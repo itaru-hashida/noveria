@@ -1,0 +1,1510 @@
+{
+  "version": 2,
+  "generation": {
+    "seed": 73129,
+    "width": 40,
+    "height": 30,
+    "year": 1,
+    "month": 1
+  },
+  "entities": [
+    {
+      "id": "noweria",
+      "kind": "State",
+      "name": "Новерская Республика",
+      "properties": {
+        "canon": true,
+        "description": "Главное государство сценария. 8 провинций, население ~4,65 млн. Ключевые темы: военное напряжение, социальное неравенство, восстановление после войны, коррупция, продовольственные проблемы.",
+        "capital_id": "city-0-0"
+      }
+    },
+    {
+      "id": "itaru",
+      "kind": "Character",
+      "name": "Итару Первый",
+      "properties": {
+        "canon": true,
+        "title": "Военный диктатор"
+      }
+    },
+    {
+      "id": "province-0",
+      "kind": "Province",
+      "name": "Лунария",
+      "properties": {
+        "canon": true,
+        "description": "центральная провинция, столица г. Лунария на р. Лунар. Политический, культурный и религиозный центр (Сенат, храмы, академии). Ресурсы: мрамор, зерно (дефицит), ремёсла. Население ~1,2 млн. Проблемы: социальное неравенство, интриги, нехватка продовольствия из-за военных расходов.",
+        "resources": [
+          "мрамор",
+          "зерно (дефицит)",
+          "ремёсла"
+        ],
+        "capital_id": "city-0-0"
+      }
+    },
+    {
+      "id": "city-0-0",
+      "kind": "City",
+      "name": "Лунария",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "province-1",
+      "kind": "Province",
+      "name": "Терра-Феррум",
+      "properties": {
+        "canon": true,
+        "description": "пограничная провинция с основными военными силами. Столица — Феррата (крепость, рудники). Ресурсы: медь, уголь, лес. Население ~500 тыс. Тяжёлые условия труда, военное напряжение.",
+        "resources": [
+          "медь",
+          "уголь",
+          "лес"
+        ],
+        "capital_id": "city-1-0"
+      }
+    },
+    {
+      "id": "city-1-0",
+      "kind": "City",
+      "name": "Феррата",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "province-2",
+      "kind": "Province",
+      "name": "Аурис Валлар",
+      "properties": {
+        "canon": true,
+        "description": "горная северная провинция. Столица — Валларис (шахты). Ресурсы: железо, гранит, меха. Население ~300 тыс. Суровый климат, бунты шахтёров, строгая дисциплина.",
+        "resources": [
+          "железо",
+          "гранит",
+          "меха"
+        ],
+        "capital_id": "city-2-0"
+      }
+    },
+    {
+      "id": "city-2-0",
+      "kind": "City",
+      "name": "Валларис",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "province-3",
+      "kind": "Province",
+      "name": "Энистар",
+      "properties": {
+        "canon": true,
+        "description": "восточная провинция, недавно освобождённая, восстанавливается. Столица — Эниополис (форты). Ресурсы: зерно, лес, шерсть. Население ~700 тыс. Милитаризация, развитие сельского хозяйства.",
+        "resources": [
+          "зерно",
+          "лес",
+          "шерсть"
+        ],
+        "capital_id": "city-3-0"
+      }
+    },
+    {
+      "id": "city-3-0",
+      "kind": "City",
+      "name": "Эниополис",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "province-4",
+      "kind": "Province",
+      "name": "Эллинор",
+      "properties": {
+        "canon": true,
+        "description": "лесная провинция, пострадавшая от войны и коррупции. Столица — Эллина (восстановление). Ресурсы: древесина, травы, камень. Население ~800 тыс. Протесты, экономические проблемы, затянутое восстановление.",
+        "resources": [
+          "древесина",
+          "травы",
+          "камень"
+        ],
+        "capital_id": "city-4-0"
+      }
+    },
+    {
+      "id": "city-4-0",
+      "kind": "City",
+      "name": "Эллина",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "province-5",
+      "kind": "Province",
+      "name": "Цитадель Вечного Солнца",
+      "properties": {
+        "canon": true,
+        "description": "отдельный регион, бывшая крепость, символ военной доблести. Столица — Соларис (город-крепость, военная база). Ресурсы: камень, металл. Население ~200 тыс. (в основном военные). Высокий военный статус, строгая дисциплина.",
+        "resources": [
+          "камень",
+          "металл"
+        ],
+        "capital_id": "city-5-0"
+      }
+    },
+    {
+      "id": "city-5-0",
+      "kind": "City",
+      "name": "Соларис",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "province-6",
+      "kind": "Province",
+      "name": "Ониксия",
+      "properties": {
+        "canon": true,
+        "description": "аграрная провинция, житница Империи. Столица — Оникс (торговля). Ресурсы: зерно, скот, лён. Население ~600 тыс. Жалобы на дискриминацию центра, экономическое неравенство.",
+        "resources": [
+          "зерно",
+          "скот",
+          "лён"
+        ],
+        "capital_id": "city-6-0"
+      }
+    },
+    {
+      "id": "city-6-0",
+      "kind": "City",
+      "name": "Оникс",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "province-7",
+      "kind": "Province",
+      "name": "Фирель",
+      "properties": {
+        "canon": true,
+        "description": "приграничная прибрежная провинция, торговые ворота. Столица — Фирополис (порт, верфи). Ресурсы: рыба, специи, морская торговля. Население ~350 тыс. Культурное смешение, стратегическая торговля.",
+        "resources": [
+          "рыба",
+          "специи",
+          "морская торговля"
+        ],
+        "capital_id": "city-7-0"
+      }
+    },
+    {
+      "id": "city-7-0",
+      "kind": "City",
+      "name": "Фирополис",
+      "properties": {
+        "canon": true
+      }
+    },
+    {
+      "id": "velaria",
+      "kind": "State",
+      "name": "Веларийская Лига",
+      "properties": {
+        "canon": false,
+        "description": "Дополнение MVP, не канон noweria.md",
+        "capital_id": "velaria-c0-0"
+      }
+    },
+    {
+      "id": "velaria-ruler",
+      "kind": "Character",
+      "name": "Марцелла Велар",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "velaria-p0",
+      "kind": "Province",
+      "name": "Берег Ветров",
+      "properties": {
+        "canon": false,
+        "capital_id": "velaria-c0-0",
+        "resources": [
+          "лес",
+          "камень"
+        ]
+      }
+    },
+    {
+      "id": "velaria-c0-0",
+      "kind": "City",
+      "name": "Берег Ветров — столица",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "velaria-c0-1",
+      "kind": "City",
+      "name": "Берег Ветров — торговый город",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "velaria-p1",
+      "kind": "Province",
+      "name": "Соляные Холмы",
+      "properties": {
+        "canon": false,
+        "capital_id": "velaria-c1-0",
+        "resources": [
+          "лес",
+          "камень"
+        ]
+      }
+    },
+    {
+      "id": "velaria-c1-0",
+      "kind": "City",
+      "name": "Соляные Холмы — столица",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "velaria-c1-1",
+      "kind": "City",
+      "name": "Соляные Холмы — торговый город",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "arven",
+      "kind": "State",
+      "name": "Арвенское княжество",
+      "properties": {
+        "canon": false,
+        "description": "Дополнение MVP, не канон noweria.md",
+        "capital_id": "arven-c0-0"
+      }
+    },
+    {
+      "id": "arven-ruler",
+      "kind": "Character",
+      "name": "Элиан Арвен",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "arven-p0",
+      "kind": "Province",
+      "name": "Сосновый Край",
+      "properties": {
+        "canon": false,
+        "capital_id": "arven-c0-0",
+        "resources": [
+          "лес",
+          "камень"
+        ]
+      }
+    },
+    {
+      "id": "arven-c0-0",
+      "kind": "City",
+      "name": "Сосновый Край — столица",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "arven-c0-1",
+      "kind": "City",
+      "name": "Сосновый Край — торговый город",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "arven-p1",
+      "kind": "Province",
+      "name": "Медный Хребет",
+      "properties": {
+        "canon": false,
+        "capital_id": "arven-c1-0",
+        "resources": [
+          "лес",
+          "камень"
+        ]
+      }
+    },
+    {
+      "id": "arven-c1-0",
+      "kind": "City",
+      "name": "Медный Хребет — столица",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "arven-c1-1",
+      "kind": "City",
+      "name": "Медный Хребет — торговый город",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "demo-character",
+      "kind": "Character",
+      "name": "Луций Север",
+      "properties": {
+        "canon": false,
+        "description": "Дополнение MVP, не канон noweria.md"
+      }
+    },
+    {
+      "id": "senate",
+      "kind": "Institution",
+      "name": "Сенат",
+      "properties": {
+        "canon": true,
+        "description": "Политический институт Лунарии, упомянутый в актуальном каноне."
+      }
+    },
+    {
+      "id": "septaria",
+      "kind": "State",
+      "name": "Септарийский Доминион",
+      "properties": {
+        "canon": false,
+        "description": "Милитаризированная аристократия горных долин.",
+        "capital_id": "septaria-c0"
+      }
+    },
+    {
+      "id": "septaria-ruler",
+      "kind": "Character",
+      "name": "Северин Септар",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "septaria-p0",
+      "kind": "Province",
+      "name": "Септара",
+      "properties": {
+        "canon": false,
+        "description": "Милитаризированная аристократия горных долин.",
+        "resources": [
+          "железо",
+          "камень"
+        ],
+        "capital_id": "septaria-c0"
+      }
+    },
+    {
+      "id": "septaria-c0",
+      "kind": "City",
+      "name": "Септариум",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "septaria-p1",
+      "kind": "Province",
+      "name": "Кальдис",
+      "properties": {
+        "canon": false,
+        "description": "Милитаризированная аристократия горных долин.",
+        "resources": [
+          "железо",
+          "камень"
+        ],
+        "capital_id": "septaria-c1"
+      }
+    },
+    {
+      "id": "septaria-c1",
+      "kind": "City",
+      "name": "Кальдория",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "septaria-p2",
+      "kind": "Province",
+      "name": "Веррум",
+      "properties": {
+        "canon": false,
+        "description": "Милитаризированная аристократия горных долин.",
+        "resources": [
+          "железо",
+          "камень"
+        ],
+        "capital_id": "septaria-c2"
+      }
+    },
+    {
+      "id": "septaria-c2",
+      "kind": "City",
+      "name": "Верруна",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "septaria-p3",
+      "kind": "Province",
+      "name": "Дорсена",
+      "properties": {
+        "canon": false,
+        "description": "Милитаризированная аристократия горных долин.",
+        "resources": [
+          "железо",
+          "камень"
+        ],
+        "capital_id": "septaria-c3"
+      }
+    },
+    {
+      "id": "septaria-c3",
+      "kind": "City",
+      "name": "Дорс",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "septaria-p4",
+      "kind": "Province",
+      "name": "Тарквель",
+      "properties": {
+        "canon": false,
+        "description": "Милитаризированная аристократия горных долин.",
+        "resources": [
+          "железо",
+          "камень"
+        ],
+        "capital_id": "septaria-c4"
+      }
+    },
+    {
+      "id": "septaria-c4",
+      "kind": "City",
+      "name": "Тарквена",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "kasseria",
+      "kind": "State",
+      "name": "Республика Кассерия",
+      "properties": {
+        "canon": false,
+        "description": "Торговая республика речных равнин.",
+        "capital_id": "kasseria-c0"
+      }
+    },
+    {
+      "id": "kasseria-ruler",
+      "kind": "Character",
+      "name": "Ливия Кассера",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "kasseria-p0",
+      "kind": "Province",
+      "name": "Кассера",
+      "properties": {
+        "canon": false,
+        "description": "Торговая республика речных равнин.",
+        "resources": [
+          "зерно",
+          "соль"
+        ],
+        "capital_id": "kasseria-c0"
+      }
+    },
+    {
+      "id": "kasseria-c0",
+      "kind": "City",
+      "name": "Кассериум",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "kasseria-p1",
+      "kind": "Province",
+      "name": "Меркатия",
+      "properties": {
+        "canon": false,
+        "description": "Торговая республика речных равнин.",
+        "resources": [
+          "зерно",
+          "соль"
+        ],
+        "capital_id": "kasseria-c1"
+      }
+    },
+    {
+      "id": "kasseria-c1",
+      "kind": "City",
+      "name": "Меркат",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "kasseria-p2",
+      "kind": "Province",
+      "name": "Салинор",
+      "properties": {
+        "canon": false,
+        "description": "Торговая республика речных равнин.",
+        "resources": [
+          "зерно",
+          "соль"
+        ],
+        "capital_id": "kasseria-c2"
+      }
+    },
+    {
+      "id": "kasseria-c2",
+      "kind": "City",
+      "name": "Салина",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "kasseria-p3",
+      "kind": "Province",
+      "name": "Ривента",
+      "properties": {
+        "canon": false,
+        "description": "Торговая республика речных равнин.",
+        "resources": [
+          "зерно",
+          "соль"
+        ],
+        "capital_id": "kasseria-c3"
+      }
+    },
+    {
+      "id": "kasseria-c3",
+      "kind": "City",
+      "name": "Ривент",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "valtoria",
+      "kind": "State",
+      "name": "Валторийский Принципат",
+      "properties": {
+        "canon": false,
+        "description": "Централизованная монархия плодородных предгорий.",
+        "capital_id": "valtoria-c0"
+      }
+    },
+    {
+      "id": "valtoria-ruler",
+      "kind": "Character",
+      "name": "Аврел Валтор",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "valtoria-p0",
+      "kind": "Province",
+      "name": "Валтор",
+      "properties": {
+        "canon": false,
+        "description": "Централизованная монархия плодородных предгорий.",
+        "resources": [
+          "лес",
+          "зерно"
+        ],
+        "capital_id": "valtoria-c0"
+      }
+    },
+    {
+      "id": "valtoria-c0",
+      "kind": "City",
+      "name": "Валториум",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "valtoria-p1",
+      "kind": "Province",
+      "name": "Луценна",
+      "properties": {
+        "canon": false,
+        "description": "Централизованная монархия плодородных предгорий.",
+        "resources": [
+          "лес",
+          "зерно"
+        ],
+        "capital_id": "valtoria-c1"
+      }
+    },
+    {
+      "id": "valtoria-c1",
+      "kind": "City",
+      "name": "Луцен",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "valtoria-p2",
+      "kind": "Province",
+      "name": "Оливера",
+      "properties": {
+        "canon": false,
+        "description": "Централизованная монархия плодородных предгорий.",
+        "resources": [
+          "лес",
+          "зерно"
+        ],
+        "capital_id": "valtoria-c2"
+      }
+    },
+    {
+      "id": "valtoria-c2",
+      "kind": "City",
+      "name": "Оливар",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "valtoria-p3",
+      "kind": "Province",
+      "name": "Кастрен",
+      "properties": {
+        "canon": false,
+        "description": "Централизованная монархия плодородных предгорий.",
+        "resources": [
+          "лес",
+          "зерно"
+        ],
+        "capital_id": "valtoria-c3"
+      }
+    },
+    {
+      "id": "valtoria-c3",
+      "kind": "City",
+      "name": "Кастренум",
+      "properties": {
+        "canon": false
+      }
+    },
+    {
+      "id": "valtoria-p4",
+      "kind": "Province",
+      "name": "Флавента",
+      "properties": {
+        "canon": false,
+        "description": "Централизованная монархия плодородных предгорий.",
+        "resources": [
+          "лес",
+          "зерно"
+        ],
+        "capital_id": "valtoria-c4"
+      }
+    },
+    {
+      "id": "valtoria-c4",
+      "kind": "City",
+      "name": "Флавен",
+      "properties": {
+        "canon": false
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "itaru",
+      "target": "noweria",
+      "kind": "rules",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-0",
+      "target": "city-0-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-0-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-1",
+      "target": "city-1-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-1-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-2",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-2",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-2",
+      "target": "city-2-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-2-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-3",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-3",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-3",
+      "target": "city-3-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-3-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-4",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-4",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-4",
+      "target": "city-4-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-4-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-5",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-5",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-5",
+      "target": "city-5-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-5-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-6",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-6",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-6",
+      "target": "city-6-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-6-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-7",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "province-7",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "province-7",
+      "target": "city-7-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "city-7-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "velaria-ruler",
+      "target": "velaria",
+      "kind": "rules",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-p0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-p0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "velaria-p0",
+      "target": "velaria-c0-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-c0-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "velaria-p0",
+      "target": "velaria-c0-1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-c0-1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-p1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-p1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "velaria-p1",
+      "target": "velaria-c1-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-c1-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "velaria-p1",
+      "target": "velaria-c1-1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "velaria",
+      "target": "velaria-c1-1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "velaria",
+      "kind": "diplomacy",
+      "properties": {
+        "value": 10,
+        "mvp": true
+      }
+    },
+    {
+      "source": "arven-ruler",
+      "target": "arven",
+      "kind": "rules",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-p0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-p0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "arven-p0",
+      "target": "arven-c0-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-c0-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "arven-p0",
+      "target": "arven-c0-1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-c0-1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-p1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-p1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "arven-p1",
+      "target": "arven-c1-0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-c1-0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "arven-p1",
+      "target": "arven-c1-1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "arven-c1-1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "arven",
+      "target": "noweria",
+      "kind": "diplomacy",
+      "properties": {
+        "value": 10,
+        "mvp": true
+      }
+    },
+    {
+      "source": "itaru",
+      "target": "demo-character",
+      "kind": "alliance",
+      "properties": {}
+    },
+    {
+      "source": "senate",
+      "target": "noweria",
+      "kind": "institution_of",
+      "properties": {}
+    },
+    {
+      "source": "septaria-ruler",
+      "target": "septaria",
+      "kind": "rules",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria-p0",
+      "target": "septaria-c0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-c0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria-p1",
+      "target": "septaria-c1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-c1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p2",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p2",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria-p2",
+      "target": "septaria-c2",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-c2",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p3",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p3",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria-p3",
+      "target": "septaria-c3",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-c3",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p4",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-p4",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "septaria-p4",
+      "target": "septaria-c4",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "septaria",
+      "target": "septaria-c4",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "septaria",
+      "kind": "diplomacy",
+      "properties": {
+        "value": -15
+      }
+    },
+    {
+      "source": "kasseria-ruler",
+      "target": "kasseria",
+      "kind": "rules",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria-p0",
+      "target": "kasseria-c0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-c0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria-p1",
+      "target": "kasseria-c1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-c1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p2",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p2",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria-p2",
+      "target": "kasseria-c2",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-c2",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p3",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-p3",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria-p3",
+      "target": "kasseria-c3",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "kasseria-c3",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "kasseria",
+      "target": "noweria",
+      "kind": "diplomacy",
+      "properties": {
+        "value": 15
+      }
+    },
+    {
+      "source": "valtoria-ruler",
+      "target": "valtoria",
+      "kind": "rules",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria-p0",
+      "target": "valtoria-c0",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-c0",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria-p1",
+      "target": "valtoria-c1",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-c1",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p2",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p2",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria-p2",
+      "target": "valtoria-c2",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-c2",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p3",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p3",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria-p3",
+      "target": "valtoria-c3",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-c3",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p4",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-p4",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "valtoria-p4",
+      "target": "valtoria-c4",
+      "kind": "includes",
+      "properties": {}
+    },
+    {
+      "source": "valtoria",
+      "target": "valtoria-c4",
+      "kind": "owns",
+      "properties": {}
+    },
+    {
+      "source": "noweria",
+      "target": "valtoria",
+      "kind": "diplomacy",
+      "properties": {
+        "value": 15
+      }
+    }
+  ]
+}

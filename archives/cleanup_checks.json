@@ -1,0 +1,32 @@
+{
+  "full_suite_passed": 134,
+  "full_suite_errors": 0,
+  "full_suite_failures": 0,
+  "profile_tests_passed": 79,
+  "reference_months": 2,
+  "exact_economic_reports_accounts_enterprises_metadata_match": true,
+  "archived_markdown_files": 19,
+  "canon_sha256": "e05e9abdf0439af0513c4fa567602abaaa9888253273dd6ffb9af8ffea52c962",
+  "estimated_removed_bytes": 12043095327,
+  "active_economy_version": 3,
+  "preserved_paths": [
+    "data/world.lbug",
+    "data/lab",
+    "docs/noweria.md",
+    "archives/experiments"
+  ],
+  "reference_hashes": [
+    {
+      "report": "38752ae02394671f2d498c53e5bc8ef156a9d33699e2aeea5780fa3caa39bd77",
+      "accounts": "ab9839d2685f55042b08143c63639fb1e08c8027afc5fa65e26e8238dc91ffd3",
+      "enterprises": "43fc92007a300ca39c4bee7b6a2bcbe24ea1b12057e7efdaa92844837215b8e1",
+      "meta": "4ade43cf3a8c103d16189e8d5b4c8beb01dccb5438158fbca6dbc52ec689e1e2"
+    },
+    {
+      "report": "52a0fa4fd71da9427bf7a53f31cbc1551a10ad309054ca94b3a87dd2852ccca1",
+      "accounts": "242c185baac4050db14089858729eb777f1a51cc21dd6f7b53872e82af7d33d3",
+      "enterprises": "435e33f43942c2864903dc2fe8ad24cd089d3ddbf4b9dbdf2975224a1f7062dd",
+      "meta": "1f59c8fe6ada1dfd24b2cd287f7fa216337baf628b0a9a68c1bf0d64955cc2a3"
+    }
+  ]
+}

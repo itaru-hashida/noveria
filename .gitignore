@@ -1,0 +1,16 @@
+.venv/
+.venv312/
+.tools/
+__pycache__/
+.pytest_cache/
+tmp/
+.tmp*/
+*.tmp
+*.temp
+*.py[cod]
+audit_results/
+archives/experiments/
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep

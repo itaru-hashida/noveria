@@ -1,0 +1,15 @@
+{
+  "entity_types": [
+    "State",
+    "Province",
+    "City",
+    "Character",
+    "SocialGroup",
+    "Army"
+  ],
+  "political_systems": [
+    "Республика",
+    "Лига",
+    "Княжество"
+  ]
+}
