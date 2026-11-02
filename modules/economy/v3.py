@@ -277,6 +277,19 @@ class Economy(EconomyServices):
         if buy is None or buy['status'] in ('cancelled', 'expired', 'filled'):
             return
         buyer = self.accounts[buy['participant']]
+        if (buy.get('adaptive_household_budget') and buyer['kind'] == 'household'
+                and buy.get('final_consumption') and buy['remaining'] > EPS):
+            # Первая оценка корзины не является жёстким пользовательским лимитом.
+            # Пересмотр возможен лишь за счёт денег вне остальных обязательств.
+            _, ceiling, _ = self.quoted_cost(buyer, buy['good'], buy['remaining'], sells)
+            budget = buy['reserved']+self.free_cash(buy['participant'])
+            price = max(buy['price'], min(ceiling, budget/buy['remaining']))
+            if price > buy['price']+EPS:
+                extra = buy['remaining']*(price-buy['price'])
+                buyer['reserved'] += extra
+                buy['reserved'] += extra
+                buy.setdefault('initial_limit', buy['price'])
+                buy.update(price=price, backing=buy['reserved'])
         options = self.offers(buyer, buy['good'], sells)
         observation = self.observe_match(buy, sells, options)
         # Равная полная цена не даёт постоянного преимущества одному ID.
@@ -397,11 +410,17 @@ class Economy(EconomyServices):
             if a['kind'] == 'household' or (e and e.get('suspended')):
                 continue
             for good in sorted(a['stock']):
+                quantity = self.free_stock(a['id'], good)
                 if e and e['status'] != 'closed' and good != e['good']:
-                    continue
+                    recipe = self.goods[e['good']]
+                    history = e.get('sales_history', [])[-3:]
+                    planned = e.get('production_plan', {}).get('output', 0)
+                    recent = max((h.get('output', 0) for h in history), default=e['capacity']*self.rules['initial_sales_fraction'])
+                    reserve = min(e['capacity'], max(planned, recent))*self.cfg['input_buffer']
+                    quantity = max(0, quantity-reserve*recipe['inputs'].get(good, 0))
                 prices = a.setdefault('ask_prices', {})
                 price = e['price'] if e and good == e['good'] else prices.setdefault(good, self.goods[good]['price'])
-                o = self.order(a['id'], good, self.free_stock(a['id'], good), 'sell', price, 'Продажа запасов')
+                o = self.order(a['id'], good, quantity, 'sell', price, 'Продажа запасов')
                 if o:
                     result[good].append(o)
         return result
@@ -419,15 +438,20 @@ class Economy(EconomyServices):
 
     def reachable_demand(self, e, sells):
         demand = 0.0
+        remaining = {sell['id']: sell['remaining'] for offers in sells.values() for sell in offers}
         for order, limit in self.customer_quotes(e):
             if limit+EPS < e['price']:
                 continue
             buyer = self.accounts[order['participant']]
             landed = self.landed(e['tile_id'], order['tile_id'], e['good'], e['price'])[0]
             volume = min(order['remaining'], order['reserved']/landed)
-            cheaper = sum(sell['remaining'] for price, sell, _ in self.offers(buyer, e['good'], sells)
-                if sell['participant'] != e['id'] and price < landed-EPS)
-            demand += max(0, volume-cheaper)
+            for price, sell, _ in self.offers(buyer, e['good'], sells):
+                if sell['participant'] == e['id'] or price >= landed-EPS:
+                    continue
+                covered = min(volume, remaining[sell['id']])
+                volume -= covered
+                remaining[sell['id']] -= covered
+            demand += volume
         return demand
 
     def unit_cost(self, e, sells):
@@ -543,7 +567,7 @@ class Economy(EconomyServices):
                 continue
             firm = self.enterprises.get(a['id'])
             for good, quantity in a['stock'].items():
-                if quantity <= EPS or (firm and (firm['good'] == good or firm['status'] != 'closed')):
+                if quantity <= EPS or (firm and firm['good'] == good):
                     continue
                 prices = a.setdefault('ask_prices', {})
                 price = prices.setdefault(good, self.goods[good]['price'])
@@ -599,7 +623,8 @@ class Economy(EconomyServices):
                 a.setdefault('needs', {})[good] = dict(needed=needed, consumed=0, deficit=needed)
                 order = self.order(a['id'], good, quantity*fraction, 'buy', price, purpose)
                 if order:
-                    order.update(need_quantity=quantity, budget_price=price*fraction, unfunded_need=fraction < 1-EPS)
+                    order.update(need_quantity=quantity, budget_price=price*fraction, unfunded_need=fraction < 1-EPS,
+                        adaptive_household_budget=True)
 
     def depth(self, good):
         inputs = self.goods[good]['inputs']
@@ -648,6 +673,62 @@ class Economy(EconomyServices):
             self.order(e['id'], good, quantity, 'buy', price, 'Сырьё')
         e['production_plan']['input_orders'] = [o['id'] for o in self.report['orders'][first_order:]]
 
+    def investment_demand(self, candidate, sells):
+        """Сначала пригодные мощности и начатые проекты, затем новая стройка."""
+        suppliers = []
+        cache = getattr(self, '_investment_supply_cache', None)
+        cached = cache.get(candidate['good']) if cache is not None else None
+        for firm in (() if cached is not None else self.enterprises.values()):
+            if firm['good'] != candidate['good'] or firm['status'] == 'closed' or firm.get('suspended'):
+                continue
+            cost = self.unit_cost(firm, sells)
+            price = firm['price'] if self.net_price(firm)+EPS >= cost else firm.get('production_price', firm['price'])
+            if self.net_price(dict(firm, price=price))+EPS < cost:
+                continue
+            owner = self.accounts[firm['owner_id']]
+            funds = self.free_cash(firm['id'])+self.cash_after_commitments(owner['id'],
+                self.project_cash_reserve(owner['id'], sells))
+            if funds <= EPS:
+                continue
+            labor = sum(self.population(a)*self.cfg['labor_share'] for a in self.workforce(firm))
+            recipe = self.goods[firm['good']]
+            capacity = min(firm['capacity'], labor/recipe['labor'])
+            if recipe['resource']:
+                resource = sum(self.cfg['extraction_per_tile'] for t in self.tiles.values()
+                    if t['province_id'] == firm['province_id'] and recipe['resource'] in t['resources'])
+                capacity = min(capacity, resource)
+            suppliers.append([firm, price, capacity])
+        if cached is not None:
+            suppliers = [list(s) for s in cached]
+        elif cache is not None:
+            cache[candidate['good']] = [tuple(s) for s in suppliers]
+        for a in self.accounts.values():
+            p = a.get('project')
+            if p and p['good'] == candidate['good']:
+                suppliers.append([dict(p['location']), p['expected_price'], p['capacity']])
+        residual = 0.0
+        cheap = {o['id']: o['remaining'] for offers in sells.values() for o in offers}
+        for order, limit in self.customer_quotes(candidate):
+            if limit+EPS < candidate['price']:
+                continue
+            buyer = self.accounts[order['participant']]
+            landed = self.landed(candidate['tile_id'], order['tile_id'], candidate['good'], candidate['price'])[0]
+            volume = min(order['remaining'], order['reserved']/landed)
+            for price, sell, _ in self.offers(buyer, candidate['good'], sells):
+                if price > order['price']+EPS:
+                    continue
+                covered = min(volume, cheap[sell['id']])
+                cheap[sell['id']] -= covered
+                volume -= covered
+            for supply in suppliers:
+                quote = self.landed(supply[0]['tile_id'], order['tile_id'], candidate['good'], supply[1])
+                if quote and quote[0] <= order['price']+EPS:
+                    covered = min(volume, supply[2])
+                    supply[2] -= covered
+                    volume -= covered
+            residual += volume
+        return residual
+
     def project_candidate(self, investor, sells):
         candidates = []
         history = self.meta.get('market_history', [])
@@ -676,9 +757,7 @@ class Economy(EconomyServices):
             signal = self.market_signal(history, investor['state_id'], pid, good)
             price = max(limits) if limits else signal['price'] or self.goods[good]['price']
             quote_firm['price'] = price
-            demand = max(0, self.reachable_demand(quote_firm, sells)-investor['stock'].get(good, 0))
-            if expansion:
-                demand = max(0, demand-expansion['capacity'])
+            demand = max(0, self.investment_demand(quote_firm, sells)-investor['stock'].get(good, 0))
             if demand < self.cfg['minimum_capacity']:
                 continue
             capacity = demand
@@ -722,12 +801,14 @@ class Economy(EconomyServices):
         due = self.meta['month'] % self.cfg['investment_interval'] == 0
         investors = [a for a in self.accounts.values() if a['kind'] in ('private', 'merchant', 'treasury', 'municipal') or
             (a['kind'] == 'enterprise' and self.enterprises[a['id']]['status'] != 'closed' and self.enterprises[a['id']]['available_from'] <= self.meta['month'])]
-        # Решения независимы; исполнение ещё не меняло ни одного предложения.
-        choices = [(a, self.project_candidate(a, sells)) for a in self.shuffled(investors) if due and 'project' not in a]
-        for a, project in choices:
+        # Последующие инвесторы учитывают уже объявленные проекты; торгов ещё нет.
+        self._investment_supply_cache = {}
+        for a in self.shuffled(investors):
+            project = self.project_candidate(a, sells) if due and 'project' not in a else None
             if project:
                 a['project'] = project
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
+        self.__dict__.pop('_investment_supply_cache', None)
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:

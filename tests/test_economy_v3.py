@@ -607,4 +607,7 @@ def test_old_save_without_frozen_plans_reloads_and_repeated_runs_match(engine,tm
             assert reopened.accounts==engine.accounts
             assert reopened.enterprises==engine.enterprises
             assert all(e.get('production_plan',{}).get('month')==reopened.meta['month']
-                for e in reopened.enterprises.values() if e['status']!='closed')
+                for e in reopened.enterprises.values() if e['status']!='closed'
+                and e['available_from']<=reopened.meta['month'])
+            assert all(e['output']==0 for e in reopened.enterprises.values()
+                if e['available_from']>reopened.meta['month'])
