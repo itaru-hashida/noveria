@@ -39,6 +39,11 @@ class Economy(EconomyServices):
         self.cfg.setdefault('dividend_profit_share', 0.50)
         self.cfg.setdefault('working_reserve_months', 1)
         self.cfg.setdefault('owner_consumption_rate', 0.05)
+        self.cfg.setdefault('project_stall_months', 12)
+        if (not isinstance(self.cfg['project_stall_months'], int)
+                or isinstance(self.cfg['project_stall_months'], bool)
+                or self.cfg['project_stall_months'] < 1):
+            raise ValueError('Срок пересмотра стройки должен быть положительным целым')
         if not 0 <= self.cfg['consumption_tax'] < 1:
             raise ValueError('Налог с потребительских продаж должен быть от 0 до 1')
         for key in ('dividend_profit_share', 'owner_consumption_rate'):
@@ -258,6 +263,12 @@ class Economy(EconomyServices):
                 break
         if left > EPS:
             reference = self.reference_price(buyer, good, sells)
+            # Ориентир следующего выпуска не является предложением товара.
+            quotes = [quote[0] for firm, price in getattr(self, '_recovery_quotes', {}).get(good, [])
+                if firm['id'] != buyer['id']
+                and (quote := self.landed(firm['tile_id'], self.market_tile(buyer), good, price))]
+            if quotes:
+                reference = max(reference, min(quotes))
             value += left*reference
             ceiling = max(ceiling, reference)
         return value, max(ceiling, EPS), left <= EPS
@@ -424,20 +435,92 @@ class Economy(EconomyServices):
         return recipe['labor']*self.cfg['wage']+sum(ratio*self.reference_price(e, good, sells) for good, ratio in recipe['inputs'].items())
 
     def net_price(self, e):
-        # Для смешанного товара консервативно учитывается конечная продажа.
+        # Налог оценивается по доступным заявкам; при их отсутствии — осторожно.
         consumer = e['good'] in (self.cfg['basic_needs'] | self.cfg['extra_needs'])
-        return e['price']*(1-self.cfg['consumption_tax'] if consumer else 1)
+        quantity, final_quantity = 0.0, 0.0
+        for order, limit in self.customer_quotes(e):
+            if limit+EPS < e['price']:
+                continue
+            landed = self.landed(e['tile_id'], order['tile_id'], e['good'], e['price'])[0]
+            volume = min(order['remaining'], order['reserved']/max(landed, EPS))
+            quantity += volume
+            if order.get('final_consumption'):
+                final_quantity += volume
+        share = (final_quantity/quantity
+            if quantity > EPS else float(consumer))
+        return e['price']*(1-self.cfg['consumption_tax']*share)
 
-    def plan(self, e, history=None, sells=None):
+    def prepare_recovery_quotes(self):
+        """Одна оценка воспроизводства снизу вверх, без будущих сделок и эмиссии."""
+        self._recovery_quotes = defaultdict(list)
+        for e in sorted(self.enterprises.values(), key=lambda f: (self.depth(f['good']), f['id'])):
+            e.pop('production_price', None)
+            if e.get('suspended'):
+                continue
+            recipe = self.goods[e['good']]
+            if recipe['resource'] and not any(t['province_id'] == e['province_id']
+                    and recipe['resource'] in t['resources'] for t in self.tiles.values()):
+                continue
+            cost = recipe['labor']*self.cfg['wage']
+            for good, ratio in recipe['inputs'].items():
+                quotes = [quote[0] for firm, price in self._recovery_quotes[good]
+                    if (quote := self.landed(firm['tile_id'], e['tile_id'], good, price))]
+                cost += ratio*(min(quotes) if quotes else self.goods[good]['price'])
+            consumer = e['good'] in (self.cfg['basic_needs'] | self.cfg['extra_needs'])
+            net = 1-self.cfg['consumption_tax'] if consumer else 1
+            price = (cost*(1+self.cfg['markup'])/net
+                if e['price']*net < cost-EPS else e['price'])
+            e['production_price'] = min(self.rules['maximum_price'], price)
+            self._recovery_quotes[e['good']].append((e, e['production_price']))
+
+    def recover_enterprises(self, sells, enterprises=None):
+        """Собственник финансирует действующую мощность до нового строительства."""
+        for e in self.shuffled(self.enterprises.values() if enterprises is None else enterprises):
+            if e.get('suspended') or e['available_from'] > self.meta['month']:
+                continue
+            outlook = self.production_outlook(e, sells=sells)
+            target = outlook['planned_output']
+            if (target <= EPS or outlook['expected_margin'] <= EPS
+                    or outlook['reachable_demand'] <= EPS):
+                continue
+            a = self.accounts[e['id']]
+            recipe = self.goods[e['good']]
+            required = target*recipe['labor']*self.cfg['wage']
+            for good, ratio in recipe['inputs'].items():
+                missing = max(0, target*ratio-self.free_stock(e['id'], good))
+                required += missing*self.quoted_cost(a, good, missing, sells)[1]
+            owner = self.accounts[e['owner_id']]
+            available = self.cash_after_commitments(owner['id'], self.project_cash_reserve(owner['id'], sells))
+            amount = min(max(0, required-self.free_cash(e['id'])), available)
+            self.transfer(owner['id'], e['id'], amount, 'Восстановление оборотного капитала')
+            if e['status'] == 'closed' and self.free_cash(e['id']) > EPS:
+                e.update(status='idle', closed=None, unviable_months=0)
+                for offers in sells.values():
+                    for offer in offers:
+                        if offer['participant'] == e['id'] and offer['good'] != e['good']:
+                            self.cancel_order(offer, 'Сырьё возвращено в производство')
+                self.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'], action='reopened',
+                    reason='Восстановлен обеспеченный рентабельный спрос'))
+            if e['status'] != 'closed':
+                hold = min(self.free_cash(e['id']), required)
+                a['operating_protected'] = hold
+                a['protected'] += hold
+
+    def production_outlook(self, e, sells=None):
+        e = dict(e)
         sells = sells or defaultdict(list)
+        cost = self.unit_cost(e, sells)
+        # Рентабельную текущую цену (включая B2B без налога) повышать не требуется.
+        price = e['price'] if self.net_price(e)+EPS >= cost else e.get('production_price', e['price'])
+        quote = dict(e, price=price)
         observations = e.get('sales_history', [])[-3:]
         own = sum(h['sold'] for h in observations)/len(observations) if observations else e['sales_forecast']
-        demand = self.reachable_demand(e, sells)
+        demand = self.reachable_demand(quote, sells)
         sold_now = sum(t['quantity'] for t in self.report['trades'] if t['seller'] == e['id'] and t['good'] == e['good'])
         forecast = max(own, sold_now+demand)
         stock = self.accounts[e['id']]['stock'].get(e['good'], 0)
         e.update(sales_forecast=forecast, reachable_demand=demand,
-            expected_unit_cost=self.unit_cost(e, sells), expected_price=self.net_price(e))
+            expected_unit_cost=cost, expected_price=self.net_price(quote), planned_price=price)
         e['expected_margin'] = e['expected_price']-e['expected_unit_cost']
         target = max(0, min(e['capacity'], forecast-stock))
         e['production_limit'] = 'Готовые запасы' if stock >= forecast and forecast > EPS else 'Нет обеспеченного спроса' if forecast <= EPS else 'План'
@@ -445,7 +528,13 @@ class Economy(EconomyServices):
             target, e['production_limit'] = 0, 'Отрицательная ожидаемая маржа'
         e['planned_output'] = target
         e['input_target_output'] = target
-        return target
+        return {k: e[k] for k in ('sales_forecast', 'reachable_demand', 'expected_unit_cost',
+            'expected_price', 'expected_margin', 'production_limit', 'planned_output', 'input_target_output',
+            'planned_price')}
+
+    def plan(self, e, history=None, sells=None):
+        e.update(self.production_outlook(e, sells))
+        return e['planned_output']
 
     def update_prices(self):
         subjects = [(e, e.get('sales_history', []), e, 'price') for e in self.enterprises.values()]
@@ -517,6 +606,8 @@ class Economy(EconomyServices):
         return 1+max((self.depth(g) for g in inputs), default=-1)
 
     def input_requests(self, e, sells):
+        a = self.accounts[e['id']]
+        a['protected'] = max(0, a.get('protected', 0)-a.pop('operating_protected', 0))
         target = self.plan(e, sells=sells)
         a, recipe = self.accounts[e['id']], self.goods[e['good']]
         cash = self.free_cash(e['id'])
@@ -545,6 +636,7 @@ class Economy(EconomyServices):
         if target+EPS < requested:
             e['production_limit'] = 'Деньги на выпуск'
         e['production_plan'] = dict(month=self.meta['month'], output=target,
+            sale_price=e['planned_price'],
             requested_output=requested, free_cash=cash, known_order_count=first_order,
             reachable_demand=e['reachable_demand'], sales_forecast=e['sales_forecast'],
             expected_margin=e['expected_margin'], reason=e['production_limit'])
@@ -561,6 +653,11 @@ class Economy(EconomyServices):
         history = self.meta.get('market_history', [])
         markets = {(o['province_id'], o['good']) for o in self.report['orders'] if o['side'] == 'buy' and o['state_id'] == investor['state_id'] and o['province_id']}
         markets |= {(r['province_id'], r['good']) for h in history for r in h['markets'] if r['state_id'] == investor['state_id'] and r['province_id']}
+        # Рынок сбыта и площадка добычи могут находиться в разных провинциях.
+        resource_goods = {good for _, good in markets if self.goods[good]['resource']}
+        markets |= {(t['province_id'], good) for t in self.tiles.values() for good in resource_goods
+            if t['province_id'] and self.owners.get(t['province_id']) == investor['state_id']
+            and self.goods[good]['resource'] in t['resources']}
         expansion = self.enterprises.get(investor['id'])
         for pid, good in sorted(markets):
             if expansion and (good != expansion['good'] or pid != expansion['province_id']):
@@ -635,6 +732,17 @@ class Economy(EconomyServices):
             project = a.get('project')
             if not project:
                 continue
+            progress = sum(project['materials'].values())
+            if progress > project.get('progress_quantity', 0)+EPS:
+                project['last_progress'] = self.meta['month']
+            project['progress_quantity'] = progress
+            project.setdefault('last_progress', project['created'])
+            if self.meta['month']-project['last_progress'] >= self.cfg['project_stall_months']:
+                del a['project']
+                a['protected'] = a.get('operating_protected', 0)+a.get('payroll_protected', 0)
+                self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'],
+                    outcome='cancelled', reason='Стройка не продвигается'))
+                continue
             good = project['good']
             loc = project['location']
             e = dict(id=a['id'], good=good, price=project['expected_price'], **loc)
@@ -645,6 +753,7 @@ class Economy(EconomyServices):
                 and signal['volume'] <= EPS and signal['unmet'] <= EPS and self.reachable_demand(e, sells) <= EPS)
             if due and (margin < -EPS or absent):
                 del a['project']
+                a['protected'] = a.get('operating_protected', 0)+a.get('payroll_protected', 0)
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='cancelled', reason='Отрицательная маржа или устойчивое отсутствие спроса'))
                 continue
             distance, _ = self.path(self.market_tile(a), loc['tile_id'])
@@ -654,7 +763,7 @@ class Economy(EconomyServices):
             delivery = sum(q*self.goods[g]['weight'] for g, q in bill.items())*distance*self.cfg['transport_rate']
             project['delivery'] = delivery
             # Сначала склад инвестора, затем площадка: обе перевозки реальны и входят в оценку.
-            a['protected'] = a.get('payroll_protected', 0)+project['working_cash']+delivery
+            a['protected'] = a.get('operating_protected', 0)+a.get('payroll_protected', 0)+project['working_cash']+delivery
             if a['protected']+a.get('reserved', 0) > a['balance']+EPS:
                 a['protected'] = max(0, a['balance']-a.get('reserved', 0))
             for g, quantity in bill.items():
@@ -760,6 +869,9 @@ class Economy(EconomyServices):
             for g, ratio in recipe['inputs'].items():
                 cost += self.use_stock(e['id'], g, q*ratio)
                 self.report['inputs_used'][g] = self.report['inputs_used'].get(g, 0)+q*ratio
+            # Цена нового выпуска заменяет цену распродажи только у пустого склада.
+            if a['stock'].get(e['good'], 0) <= EPS:
+                e['price'] = plan.get('sale_price', e['price'])
             self.add_stock(e['id'], e['good'], q, cost)
             e.update(status='active', workers=workers, output=q, production_cost=cost, unit_cost=cost/q, wages=wages)
             self.report['production'][e['good']] = self.report['production'].get(e['good'], 0)+q
@@ -825,6 +937,7 @@ class Economy(EconomyServices):
 
     def step(self):
         self.__dict__.pop('_planning_orders', None)
+        self.__dict__.pop('_recovery_quotes', None)
         self.activate_rules()
         self.accounts = dict(sorted(self.accounts.items()))
         self.enterprises = dict(sorted(self.enterprises.items()))
@@ -838,7 +951,8 @@ class Economy(EconomyServices):
         prior_cash = {a['id']: a['balance'] for a in self.accounts.values() if a['kind'] == 'household'}
         for a in self.accounts.values():
             hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
-            a.update(reserved=0.0, protected=min(a['balance'], hold), payroll_protected=0.0, stock_reserved={})
+            a.update(reserved=0.0, protected=min(a['balance'], hold), payroll_protected=0.0,
+                operating_protected=0.0, stock_reserved={})
         existing = list(self.enterprises.values())
         for e in existing:
             e.pop('production_observation', None)
@@ -846,15 +960,22 @@ class Economy(EconomyServices):
                 production_cost=0, input_limited=False, fixed_cost_due=0, fixed_cost_paid=0,
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0)
         self.update_prices()
+        self.prepare_recovery_quotes()
         sells = self.sell_orders()
         households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')
         self.household_requests(households, self.cfg['basic_needs'], 'Базовые нужды', sells)
         self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
         self.owner_requests(sells)
+        self.recover_enterprises(sells)
         # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
         self.project_requests(sells)
         # Один проход от конечных товаров ко входам, без рекурсивного перепланирования.
         for e in sorted(self.shuffled(existing), key=lambda e: -self.depth(e['good'])):
+            a = self.accounts[e['id']]
+            if e['status'] == 'closed' or (self.free_cash(e['id']) <= EPS
+                    and a.get('operating_protected', 0) <= EPS):
+                # Спрос на входы появляется после планирования следующего звена цепочки.
+                self.recover_enterprises(sells, [e])
             if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
                 self.input_requests(e, sells)
         buys = [o for o in self.report['orders'] if o['side'] == 'buy']
