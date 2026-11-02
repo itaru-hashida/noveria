@@ -5,6 +5,10 @@
 Правила восстановления выпуска, оборотного финансирования и пересмотра
 долгостроев описаны в [ECONOMY_RECOVERY.md](docs/ECONOMY_RECOVERY.md).
 
+Методика диагностики агентов — [AGENT_METRICS.md](docs/AGENT_METRICS.md),
+измерения и парные эксперименты — [AGENT_RESEARCH_RESULTS.md](docs/AGENT_RESEARCH_RESULTS.md).
+Экспериментальные политики исследовательского скрипта не подключены к игре.
+
 ## Запуск в Windows
 
 Из корня проекта:
