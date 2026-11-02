@@ -160,11 +160,11 @@ def main(directory, seeds):
         cash_return=output['secondary_cash_test']['p_two_sided']))
     (directory/'summary.json').write_text(json.dumps(output, ensure_ascii=False, indent=2))
     with (directory/'paired.csv').open('w') as target:
-        writer = csv.DictWriter(target, fieldnames=paired[0].keys())
+        writer = csv.DictWriter(target, fieldnames=paired[0].keys(), lineterminator='\n')
         writer.writeheader()
         writer.writerows(paired)
     with (directory/'metrics.csv').open('w') as target:
-        writer = csv.writer(target)
+        writer = csv.writer(target, lineterminator='\n')
         writer.writerow(('series', 'block', 'metric', 'value'))
         for series, values in result.items():
             for block in ('micro', 'macro'):
