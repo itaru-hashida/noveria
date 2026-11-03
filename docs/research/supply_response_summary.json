@@ -1,0 +1,2358 @@
+{
+  "primary": "control vs lead_time; last 30 of 60 months; three migrated seeds; fresh history and other policies separate",
+  "primary_test": {
+    "n": 3,
+    "mean_difference": 12.952745600583645,
+    "seed_range": [
+      7.616036938360205,
+      20.14261012637052
+    ],
+    "p_two_sided": 0.25
+  },
+  "cases": {
+    "73129": {
+      "control": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "74cee345ae8b61a2987e4d258040e2212e4d7c42fb9e4c1e70405ca7c4a9c46b",
+        "coverage": 0.527014631812173,
+        "household_bread": 929.5855644024458,
+        "household_net_flow": -3955.9352520011953,
+        "household_cash_end": 439571.99035465927,
+        "open_firms_end": 287,
+        "goods": {
+          "grain": {
+            "output": 1157.8808125454257,
+            "stock": 1186.599289234596,
+            "household_consumed": 0,
+            "used": 1143.7345107384085,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 953.1120922820072,
+            "stock": 1108.030611019326,
+            "household_consumed": 0,
+            "used": 945.5039219546902,
+            "need": 0,
+            "execution": 0.6758379801175703
+          },
+          "bread": {
+            "output": 1181.8799024433627,
+            "stock": 1184.2830388970067,
+            "household_consumed": 929.5855644024458,
+            "used": 1180.845536493822,
+            "need": 1664.252,
+            "execution": 0.3895582468069611
+          },
+          "wood": {
+            "output": 278.356762166965,
+            "stock": 592.2418451039929,
+            "household_consumed": 0,
+            "used": 273.07682478668545,
+            "need": 0,
+            "execution": 1.0000000000000002
+          },
+          "planks": {
+            "output": 92.50374848482038,
+            "stock": 254.08687401269933,
+            "household_consumed": 60.52412533333334,
+            "used": 88.0639305841962,
+            "need": 66.57008,
+            "execution": 0.6975640059957767
+          },
+          "ore": {
+            "output": 10.330306128959394,
+            "stock": 3178.4849020159213,
+            "household_consumed": 0,
+            "used": 59.194436113370244,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 32.88579784076124,
+            "stock": 105.91636265446597,
+            "household_consumed": 0,
+            "used": 34.772459884460574,
+            "need": 0,
+            "execution": 0.5141979447182231
+          },
+          "tools": {
+            "output": 49.67494269208654,
+            "stock": 138.9360566749229,
+            "household_consumed": 39.08159983128654,
+            "used": 52.85150245671797,
+            "need": 41.606300000000005,
+            "execution": 0.6660825975442616
+          },
+          "flax": {
+            "output": 403.60470034994177,
+            "stock": 494.15963211568095,
+            "household_consumed": 0,
+            "used": 402.8788722708422,
+            "need": 0,
+            "execution": 0.9999999999999999
+          },
+          "cloth": {
+            "output": 287.77062305060156,
+            "stock": 305.32597619421585,
+            "household_consumed": 101.53888493365679,
+            "used": 281.9657168203949,
+            "need": 124.81889999999999,
+            "execution": 0.7506038194780813
+          },
+          "fish": {
+            "output": 172.50718773365213,
+            "stock": 172.50718773365227,
+            "household_consumed": 101.91645787285181,
+            "used": 172.91572516316984,
+            "need": 332.85040000000004,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1584.0,
+            "zero_plan_stock": 259.0,
+            "zero_plan_sold_out": 322.0,
+            "idle_after_sold_out": 322.0,
+            "unanticipated_sales": 14202.978682052646,
+            "retrospective_gap_per_month": 345.8726550955172
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 140.0,
+            "zero_plan_sold_out": 140.0,
+            "idle_after_sold_out": 140.0,
+            "unanticipated_sales": 5939.550024174239,
+            "retrospective_gap_per_month": 229.74370180896477
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 230.0,
+            "zero_plan_sold_out": 132.0,
+            "idle_after_sold_out": 132.0,
+            "unanticipated_sales": 1558.306542591638,
+            "retrospective_gap_per_month": 156.88648459711453
+          },
+          "grain": {
+            "firm_months": 570.0,
+            "zero_plan_stock": 126.0,
+            "zero_plan_sold_out": 114.0,
+            "idle_after_sold_out": 114.0,
+            "unanticipated_sales": 3043.1603153317797,
+            "retrospective_gap_per_month": 671.0322977612021
+          }
+        },
+        "investment_starts": 9,
+        "examples": [
+          {
+            "month": 211,
+            "id": "firm-00001",
+            "good": "grain",
+            "opening_stock": 215.71258542294902,
+            "expected_sales": 0.0,
+            "forecast": 32.65283323106885,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 606.9,
+            "margin": 0.10877754436062681,
+            "sale_price": 0.1687775443606268,
+            "planning_reason": "Готовые запасы",
+            "sold": 215.71258542294902,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 32.65283323106885,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00075",
+            "good": "grain",
+            "opening_stock": 25.5,
+            "expected_sales": 0.0,
+            "forecast": 14.198930251492817,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 25.5,
+            "margin": 0.11724434641709083,
+            "sale_price": 0.17724434641709083,
+            "planning_reason": "Готовые запасы",
+            "sold": 25.5,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 14.198930251492817,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00067",
+            "good": "grain",
+            "opening_stock": 56.1,
+            "expected_sales": 0.0,
+            "forecast": 37.4,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 56.1,
+            "margin": 0.09450695322372929,
+            "sale_price": 0.1545069532237293,
+            "planning_reason": "Готовые запасы",
+            "sold": 56.1,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 37.4,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 0.0,
+        "bread_delta_pct": 0.0
+      },
+      "lead_time": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "lead_time",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "1685db5de03d636749b4809a4e193cf50d859f348aea076fe182131204f4b3b0",
+        "coverage": 0.7284407330758782,
+        "household_bread": 1307.613294080377,
+        "household_net_flow": -5583.092410792622,
+        "household_cash_end": 361796.0762144742,
+        "open_firms_end": 288,
+        "goods": {
+          "grain": {
+            "output": 1458.291962949613,
+            "stock": 1534.5049631041443,
+            "household_consumed": 0,
+            "used": 1457.7718016768767,
+            "need": 0,
+            "execution": 0.9999999999999999
+          },
+          "flour": {
+            "output": 1214.8098347307307,
+            "stock": 1303.4513084088512,
+            "household_consumed": 0,
+            "used": 1207.066534954573,
+            "need": 0,
+            "execution": 0.871788543847352
+          },
+          "bread": {
+            "output": 1508.833168693216,
+            "stock": 1520.7665380007047,
+            "household_consumed": 1307.613294080377,
+            "used": 1510.3094414748653,
+            "need": 1664.252,
+            "execution": 0.5351531843335456
+          },
+          "wood": {
+            "output": 283.53654097650735,
+            "stock": 658.1846445514715,
+            "household_consumed": 0,
+            "used": 280.81315599690754,
+            "need": 0,
+            "execution": 1.0000000000000002
+          },
+          "planks": {
+            "output": 77.368675056919,
+            "stock": 300.31649013325216,
+            "household_consumed": 66.57008,
+            "used": 82.75867094541981,
+            "need": 66.57008,
+            "execution": 0.9646328309130421
+          },
+          "ore": {
+            "output": 14.140164645487351,
+            "stock": 2924.2707513458668,
+            "household_consumed": 0,
+            "used": 49.92795988716865,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 27.737755492871468,
+            "stock": 153.25301254620587,
+            "household_consumed": 0,
+            "used": 29.65178593502622,
+            "need": 0,
+            "execution": 0.7742276280919471
+          },
+          "tools": {
+            "output": 42.3596941928946,
+            "stock": 105.61740956517426,
+            "household_consumed": 41.606300000000005,
+            "used": 49.70059547270989,
+            "need": 41.606300000000005,
+            "execution": 0.8631112765469419
+          },
+          "flax": {
+            "output": 464.35437654949095,
+            "stock": 473.3838353549179,
+            "household_consumed": 0,
+            "used": 459.75939698922826,
+            "need": 0,
+            "execution": 0.9999999999999999
+          },
+          "cloth": {
+            "output": 328.39956927802024,
+            "stock": 333.11044145855993,
+            "household_consumed": 94.71422174971843,
+            "used": 330.2673149660548,
+            "need": 124.81889999999999,
+            "execution": 0.49184077878711074
+          },
+          "fish": {
+            "output": 179.58799423968918,
+            "stock": 179.5879942396893,
+            "household_consumed": 109.03570333226651,
+            "used": 179.58799423968918,
+            "need": 332.85040000000004,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1757.0,
+            "zero_plan_stock": 488.0,
+            "zero_plan_sold_out": 505.0,
+            "idle_after_sold_out": 505.0,
+            "unanticipated_sales": 24911.529933808906,
+            "retrospective_gap_per_month": 457.65829722346075
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 130.0,
+            "zero_plan_sold_out": 124.0,
+            "idle_after_sold_out": 124.0,
+            "unanticipated_sales": 6784.956739643235,
+            "retrospective_gap_per_month": 239.98945812284876
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 206.0,
+            "zero_plan_sold_out": 60.0,
+            "idle_after_sold_out": 60.0,
+            "unanticipated_sales": 699.1077899486403,
+            "retrospective_gap_per_month": 48.987802661057344
+          },
+          "grain": {
+            "firm_months": 570.0,
+            "zero_plan_stock": 48.0,
+            "zero_plan_sold_out": 35.0,
+            "idle_after_sold_out": 35.0,
+            "unanticipated_sales": 1979.8621147297538,
+            "retrospective_gap_per_month": 271.17106969048643
+          }
+        },
+        "investment_starts": 4,
+        "examples": [
+          {
+            "month": 212,
+            "id": "firm-00022",
+            "good": "grain",
+            "opening_stock": 15.299999999999999,
+            "expected_sales": 0.0,
+            "forecast": 15.299999999999999,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 15.299999999999999,
+            "margin": 0.026205366049335765,
+            "sale_price": 0.08620536604933576,
+            "planning_reason": "Готовые запасы",
+            "sold": 15.299999999999999,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 15.299999999999999,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 213,
+            "id": "firm-00042",
+            "good": "grain",
+            "opening_stock": 76.5,
+            "expected_sales": 0.0,
+            "forecast": 76.5,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 76.5,
+            "margin": 0.06486121579354467,
+            "sale_price": 0.12486121579354467,
+            "planning_reason": "Готовые запасы",
+            "sold": 76.5,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 76.5,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 213,
+            "id": "firm-00067",
+            "good": "grain",
+            "opening_stock": 56.099999999999994,
+            "expected_sales": 0.0,
+            "forecast": 56.099999999999994,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 56.1,
+            "margin": 0.044007109814790724,
+            "sale_price": 0.10400710981479072,
+            "planning_reason": "Готовые запасы",
+            "sold": 56.099999999999994,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 56.099999999999994,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 20.14261012637052,
+        "bread_delta_pct": 40.66626507059996
+      }
+    },
+    "17": {
+      "control": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-17/engine-180.pickle",
+          "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a",
+          "seed": 17,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "ba9a4f06d2e2617368b7f171fe08164e2e1d59a8032a77cd3f328127614bb475",
+        "coverage": 0.5705695080042583,
+        "household_bread": 1014.2003640551501,
+        "household_net_flow": -5001.021691587444,
+        "household_cash_end": 168555.88739937166,
+        "open_firms_end": 290,
+        "goods": {
+          "grain": {
+            "output": 1184.8702897187318,
+            "stock": 1256.3800611551726,
+            "household_consumed": 0,
+            "used": 1160.1258681344143,
+            "need": 0,
+            "execution": 1.0000000000000002
+          },
+          "flour": {
+            "output": 966.7715567786787,
+            "stock": 1276.4290676143219,
+            "household_consumed": 0,
+            "used": 953.838931855006,
+            "need": 0,
+            "execution": 0.7462782021723497
+          },
+          "bread": {
+            "output": 1192.2986648187575,
+            "stock": 1222.9690744261293,
+            "household_consumed": 1014.2003640551501,
+            "used": 1198.0809523881153,
+            "need": 1678.19,
+            "execution": 0.5140554867702802
+          },
+          "wood": {
+            "output": 284.18801953686665,
+            "stock": 446.29057856642754,
+            "household_consumed": 0,
+            "used": 282.1000852885747,
+            "need": 0,
+            "execution": 1.0
+          },
+          "planks": {
+            "output": 94.4279748887075,
+            "stock": 322.3822820196139,
+            "household_consumed": 52.18729247061562,
+            "used": 72.71626606752864,
+            "need": 67.1276,
+            "execution": 0.6779209077691103
+          },
+          "ore": {
+            "output": 29.599540678648992,
+            "stock": 2526.59683202677,
+            "household_consumed": 0,
+            "used": 69.095262687805,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 38.38625704878056,
+            "stock": 163.884382149578,
+            "household_consumed": 0,
+            "used": 39.85822685159198,
+            "need": 0,
+            "execution": 0.5591773679085394
+          },
+          "tools": {
+            "output": 56.940324073702826,
+            "stock": 177.7329373169624,
+            "household_consumed": 33.03332452728976,
+            "used": 43.29781132574626,
+            "need": 41.954750000000004,
+            "execution": 0.4965534916977538
+          },
+          "flax": {
+            "output": 350.82122445170813,
+            "stock": 468.75726232548345,
+            "household_consumed": 0,
+            "used": 346.7700894190871,
+            "need": 0,
+            "execution": 1.0000000000000002
+          },
+          "cloth": {
+            "output": 247.69292101363365,
+            "stock": 281.4721398755648,
+            "household_consumed": 93.8171547043579,
+            "used": 256.138606460873,
+            "need": 125.86424999999998,
+            "execution": 0.4553595760646494
+          },
+          "fish": {
+            "output": 170.88037947756908,
+            "stock": 170.88037947756942,
+            "household_consumed": 112.15795854305576,
+            "used": 170.88037947756908,
+            "need": 335.63800000000003,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1397.0,
+            "zero_plan_stock": 344.0,
+            "zero_plan_sold_out": 379.0,
+            "idle_after_sold_out": 379.0,
+            "unanticipated_sales": 17297.420279108355,
+            "retrospective_gap_per_month": 408.70666050672565
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 177.0,
+            "zero_plan_sold_out": 156.0,
+            "idle_after_sold_out": 156.0,
+            "unanticipated_sales": 5712.246933467824,
+            "retrospective_gap_per_month": 286.467276008788
+          },
+          "wood": {
+            "firm_months": 540.0,
+            "zero_plan_stock": 172.0,
+            "zero_plan_sold_out": 117.0,
+            "idle_after_sold_out": 117.0,
+            "unanticipated_sales": 1680.4769347087347,
+            "retrospective_gap_per_month": 177.71689131725978
+          },
+          "grain": {
+            "firm_months": 630.0,
+            "zero_plan_stock": 134.0,
+            "zero_plan_sold_out": 101.0,
+            "idle_after_sold_out": 101.0,
+            "unanticipated_sales": 3446.6271656947324,
+            "retrospective_gap_per_month": 610.1359650952121
+          }
+        },
+        "investment_starts": 12,
+        "examples": [
+          {
+            "month": 211,
+            "id": "firm-00038",
+            "good": "grain",
+            "opening_stock": 40.967414797558504,
+            "expected_sales": 0.0,
+            "forecast": 23.265528765826147,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 71.39999999999999,
+            "margin": 0.07070615444119063,
+            "sale_price": 0.13070615444119063,
+            "planning_reason": "Готовые запасы",
+            "sold": 40.967414797558504,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 23.265528765826147,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00022",
+            "good": "grain",
+            "opening_stock": 137.7,
+            "expected_sales": 59.59920000000002,
+            "forecast": 59.59920000000002,
+            "demand": 59.59920000000002,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 137.7,
+            "margin": 0.05772147288011015,
+            "sale_price": 0.11772147288011015,
+            "planning_reason": "Готовые запасы",
+            "sold": 137.7,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 59.59920000000002,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00063",
+            "good": "grain",
+            "opening_stock": 25.5,
+            "expected_sales": 0.0,
+            "forecast": 25.5,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 25.5,
+            "margin": 0.05559462194575597,
+            "sale_price": 0.11559462194575597,
+            "planning_reason": "Готовые запасы",
+            "sold": 25.5,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 25.5,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 0.0,
+        "bread_delta_pct": 0.0
+      },
+      "lead_time": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-17/engine-180.pickle",
+          "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a",
+          "seed": 17,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "lead_time",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "d0d13c13ff58bff70caa7944e5d20711dbccf324c903e5ce9d00d0bbd0d1c47b",
+        "coverage": 0.6467298773878604,
+        "household_bread": 1162.520997490178,
+        "household_net_flow": -5233.801212185058,
+        "household_cash_end": 121747.59790425535,
+        "open_firms_end": 286,
+        "goods": {
+          "grain": {
+            "output": 1427.8414702391358,
+            "stock": 1494.2045208231314,
+            "household_consumed": 0,
+            "used": 1427.544572358345,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 1189.6204769652877,
+            "stock": 1317.5475004922253,
+            "household_consumed": 0,
+            "used": 1180.1116457514768,
+            "need": 0,
+            "execution": 0.8653139189245589
+          },
+          "bread": {
+            "output": 1475.1395571893459,
+            "stock": 1580.679606199329,
+            "household_consumed": 1162.520997490178,
+            "used": 1433.0639560459601,
+            "need": 1678.19,
+            "execution": 0.5072439346163689
+          },
+          "wood": {
+            "output": 263.3728787991612,
+            "stock": 562.3449710669776,
+            "household_consumed": 0,
+            "used": 250.46123664395753,
+            "need": 0,
+            "execution": 1.0000000000000002
+          },
+          "planks": {
+            "output": 59.555408164751746,
+            "stock": 222.40009815839306,
+            "household_consumed": 59.04642661424917,
+            "used": 64.57884147489932,
+            "need": 67.1276,
+            "execution": 0.8944386191742496
+          },
+          "ore": {
+            "output": 18.301277244668217,
+            "stock": 2922.1111000967176,
+            "household_consumed": 0,
+            "used": 45.99882928977892,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 25.554905160988287,
+            "stock": 95.39525723948604,
+            "household_consumed": 0,
+            "used": 23.782050166589627,
+            "need": 0,
+            "execution": 0.8185948323886506
+          },
+          "tools": {
+            "output": 33.97435738084233,
+            "stock": 61.86403207532698,
+            "household_consumed": 34.70259641511516,
+            "used": 37.46880384544023,
+            "need": 41.954750000000004,
+            "execution": 0.6197416641735994
+          },
+          "flax": {
+            "output": 437.9023288042139,
+            "stock": 520.1662873137393,
+            "household_consumed": 0,
+            "used": 427.0584456507132,
+            "need": 0,
+            "execution": 1.0
+          },
+          "cloth": {
+            "output": 305.0417468933666,
+            "stock": 361.2225670273013,
+            "household_consumed": 99.86172104463243,
+            "used": 307.02830627582244,
+            "need": 125.86424999999998,
+            "execution": 0.6387631011562576
+          },
+          "fish": {
+            "output": 180,
+            "stock": 180.00000000000028,
+            "household_consumed": 109.00758420740416,
+            "used": 179.99999999999997,
+            "need": 335.63800000000003,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1320.0,
+            "zero_plan_stock": 337.0,
+            "zero_plan_sold_out": 336.0,
+            "idle_after_sold_out": 336.0,
+            "unanticipated_sales": 21331.530053661198,
+            "retrospective_gap_per_month": 362.88304947740755
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 175.0,
+            "zero_plan_sold_out": 165.0,
+            "idle_after_sold_out": 165.0,
+            "unanticipated_sales": 8747.625828865854,
+            "retrospective_gap_per_month": 255.32570224637942
+          },
+          "wood": {
+            "firm_months": 540.0,
+            "zero_plan_stock": 146.0,
+            "zero_plan_sold_out": 51.0,
+            "idle_after_sold_out": 51.0,
+            "unanticipated_sales": 850.5878332783695,
+            "retrospective_gap_per_month": 45.93403684186843
+          },
+          "grain": {
+            "firm_months": 630.0,
+            "zero_plan_stock": 84.0,
+            "zero_plan_sold_out": 59.0,
+            "idle_after_sold_out": 59.0,
+            "unanticipated_sales": 2921.59305846903,
+            "retrospective_gap_per_month": 248.28068799347287
+          }
+        },
+        "investment_starts": 2,
+        "examples": [
+          {
+            "month": 211,
+            "id": "firm-00068",
+            "good": "grain",
+            "opening_stock": 63.784045169308335,
+            "expected_sales": 0.0,
+            "forecast": 38.54351563302789,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 137.7,
+            "margin": 0.048719495451896896,
+            "sale_price": 0.1087194954518969,
+            "planning_reason": "Готовые запасы",
+            "sold": 63.784045169308335,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 38.54351563302789,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00055",
+            "good": "grain",
+            "opening_stock": 51.0,
+            "expected_sales": 0.0,
+            "forecast": 20.777777777777775,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 51.0,
+            "margin": 0.04532676040470544,
+            "sale_price": 0.10532676040470544,
+            "planning_reason": "Готовые запасы",
+            "sold": 51.0,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 20.777777777777775,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00041",
+            "good": "grain",
+            "opening_stock": 168.6403824094969,
+            "expected_sales": 32.36543999999999,
+            "forecast": 56.77388365739635,
+            "demand": 32.36543999999999,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 214.2,
+            "margin": 0.03588216846387475,
+            "sale_price": 0.09588216846387475,
+            "planning_reason": "Готовые запасы",
+            "sold": 168.6403824094969,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 56.77388365739635,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 7.616036938360205,
+        "bread_delta_pct": 14.624391657875858
+      }
+    },
+    "2026": {
+      "control": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-2026/engine-180.pickle",
+          "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612",
+          "seed": 2026,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "afa76d8e4851d03ee4e2f3adb0a7455817646a6e64a4fa6ba1a80235f3ba6a86",
+        "coverage": 0.5572316571865181,
+        "household_bread": 1036.3496591260123,
+        "household_net_flow": -2895.328989896175,
+        "household_cash_end": 352805.4651479288,
+        "open_firms_end": 284,
+        "goods": {
+          "grain": {
+            "output": 1538.277155990819,
+            "stock": 1554.0440190171223,
+            "household_consumed": 0,
+            "used": 1527.3153459298087,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 1272.7627882748404,
+            "stock": 1420.9117144162792,
+            "household_consumed": 0,
+            "used": 1286.7565880097677,
+            "need": 0,
+            "execution": 0.7090741511769102
+          },
+          "bread": {
+            "output": 1608.4457350122095,
+            "stock": 1634.5304707165328,
+            "household_consumed": 1036.3496591260123,
+            "used": 1595.1944812744534,
+            "need": 1735.604,
+            "execution": 0.28620375972392015
+          },
+          "wood": {
+            "output": 400.1434046764755,
+            "stock": 1025.175669676092,
+            "household_consumed": 0,
+            "used": 381.7894519602322,
+            "need": 0,
+            "execution": 1.0
+          },
+          "planks": {
+            "output": 126.87728535962503,
+            "stock": 468.28211803415036,
+            "household_consumed": 58.67368994788766,
+            "used": 90.06881621082057,
+            "need": 69.42416,
+            "execution": 0.7780850832440186
+          },
+          "ore": {
+            "output": 43.183627913676204,
+            "stock": 1868.9484543830733,
+            "household_consumed": 0,
+            "used": 102.79833260104822,
+            "need": 0,
+            "execution": 0.9999999999999998
+          },
+          "iron": {
+            "output": 57.11018477836012,
+            "stock": 133.89839150140944,
+            "household_consumed": 0,
+            "used": 50.722692123792825,
+            "need": 0,
+            "execution": 0.5770919113232816
+          },
+          "tools": {
+            "output": 72.46098874827547,
+            "stock": 243.21746737383017,
+            "household_consumed": 36.42677389636074,
+            "used": 52.12433702782718,
+            "need": 43.390100000000004,
+            "execution": 0.7126055577587626
+          },
+          "flax": {
+            "output": 430.2901918403967,
+            "stock": 469.4872438693282,
+            "household_consumed": 0,
+            "used": 420.54096936561007,
+            "need": 0,
+            "execution": 1.0
+          },
+          "cloth": {
+            "output": 300.3864066897215,
+            "stock": 337.4096428215084,
+            "household_consumed": 105.50870399565527,
+            "used": 303.3990029187626,
+            "need": 130.1703,
+            "execution": 0.3888248844007039
+          },
+          "fish": {
+            "output": 180,
+            "stock": 180.0000000000003,
+            "household_consumed": 96.52406624686195,
+            "used": 180.0,
+            "need": 347.12080000000003,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1231.0,
+            "zero_plan_stock": 164.0,
+            "zero_plan_sold_out": 183.0,
+            "idle_after_sold_out": 183.0,
+            "unanticipated_sales": 14492.7339410637,
+            "retrospective_gap_per_month": 524.591813587478
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 106.0,
+            "zero_plan_sold_out": 101.0,
+            "idle_after_sold_out": 101.0,
+            "unanticipated_sales": 4708.149916702647,
+            "retrospective_gap_per_month": 173.0515843083377
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 246.0,
+            "zero_plan_sold_out": 133.0,
+            "idle_after_sold_out": 133.0,
+            "unanticipated_sales": 2193.836141026497,
+            "retrospective_gap_per_month": 221.71359051467715
+          },
+          "grain": {
+            "firm_months": 630.0,
+            "zero_plan_stock": 114.0,
+            "zero_plan_sold_out": 103.0,
+            "idle_after_sold_out": 103.0,
+            "unanticipated_sales": 6781.822955769315,
+            "retrospective_gap_per_month": 653.6477327451777
+          }
+        },
+        "investment_starts": 8,
+        "examples": [
+          {
+            "month": 212,
+            "id": "firm-00065",
+            "good": "grain",
+            "opening_stock": 35.699999999999996,
+            "expected_sales": 0.0,
+            "forecast": 11.060719012345695,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 35.699999999999996,
+            "margin": 0.1612423545175978,
+            "sale_price": 0.2212423545175978,
+            "planning_reason": "Готовые запасы",
+            "sold": 35.699999999999996,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 11.060719012345695,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00016",
+            "good": "grain",
+            "opening_stock": 86.7,
+            "expected_sales": 0.0,
+            "forecast": 20.926907654320967,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 86.7,
+            "margin": 0.15157572525113472,
+            "sale_price": 0.21157572525113472,
+            "planning_reason": "Готовые запасы",
+            "sold": 86.7,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 20.926907654320967,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00061",
+            "good": "grain",
+            "opening_stock": 102.0,
+            "expected_sales": 38.61743999999997,
+            "forecast": 101.08300799999999,
+            "demand": 38.61743999999997,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 102.0,
+            "margin": 0.2185893214557182,
+            "sale_price": 0.2785893214557182,
+            "planning_reason": "Готовые запасы",
+            "sold": 102.0,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 101.08300799999999,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 0.0,
+        "bread_delta_pct": 0.0
+      },
+      "lead_time": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-2026/engine-180.pickle",
+          "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612",
+          "seed": 2026,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "lead_time",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "f863e5627cf81fbf97f3dfd38c1b3b37fe48dd1790f1f9f3c0b48d23dae18243",
+        "coverage": 0.6682275545567202,
+        "household_bread": 1254.1198274254643,
+        "household_net_flow": -3326.4753497561655,
+        "household_cash_end": 334512.7120188196,
+        "open_firms_end": 289,
+        "goods": {
+          "grain": {
+            "output": 1767.0900179980508,
+            "stock": 1910.5066646942237,
+            "household_consumed": 0,
+            "used": 1771.970206347194,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 1476.6418386226615,
+            "stock": 1681.0454787275426,
+            "household_consumed": 0,
+            "used": 1478.2071523857392,
+            "need": 0,
+            "execution": 0.8670162445648035
+          },
+          "bread": {
+            "output": 1847.7589404821738,
+            "stock": 1880.4121666795459,
+            "household_consumed": 1254.1198274254643,
+            "used": 1843.7070342010827,
+            "need": 1735.604,
+            "execution": 0.3781049591731025
+          },
+          "wood": {
+            "output": 337.037930735184,
+            "stock": 992.8938797830572,
+            "household_consumed": 0,
+            "used": 326.24251655683634,
+            "need": 0,
+            "execution": 1.0
+          },
+          "planks": {
+            "output": 80.83989047444248,
+            "stock": 366.31997539928716,
+            "household_consumed": 68.28987106848106,
+            "used": 87.6018709243022,
+            "need": 69.42416,
+            "execution": 0.8212302192402918
+          },
+          "ore": {
+            "output": 37.17587020279392,
+            "stock": 1923.7574843178265,
+            "household_consumed": 0,
+            "used": 64.78889163565741,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 35.993828686476334,
+            "stock": 231.65645798574428,
+            "household_consumed": 0,
+            "used": 34.483091253235045,
+            "need": 0,
+            "execution": 0.5431182916985497
+          },
+          "tools": {
+            "output": 49.26155893319293,
+            "stock": 148.33344944959939,
+            "household_consumed": 39.16753563033477,
+            "used": 48.82353555824532,
+            "need": 43.390100000000004,
+            "execution": 0.7974761349655285
+          },
+          "flax": {
+            "output": 448.5430334547036,
+            "stock": 483.28130361846416,
+            "household_consumed": 0,
+            "used": 443.7913041218612,
+            "need": 0,
+            "execution": 1.0
+          },
+          "cloth": {
+            "output": 316.9937886584723,
+            "stock": 373.8233951652862,
+            "household_consumed": 116.54904742778947,
+            "used": 315.4024959606033,
+            "need": 130.1703,
+            "execution": 0.4662914381685657
+          },
+          "fish": {
+            "output": 180,
+            "stock": 180.00000000000028,
+            "household_consumed": 99.87770816252862,
+            "used": 180.00000000000003,
+            "need": 347.12080000000003,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1346.0,
+            "zero_plan_stock": 196.0,
+            "zero_plan_sold_out": 213.0,
+            "idle_after_sold_out": 213.0,
+            "unanticipated_sales": 16427.123452723277,
+            "retrospective_gap_per_month": 435.90084462376075
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 127.0,
+            "zero_plan_sold_out": 98.0,
+            "idle_after_sold_out": 98.0,
+            "unanticipated_sales": 6396.236635607063,
+            "retrospective_gap_per_month": 207.42092376753885
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 214.0,
+            "zero_plan_sold_out": 45.0,
+            "idle_after_sold_out": 45.0,
+            "unanticipated_sales": 908.1875808342447,
+            "retrospective_gap_per_month": 38.2732096557073
+          },
+          "grain": {
+            "firm_months": 630.0,
+            "zero_plan_stock": 73.0,
+            "zero_plan_sold_out": 48.0,
+            "idle_after_sold_out": 48.0,
+            "unanticipated_sales": 2885.2761394561567,
+            "retrospective_gap_per_month": 249.8226043358275
+          }
+        },
+        "investment_starts": 9,
+        "examples": [
+          {
+            "month": 212,
+            "id": "firm-00053",
+            "good": "grain",
+            "opening_stock": 12.595626666666666,
+            "expected_sales": 0.0,
+            "forecast": 12.595626666666666,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 20.4,
+            "margin": 0.15393573171625874,
+            "sale_price": 0.21393573171625874,
+            "planning_reason": "Готовые запасы",
+            "sold": 12.595626666666666,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 12.595626666666666,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00029",
+            "good": "grain",
+            "opening_stock": 5.1,
+            "expected_sales": 0.0,
+            "forecast": 5.1,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 5.1,
+            "margin": 0.07049323390888132,
+            "sale_price": 0.13049323390888132,
+            "planning_reason": "Готовые запасы",
+            "sold": 5.1,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 5.1,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00037",
+            "good": "grain",
+            "opening_stock": 15.299999999999999,
+            "expected_sales": 0.0,
+            "forecast": 15.299999999999999,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 15.299999999999999,
+            "margin": 0.07058786898685315,
+            "sale_price": 0.13058786898685315,
+            "planning_reason": "Готовые запасы",
+            "sold": 15.299999999999999,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 15.299999999999999,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 11.09958973702021,
+        "bread_delta_pct": 21.01319437718585
+      }
+    },
+    "fresh-73129": {
+      "control": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "fb76e3e038090b368911a19acc633f921a29e4bd3bbbe46e68aebb587f09a74c",
+        "coverage": 0.41757671457686607,
+        "household_bread": 727.5630837207295,
+        "household_net_flow": -4236.93219677595,
+        "household_cash_end": 429915.8714919733,
+        "open_firms_end": 290,
+        "goods": {
+          "grain": {
+            "output": 826.9128063887358,
+            "stock": 1042.3577584074867,
+            "household_consumed": 0,
+            "used": 843.3546516630591,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 702.7955430525493,
+            "stock": 1089.3448077450512,
+            "household_consumed": 0,
+            "used": 705.3023720198244,
+            "need": 0,
+            "execution": 0.6485904159780359
+          },
+          "bread": {
+            "output": 881.6279650247803,
+            "stock": 896.636534695027,
+            "household_consumed": 727.5630837207295,
+            "used": 879.706698070893,
+            "need": 1664.252,
+            "execution": 0.40469303783281935
+          },
+          "wood": {
+            "output": 242.90254129597204,
+            "stock": 439.4842890465461,
+            "household_consumed": 0,
+            "used": 241.63525899062682,
+            "need": 0,
+            "execution": 1.0
+          },
+          "planks": {
+            "output": 89.89092704904786,
+            "stock": 201.01582790682858,
+            "household_consumed": 56.14100886316792,
+            "used": 86.18890433390973,
+            "need": 66.57008,
+            "execution": 0.7750357963989293
+          },
+          "ore": {
+            "output": 17.063435141708077,
+            "stock": 2076.122220688537,
+            "household_consumed": 0,
+            "used": 62.3865362153837,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 34.65918678632428,
+            "stock": 132.26621963189837,
+            "household_consumed": 0,
+            "used": 36.91040558938129,
+            "need": 0,
+            "execution": 0.6761223815581431
+          },
+          "tools": {
+            "output": 52.72915084197327,
+            "stock": 111.35641776753108,
+            "household_consumed": 37.84384235028242,
+            "used": 52.86779008565333,
+            "need": 41.606300000000005,
+            "execution": 0.7679001119996823
+          },
+          "flax": {
+            "output": 465.3,
+            "stock": 465.38105993846534,
+            "household_consumed": 0,
+            "used": 465.30000000000007,
+            "need": 0,
+            "execution": 0.9999999999999999
+          },
+          "cloth": {
+            "output": 332.3571428571429,
+            "stock": 332.3571428571431,
+            "household_consumed": 38.97337565388495,
+            "used": 332.3571428571429,
+            "need": 124.81889999999999,
+            "execution": 0.25947963236149985
+          },
+          "fish": {
+            "output": 179.63590541634932,
+            "stock": 179.6359054163495,
+            "household_consumed": 93.33629461174418,
+            "used": 179.63590541634932,
+            "need": 332.85040000000004,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1608.0,
+            "zero_plan_stock": 315.0,
+            "zero_plan_sold_out": 355.0,
+            "idle_after_sold_out": 355.0,
+            "unanticipated_sales": 11216.103980245267,
+            "retrospective_gap_per_month": 291.06782049045455
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 231.0,
+            "zero_plan_sold_out": 154.0,
+            "idle_after_sold_out": 154.0,
+            "unanticipated_sales": 5970.4178213896885,
+            "retrospective_gap_per_month": 168.48060153484252
+          },
+          "grain": {
+            "firm_months": 570.0,
+            "zero_plan_stock": 200.0,
+            "zero_plan_sold_out": 132.0,
+            "idle_after_sold_out": 132.0,
+            "unanticipated_sales": 9168.579024867795,
+            "retrospective_gap_per_month": 353.3798185890459
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 224.0,
+            "zero_plan_sold_out": 107.0,
+            "idle_after_sold_out": 107.0,
+            "unanticipated_sales": 1175.864838956047,
+            "retrospective_gap_per_month": 127.07669752347618
+          }
+        },
+        "investment_starts": 16,
+        "examples": [
+          {
+            "month": 211,
+            "id": "firm-00060",
+            "good": "grain",
+            "opening_stock": 71.2831273554589,
+            "expected_sales": 0.0,
+            "forecast": 46.64858629772727,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 229.5,
+            "margin": 3.8807441978831343,
+            "sale_price": 3.9407441978831343,
+            "planning_reason": "Готовые запасы",
+            "sold": 71.2831273554589,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 46.64858629772727,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00075",
+            "good": "grain",
+            "opening_stock": 25.5,
+            "expected_sales": 0.0,
+            "forecast": 17.0,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 25.5,
+            "margin": 3.858344197883134,
+            "sale_price": 3.918344197883134,
+            "planning_reason": "Готовые запасы",
+            "sold": 25.5,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 17.0,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00057",
+            "good": "grain",
+            "opening_stock": 17.629378414820263,
+            "expected_sales": 0.0,
+            "forecast": 10.447410258380447,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 40.8,
+            "margin": 3.837986987988977,
+            "sale_price": 3.8979869879889772,
+            "planning_reason": "Готовые запасы",
+            "sold": 17.629378414820263,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 10.447410258380447,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 0.0,
+        "bread_delta_pct": 0.0
+      },
+      "lead_time": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "lead_time",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "c452fd7fb49def963ef638ed6c55aac3c2a786adc3eb44482f0347c33ecf486d",
+        "coverage": 0.5210456408807779,
+        "household_bread": 912.4795264703292,
+        "household_net_flow": -5641.907294803361,
+        "household_cash_end": 360105.99378000316,
+        "open_firms_end": 289,
+        "goods": {
+          "grain": {
+            "output": 1039.9089966876757,
+            "stock": 1213.3013121047056,
+            "household_consumed": 0,
+            "used": 1022.949489834081,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 852.4579081950675,
+            "stock": 1025.1812015771065,
+            "household_consumed": 0,
+            "used": 829.1533863365576,
+            "need": 0,
+            "execution": 0.8138114776267884
+          },
+          "bread": {
+            "output": 1036.441732920697,
+            "stock": 1039.5842657123708,
+            "household_consumed": 912.4795264703292,
+            "used": 1039.0972402156729,
+            "need": 1664.252,
+            "execution": 0.502194308607826
+          },
+          "wood": {
+            "output": 254.68835934262052,
+            "stock": 534.7313965534947,
+            "household_consumed": 0,
+            "used": 248.45167766001563,
+            "need": 0,
+            "execution": 1.0
+          },
+          "planks": {
+            "output": 82.21651424018216,
+            "stock": 204.1720524340121,
+            "household_consumed": 66.12417762151394,
+            "used": 81.5146026257264,
+            "need": 66.57008,
+            "execution": 0.9526089808462417
+          },
+          "ore": {
+            "output": 33.57018591353401,
+            "stock": 2598.6624843792374,
+            "household_consumed": 0,
+            "used": 66.90868212164936,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 37.17149006758298,
+            "stock": 133.6340094455518,
+            "household_consumed": 0,
+            "used": 36.45399756870514,
+            "need": 0,
+            "execution": 0.8954124819448301
+          },
+          "tools": {
+            "output": 52.077139383864484,
+            "stock": 187.60382406741695,
+            "household_consumed": 41.606300000000005,
+            "used": 49.30151250210623,
+            "need": 41.606300000000005,
+            "execution": 0.9610390461022829
+          },
+          "flax": {
+            "output": 465.3,
+            "stock": 465.30000000000007,
+            "household_consumed": 0,
+            "used": 465.30000000000007,
+            "need": 0,
+            "execution": 1.0
+          },
+          "cloth": {
+            "output": 332.3571428571429,
+            "stock": 332.3571428571432,
+            "household_consumed": 43.089384496235596,
+            "used": 332.35714285714295,
+            "need": 124.81889999999999,
+            "execution": 0.2289840199716439
+          },
+          "fish": {
+            "output": 180,
+            "stock": 180.0000000000001,
+            "household_consumed": 109.97066282492536,
+            "used": 180.0,
+            "need": 332.85040000000004,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1635.0,
+            "zero_plan_stock": 223.0,
+            "zero_plan_sold_out": 260.0,
+            "idle_after_sold_out": 260.0,
+            "unanticipated_sales": 14845.764574473755,
+            "retrospective_gap_per_month": 257.2504549137057
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 255.0,
+            "zero_plan_sold_out": 205.0,
+            "idle_after_sold_out": 205.0,
+            "unanticipated_sales": 10725.400550892384,
+            "retrospective_gap_per_month": 214.9436524114968
+          },
+          "grain": {
+            "firm_months": 570.0,
+            "zero_plan_stock": 189.0,
+            "zero_plan_sold_out": 134.0,
+            "idle_after_sold_out": 134.0,
+            "unanticipated_sales": 13276.896770950474,
+            "retrospective_gap_per_month": 315.26660347682395
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 156.0,
+            "zero_plan_sold_out": 54.0,
+            "idle_after_sold_out": 54.0,
+            "unanticipated_sales": 372.61615318875465,
+            "retrospective_gap_per_month": 32.81994249527934
+          }
+        },
+        "investment_starts": 12,
+        "examples": [
+          {
+            "month": 211,
+            "id": "firm-00063",
+            "good": "grain",
+            "opening_stock": 64.67486140706968,
+            "expected_sales": 0.0,
+            "forecast": 27.55584,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 244.79999999999998,
+            "margin": 4.055341866209626,
+            "sale_price": 4.115341866209626,
+            "planning_reason": "Готовые запасы",
+            "sold": 64.67486140706968,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 27.55584,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00060",
+            "good": "grain",
+            "opening_stock": 29.544840068046987,
+            "expected_sales": 0.0,
+            "forecast": 26.530146632507037,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 229.5,
+            "margin": 4.02667464263984,
+            "sale_price": 4.0866746426398395,
+            "planning_reason": "Готовые запасы",
+            "sold": 29.544840068046987,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 26.530146632507037,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00051",
+            "good": "grain",
+            "opening_stock": 15.299999999999999,
+            "expected_sales": 0.0,
+            "forecast": 8.326550703534847,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 15.299999999999999,
+            "margin": 3.8022639657591553,
+            "sale_price": 3.8622639657591553,
+            "planning_reason": "Готовые запасы",
+            "sold": 15.299999999999999,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 8.326550703534847,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 10.34689263039118,
+        "bread_delta_pct": 25.415863845639898
+      },
+      "raw_lead_time": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "raw_lead_time",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa"
+        },
+        "trace_sha256": "d37f63ba7e2b048d99eeea1b032d56a13faf7dd29d8b9526820931abc465c891",
+        "coverage": 0.4753937978759902,
+        "household_bread": 836.7851361401479,
+        "household_net_flow": -5006.01208588221,
+        "household_cash_end": 381072.7927822609,
+        "open_firms_end": 286,
+        "goods": {
+          "grain": {
+            "output": 903.7695628102381,
+            "stock": 1072.2585956074486,
+            "household_consumed": 0,
+            "used": 919.0842664399152,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 765.9035553665959,
+            "stock": 829.7190434684005,
+            "household_consumed": 0,
+            "used": 770.183107830154,
+            "need": 0,
+            "execution": 0.8031118081686061
+          },
+          "bread": {
+            "output": 962.7288847876924,
+            "stock": 962.7288847876929,
+            "household_consumed": 836.7851361401479,
+            "used": 958.1556143945224,
+            "need": 1664.252,
+            "execution": 0.5294907330261781
+          },
+          "wood": {
+            "output": 211.94580697757124,
+            "stock": 498.62108514262536,
+            "household_consumed": 0,
+            "used": 208.58193477153156,
+            "need": 0,
+            "execution": 1.0
+          },
+          "planks": {
+            "output": 65.19347715696559,
+            "stock": 87.127339463687,
+            "household_consumed": 66.57008,
+            "used": 66.77720565928881,
+            "need": 66.57008,
+            "execution": 0.99837438586757
+          },
+          "ore": {
+            "output": 21.563557078105806,
+            "stock": 2612.462856266161,
+            "household_consumed": 0,
+            "used": 47.85277769932647,
+            "need": 0,
+            "execution": 1.0
+          },
+          "iron": {
+            "output": 26.584876499625814,
+            "stock": 67.06362619195188,
+            "household_consumed": 0,
+            "used": 27.082066874173712,
+            "need": 0,
+            "execution": 0.8478424797435987
+          },
+          "tools": {
+            "output": 38.688666963105305,
+            "stock": 46.87922802652015,
+            "household_consumed": 38.330249481957516,
+            "used": 38.43381231160191,
+            "need": 41.606300000000005,
+            "execution": 0.9432839777224691
+          },
+          "flax": {
+            "output": 465.3,
+            "stock": 465.30000000000007,
+            "household_consumed": 0,
+            "used": 465.30000000000007,
+            "need": 0,
+            "execution": 1.0
+          },
+          "cloth": {
+            "output": 332.3571428571429,
+            "stock": 332.3571428571432,
+            "household_consumed": 44.76584493121628,
+            "used": 332.357142857143,
+            "need": 124.81889999999999,
+            "execution": 0.2798459733406062
+          },
+          "fish": {
+            "output": 180,
+            "stock": 180.0000000000002,
+            "household_consumed": 94.38093564813283,
+            "used": 179.99999999999997,
+            "need": 332.85040000000004,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1620.0,
+            "zero_plan_stock": 263.0,
+            "zero_plan_sold_out": 300.0,
+            "idle_after_sold_out": 300.0,
+            "unanticipated_sales": 13562.090534410343,
+            "retrospective_gap_per_month": 328.9830643014482
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 262.0,
+            "zero_plan_sold_out": 221.0,
+            "idle_after_sold_out": 221.0,
+            "unanticipated_sales": 9622.767422819794,
+            "retrospective_gap_per_month": 261.1286886058723
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 174.0,
+            "zero_plan_sold_out": 51.0,
+            "idle_after_sold_out": 51.0,
+            "unanticipated_sales": 228.47557917988323,
+            "retrospective_gap_per_month": 22.900455215620134
+          },
+          "grain": {
+            "firm_months": 570.0,
+            "zero_plan_stock": 177.0,
+            "zero_plan_sold_out": 137.0,
+            "idle_after_sold_out": 137.0,
+            "unanticipated_sales": 11901.534844449092,
+            "retrospective_gap_per_month": 287.31416061773626
+          }
+        },
+        "investment_starts": 2,
+        "examples": [
+          {
+            "month": 211,
+            "id": "firm-00022",
+            "good": "grain",
+            "opening_stock": 11.688159591787509,
+            "expected_sales": 0.0,
+            "forecast": 8.5,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 15.299999999999999,
+            "margin": 3.929949457349332,
+            "sale_price": 3.989949457349332,
+            "planning_reason": "Готовые запасы",
+            "sold": 11.688159591787509,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 8.5,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00010",
+            "good": "grain",
+            "opening_stock": 232.65978755480455,
+            "expected_sales": 37.15445333333332,
+            "forecast": 137.4597875548046,
+            "demand": 37.15445333333332,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 285.59999999999997,
+            "margin": 3.82429906414222,
+            "sale_price": 3.88429906414222,
+            "planning_reason": "Готовые запасы",
+            "sold": 232.65978755480455,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 137.4597875548046,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 212,
+            "id": "firm-00054",
+            "good": "grain",
+            "opening_stock": 20.4,
+            "expected_sales": 0.0,
+            "forecast": 8.311111111111112,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 20.4,
+            "margin": 3.80189906414222,
+            "sale_price": 3.86189906414222,
+            "planning_reason": "Готовые запасы",
+            "sold": 20.4,
+            "preproduction_stock": 0,
+            "output": 0,
+            "production_limit": "Готовые запасы",
+            "retrospective_replenishment_gap": 8.311111111111112,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 5.78170832991241,
+        "bread_delta_pct": 15.012038799558237
+      },
+      "post_trade_raw": {
+        "metadata": {
+          "commit": "9b3a608dfb45ea1e529c1823a976d01c18bd89e0",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "post_trade_raw",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "supply_observer_sha256": "bd88b6d27d428e3d6be135acc5f7300919cb2551139c799f7a45db9b1f75d5fa",
+          "post_trade_experiment_sha256": "78f10b2b0ad4856461ba5ec184f80032af65007793c093c1669c4e8a8f86df74",
+          "selection": "exploratory after observing hidden bid increases and sales after zero plans"
+        },
+        "trace_sha256": "806d9ea1e1eb06c0e045b6167b93ffc917ab834fabb0fb725c9c038f4afaa7b8",
+        "coverage": 0.5530968804940773,
+        "household_bread": 989.0150721770658,
+        "household_net_flow": -5602.36159316729,
+        "household_cash_end": 366090.0981536173,
+        "open_firms_end": 287,
+        "goods": {
+          "grain": {
+            "output": 1124.0313940435015,
+            "stock": 1786.7441124882162,
+            "household_consumed": 0,
+            "used": 1119.70051418401,
+            "need": 0,
+            "execution": 1.0
+          },
+          "flour": {
+            "output": 933.0837618200084,
+            "stock": 1246.1037892535176,
+            "household_consumed": 0,
+            "used": 909.6196866369489,
+            "need": 0,
+            "execution": 0.917006571791523
+          },
+          "bread": {
+            "output": 1137.024608296186,
+            "stock": 1145.9623666640189,
+            "household_consumed": 989.0150721770658,
+            "used": 1155.3377442504182,
+            "need": 1664.252,
+            "execution": 0.5836091109337478
+          },
+          "wood": {
+            "output": 235.15280448441533,
+            "stock": 556.007363813386,
+            "household_consumed": 0,
+            "used": 228.13830524606854,
+            "need": 0,
+            "execution": 0.9999999999999999
+          },
+          "planks": {
+            "output": 66.84605227406661,
+            "stock": 97.4265247675618,
+            "household_consumed": 64.53819723840952,
+            "used": 64.90661182551516,
+            "need": 66.57008,
+            "execution": 0.9873725620059389
+          },
+          "ore": {
+            "output": 18.971809739816404,
+            "stock": 2536.386037664749,
+            "household_consumed": 0,
+            "used": 47.03053816869668,
+            "need": 0,
+            "execution": 1.0000000000000002
+          },
+          "iron": {
+            "output": 26.128076760387042,
+            "stock": 54.10224424069597,
+            "household_consumed": 0,
+            "used": 27.671304275839287,
+            "need": 0,
+            "execution": 0.8527377337542374
+          },
+          "tools": {
+            "output": 39.53043467977041,
+            "stock": 51.885992177064615,
+            "household_consumed": 40.04185400019213,
+            "used": 40.22606129374494,
+            "need": 41.606300000000005,
+            "execution": 0.9732699478384877
+          },
+          "flax": {
+            "output": 465.30000000000007,
+            "stock": 465.30000000000007,
+            "household_consumed": 0,
+            "used": 465.30000000000007,
+            "need": 0,
+            "execution": 1.0
+          },
+          "cloth": {
+            "output": 332.3571428571429,
+            "stock": 332.3571428571431,
+            "household_consumed": 45.928650282092256,
+            "used": 332.35714285714295,
+            "need": 124.81889999999999,
+            "execution": 0.3129144618627383
+          },
+          "fish": {
+            "output": 180,
+            "stock": 180.00000000000014,
+            "household_consumed": 88.16704224175474,
+            "used": 180.0,
+            "need": 332.85040000000004,
+            "execution": 1.0
+          }
+        },
+        "diagnostic": {
+          "bread": {
+            "firm_months": 1590.0,
+            "zero_plan_stock": 354.0,
+            "zero_plan_sold_out": 399.0,
+            "idle_after_sold_out": 399.0,
+            "unanticipated_sales": 17900.063124200675,
+            "retrospective_gap_per_month": 386.3651861875706
+          },
+          "flour": {
+            "firm_months": 900.0,
+            "zero_plan_stock": 287.0,
+            "zero_plan_sold_out": 166.0,
+            "idle_after_sold_out": 166.0,
+            "unanticipated_sales": 8049.349947784892,
+            "retrospective_gap_per_month": 283.7618015661912
+          },
+          "wood": {
+            "firm_months": 600.0,
+            "zero_plan_stock": 377.0,
+            "zero_plan_sold_out": 117.0,
+            "idle_after_sold_out": 0.0,
+            "unanticipated_sales": 946.6409084610035,
+            "retrospective_gap_per_month": 147.37854203893775
+          },
+          "grain": {
+            "firm_months": 570.0,
+            "zero_plan_stock": 319.0,
+            "zero_plan_sold_out": 150.0,
+            "idle_after_sold_out": 0.0,
+            "unanticipated_sales": 10909.929329844848,
+            "retrospective_gap_per_month": 568.8113733468313
+          }
+        },
+        "investment_starts": 1,
+        "examples": [
+          {
+            "month": 211,
+            "id": "firm-00063",
+            "good": "grain",
+            "opening_stock": 114.74535827431697,
+            "expected_sales": 0.0,
+            "forecast": 114.74535827431697,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 244.79999999999998,
+            "margin": 3.4412912933450457,
+            "sale_price": 3.5012912933450457,
+            "planning_reason": "Готовые запасы",
+            "sold": 114.74535827431697,
+            "preproduction_stock": 0,
+            "output": 114.74535827431697,
+            "production_limit": "План",
+            "retrospective_replenishment_gap": 114.74535827431697,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00010",
+            "good": "grain",
+            "opening_stock": 112.7033539140764,
+            "expected_sales": 0.0,
+            "forecast": 112.7033539140764,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 285.59999999999997,
+            "margin": 3.4048912933450457,
+            "sale_price": 3.4648912933450458,
+            "planning_reason": "Готовые запасы",
+            "sold": 112.70335391407642,
+            "preproduction_stock": 0,
+            "output": 112.7033539140764,
+            "production_limit": "План",
+            "retrospective_replenishment_gap": 112.7033539140764,
+            "zero_plan_sold_out": true
+          },
+          {
+            "month": 211,
+            "id": "firm-00051",
+            "good": "grain",
+            "opening_stock": 15.299999999999999,
+            "expected_sales": 0.0,
+            "forecast": 15.299999999999999,
+            "demand": 0.0,
+            "plan": 0,
+            "requested": 0,
+            "capacity": 15.299999999999999,
+            "margin": 3.3638636909085466,
+            "sale_price": 3.4238636909085467,
+            "planning_reason": "Готовые запасы",
+            "sold": 15.299999999999999,
+            "preproduction_stock": 0,
+            "output": 15.299999999999999,
+            "production_limit": "План",
+            "retrospective_replenishment_gap": 15.299999999999999,
+            "zero_plan_sold_out": true
+          }
+        ],
+        "invariant_violations": 0,
+        "coverage_delta_pp": 13.552016591721127,
+        "bread_delta_pct": 35.935301598767346
+      }
+    }
+  }
+}
