@@ -17,6 +17,7 @@ class Economy(EconomyServices):
     INPUT_BID_REVISION = 1
     STOCK_PLANNING_REVISION = 1
     PROFIT_DISTRIBUTION_REVISION = 1
+    HOUSEHOLD_TOP_UP_REVISION = 1
 
     def reset_report(self):
         super().reset_report()
@@ -35,7 +36,8 @@ class Economy(EconomyServices):
             input_bid_revision=self.INPUT_BID_REVISION,
             stock_planning_revision=self.STOCK_PLANNING_REVISION,
             profit_distribution_revision=self.PROFIT_DISTRIBUTION_REVISION,
-            rule_changes=['Обеспеченные заявки и один проход торговли существующими товарами',
+            household_top_up_revision=self.HOUSEHOLD_TOP_UP_REVISION,
+            rule_changes=['Обеспеченные заявки и торговля существующими товарами',
                 'Налог с конечных продаж вместо налога на прибыль',
                 'Выпуск по доступному спросу и неотрицательной ожидаемой марже',
                 'Сохранённые стройки и оплаченное собственное расширение',
@@ -706,6 +708,45 @@ class Economy(EconomyServices):
                     order.update(need_quantity=quantity, budget_price=price*fraction, unfunded_need=fraction < 1-EPS,
                         adaptive_household_budget=True)
 
+    def household_top_up(self, households, sells):
+        """Допокупка базовой еды после освобождения старых резервов, до доходов."""
+        for o in self.report['orders']:
+            if o['side'] == 'buy' and self.accounts[o['participant']]['kind'] == 'household':
+                o['reserved_before_top_up'] = o['reserved']
+                self.cancel_order(o, 'Пересмотр остатка потребительского бюджета')
+                o['superseded_by_top_up'] = True
+        candidates = [a for a in households if self.free_cash(a['id']) > EPS
+            and any(self.free_stock(a['id'], g) + EPS < self.population(a)*rate
+                for g, rate in self.cfg['basic_needs'].items())]
+        for a in self.shuffled(candidates):
+            for good in self.shuffled(self.cfg['basic_needs'], key=lambda g: g):
+                needed = self.population(a)*self.cfg['basic_needs'][good]
+                for price, sell, _ in self.offers(a, good, sells):
+                    missing = max(0, needed-self.free_stock(a['id'], good))
+                    if missing <= EPS or self.free_cash(a['id']) <= EPS:
+                        break
+                    quantity = min(missing, sell['remaining'], self.free_cash(a['id'])/price)
+                    buy = self.order(a['id'], good, quantity, 'buy', price, 'Базовые нужды')
+                    if buy:
+                        buy['household_top_up'] = True
+                        self.match(buy, sells)
+                        self.cancel_order(buy, 'Окончание допокупки')
+        # Новая книга остаточного спроса обеспечена оставшейся кассой.
+        # Это не повторное наблюдение начального бюджета исследовательскими классами.
+        first = len(self.report['orders'])
+        Economy.household_requests(self, households, self.cfg['basic_needs'], 'Базовые нужды', sells)
+        Economy.household_requests(self, households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
+        for buy in self.report['orders'][first:]:
+            buy['household_top_up_residual'] = True
+            buy['household_top_up'] = True
+            self.match(buy, sells)
+        top_up_ids = {o['id'] for o in self.report['orders'] if o.get('household_top_up')}
+        trades = [t for t in self.report['trades'] if t['buy_order'] in top_up_ids]
+        self.report['household_top_up'] = dict(quantity=sum(t['quantity'] for t in trades),
+            gold=sum(t['gold']+t['freight'] for t in trades),
+            by_good={g: sum(t['quantity'] for t in trades if t['good'] == g)
+                for g in self.cfg['basic_needs']})
+
     def depth(self, good):
         inputs = self.goods[good]['inputs']
         return 1+max((self.depth(g) for g in inputs), default=-1)
@@ -1082,14 +1123,16 @@ class Economy(EconomyServices):
         rows = defaultdict(lambda: dict(volume=0, trade_gold=0, freight=0, requested=0, unmet_solvent=0, limit_value=0, reserved_unmet=0))
         public = []
         for o in self.report['orders']:
-            if o['side'] != 'buy' or o['status'] == 'cancelled':
+            if o['side'] != 'buy' or (o['status'] == 'cancelled' and not o.get('superseded_by_top_up')):
                 continue
+            quantity = o['quantity']-o['remaining'] if o.get('superseded_by_top_up') else o['quantity']
+            remaining = 0 if o.get('superseded_by_top_up') else o['remaining']
             row = rows[o['state_id'], o['province_id'], o['good']]
-            row['requested'] += o['quantity']
-            row['limit_value'] += o['quantity']*o['price']
+            row['requested'] += quantity
+            row['limit_value'] += quantity*o['price']
             row['unmet_solvent'] += min(o['remaining'], o['reserved']/o['price'])
             row['reserved_unmet'] += o['reserved']
-            if o['remaining'] > EPS:
+            if remaining > EPS:
                 public.append(copy.deepcopy(o))
             o['unmet_solvent'] = min(o['remaining'], o['reserved']/o['price'])
         for t in self.report['trades']:
@@ -1100,7 +1143,7 @@ class Economy(EconomyServices):
         self.meta['market_history'] = (self.meta.get('market_history', [])+[dict(month=self.meta['month'], markets=[dict(state_id=s, province_id=p, good=g, **r) for (s, p, g), r in sorted(rows.items(), key=lambda x: tuple(v or '' for v in x[0]))])])[-3:]
         self.meta['public_orders'] = public
         self.meta['price_feedback'] = [copy.deepcopy(o) for o in self.report['orders']
-            if o['side'] == 'buy' and o['status'] != 'cancelled' and o.get('unfunded_need')]
+            if o['side'] == 'buy' and o['status'] != 'cancelled' and o.get('unfunded_need') and not o.get('superseded_by_top_up')]
 
     def step(self):
         self.__dict__.pop('_planning_orders', None)
@@ -1148,6 +1191,8 @@ class Economy(EconomyServices):
         buys = [o for o in self.report['orders'] if o['side'] == 'buy']
         for buy in self.shuffled(buys):
             self.match(buy, sells)
+        if self.HOUSEHOLD_TOP_UP_REVISION:
+            self.household_top_up(households, sells)
         self.record_market()
         self._planning_orders = copy.deepcopy(self.report['orders'])
         planning_sells = copy.deepcopy(sells)

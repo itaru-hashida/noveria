@@ -25,6 +25,8 @@ def run(case):
 
 
 if __name__=='__main__':
+    if Economy.HOUSEHOLD_TOP_UP_REVISION:
+        raise ValueError('Историческая проверка доходов: используйте commit 69f5bde до допокупки.')
     cases=[('pilot','/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle',
         '/workspace/money-cycle-pilot/profit_income/monthly.jsonl')]
     cases += [(str(s),f'/workspace/audit-noveria/allocation-final/seed-{s}/engine-180.pickle',

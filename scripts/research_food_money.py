@@ -26,14 +26,16 @@ class MoneyEconomy(research.ObservedEconomy):
 
 
 def details(engine, row):
-    orders = {o['participant']: o for o in engine.report['orders']
-        if o['side'] == 'buy' and o['purpose'] == 'Базовые нужды' and o['good'] == 'bread'}
+    orders = [o for o in engine.report['orders']
+        if o['side'] == 'buy' and o['purpose'] == 'Базовые нужды' and o['good'] == 'bread']
     for h in engine.food_money:
-        o = orders.get(h['id'], {})
-        h.update(backed=o.get('quantity', 0), unfilled=o.get('remaining', 0),
+        buys = [o for o in orders if o['participant'] == h['id']]
+        filled = sum(o['quantity']-o['remaining'] for o in buys)
+        unfilled = sum(min(o['remaining'], o.get('reserved_at_clearing', 0)/o['price'])
+            for o in buys if not o.get('superseded_by_top_up'))
+        h.update(backed=filled+unfilled, unfilled=unfilled,
             consumed=engine.accounts[h['id']]['needs']['bread']['consumed'])
         h['unfunded'] = h['requested']-h['backed']
-        # Точное разложение дефицита: непоставленная заявка + невыставленный спрос.
         assert abs(h['need']-h['consumed']-h['unfunded']-h['unfilled']) < 1e-5
     incoming, outgoing = defaultdict(float), defaultdict(float)
     for flow in engine.report['flows']:

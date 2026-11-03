@@ -28,6 +28,7 @@ def weighted_median(values):
 
 class MoneyCycleEconomy(Economy):
     PROFIT_DISTRIBUTION_REVISION = 0
+    HOUSEHOLD_TOP_UP_REVISION = 0
     def household_requests(self, households, needs, purpose, sells):
         if purpose == 'Базовые нужды':
             self.basic_signals = []

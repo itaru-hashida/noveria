@@ -20,6 +20,7 @@ def test_default_pays_households_and_keeps_legal_owner(engine):
 
 
 def test_game_matches_independent_income_experiment(engine):
+    engine.HOUSEHOLD_TOP_UP_REVISION = 0  # Исторический опыт до допокупки.
     expected=copy.deepcopy(engine);expected.__class__=MoneyCycleEconomy;expected.variant='profit_income'
     for _ in range(12):
         engine.step();expected.step()
