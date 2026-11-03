@@ -129,3 +129,26 @@ def test_fresh_cli_can_prove_observer_parity_without_external_artifacts(tmp_path
     assert metadata['status'] == 'completed' and metadata['completed'] == 1
     assert metadata['observer_state_parity']
     assert (output/'checkpoint.pickle').is_file()
+
+
+def test_promoted_policy_is_not_presented_as_a_new_experiment(tmp_path):
+    output = tmp_path/'duplicate-policy'
+    result = subprocess.run([sys.executable, str(ROOT/'scripts/research_agents.py'),
+        '--seed', '17', '--warmup', '0', '--months', '1', '--variant', 'input_bid',
+        '--out', str(output)], cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'уже включена' in result.stderr
+    assert not output.exists()
+
+
+def test_control_observer_records_repricing_by_the_promoted_engine(engine):
+    buy, sells, record = market(engine)
+    producer = engine.enterprises[buy['participant']]
+    producer['production_plan'] = dict(month=engine.meta['month'], output=record['plan'],
+        input_ratios=record['inputs'], input_prices=record['prices'],
+        expected_net_price=record['net_price'], wage_unit=record['wage_unit'],
+        input_orders=record['input_orders'])
+    buy['adaptive_input_budget'] = True
+    engine.match(buy, sells)
+    assert buy['status'] == 'filled'
+    assert engine.probe.decisions[-1]['changed']

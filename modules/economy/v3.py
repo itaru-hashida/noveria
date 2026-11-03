@@ -14,6 +14,7 @@ CONSUMPTION_PURPOSES = ('Базовые нужды', 'Дополнительны
 
 class Economy(EconomyServices):
     RULES_VERSION = 3
+    INPUT_BID_REVISION = 1
 
     def reset_report(self):
         super().reset_report()
@@ -29,6 +30,7 @@ class Economy(EconomyServices):
         previous = self.meta.get('rules_version', self.meta.get('version', 1))
         self.meta.setdefault('previous_rules_version', previous)
         self.meta.update(version=3, rules_version=3, rng_seed=self.seed,
+            input_bid_revision=self.INPUT_BID_REVISION,
             rule_changes=['Обеспеченные заявки и один проход торговли существующими товарами',
                 'Налог с конечных продаж вместо налога на прибыль',
                 'Выпуск по доступному спросу и неотрицательной ожидаемой марже',
@@ -273,9 +275,50 @@ class Economy(EconomyServices):
             ceiling = max(ceiling, reference)
         return value, max(ceiling, EPS), left <= EPS
 
+    def input_bid_ceiling(self, buy):
+        """Предельная цена автоматической закупки при зафиксированной марже."""
+        firm = self.enterprises.get(buy['participant'])
+        if (not firm or firm['status'] == 'closed' or firm.get('suspended')
+                or not buy.get('adaptive_input_budget') or buy['side'] != 'buy'
+                or buy['purpose'] != 'Сырьё' or buy.get('final_consumption')):
+            return None
+        plan = firm.get('production_plan', {})
+        inputs = plan.get('input_ratios', {})
+        prices = plan.get('input_prices', {})
+        if (plan.get('month') != self.meta['month'] or plan.get('output', 0) <= EPS
+                or buy['id'] not in plan.get('input_orders', [])
+                or inputs.get(buy['good'], 0) <= EPS
+                or not inputs.keys() <= prices.keys()
+                or 'expected_net_price' not in plan or 'wage_unit' not in plan):
+            return None
+        other_cost = plan['wage_unit']
+        for good, quantity in inputs.items():
+            if good == buy['good']:
+                continue
+            committed = [o['price'] for o in self.report['orders']
+                if o['id'] in plan['input_orders'] and o['good'] == good]
+            other_cost += quantity*max([prices[good]]+committed)
+        return max(0, (plan['expected_net_price']-other_cost)/inputs[buy['good']])
+
+    def reprice_input_order(self, buy, sells):
+        ceiling = self.input_bid_ceiling(buy)
+        if ceiling is None or buy['remaining'] <= EPS:
+            return
+        a = self.accounts[buy['participant']]
+        _, quote, _ = self.quoted_cost(a, buy['good'], buy['remaining'], sells)
+        budget = buy['reserved']+self.free_cash(a['id'])
+        price = min(quote, ceiling, budget/buy['remaining'])
+        if price > buy['price']+EPS:
+            extra = buy['remaining']*(price-buy['price'])
+            a['reserved'] += extra
+            buy['reserved'] += extra
+            buy.setdefault('initial_input_limit', buy['price'])
+            buy.update(price=price, backing=buy['reserved'])
+
     def match(self, buy, sells):
         if buy is None or buy['status'] in ('cancelled', 'expired', 'filled'):
             return
+        self.reprice_input_order(buy, sells)
         buyer = self.accounts[buy['participant']]
         if (buy.get('adaptive_household_budget') and buyer['kind'] == 'household'
                 and buy.get('final_consumption') and buy['remaining'] > EPS):
@@ -632,6 +675,8 @@ class Economy(EconomyServices):
 
     def input_requests(self, e, sells):
         a = self.accounts[e['id']]
+        input_prices = {good: self.reference_price(a, good, sells)
+            for good in self.goods[e['good']]['inputs']}
         a['protected'] = max(0, a.get('protected', 0)-a.pop('operating_protected', 0))
         target = self.plan(e, sells=sells)
         a, recipe = self.accounts[e['id']], self.goods[e['good']]
@@ -662,6 +707,8 @@ class Economy(EconomyServices):
             e['production_limit'] = 'Деньги на выпуск'
         e['production_plan'] = dict(month=self.meta['month'], output=target,
             sale_price=e['planned_price'],
+            expected_net_price=e['expected_price'], input_prices=input_prices,
+            input_ratios=dict(recipe['inputs']), wage_unit=recipe['labor']*self.cfg['wage'],
             requested_output=requested, free_cash=cash, known_order_count=first_order,
             reachable_demand=e['reachable_demand'], sales_forecast=e['sales_forecast'],
             expected_margin=e['expected_margin'], reason=e['production_limit'])
@@ -670,7 +717,9 @@ class Economy(EconomyServices):
         for good, ratio in recipe['inputs'].items():
             quantity = max(0, target*ratio-self.free_stock(e['id'], good))
             _, price, _ = self.quoted_cost(a, good, quantity, sells)
-            self.order(e['id'], good, quantity, 'buy', price, 'Сырьё')
+            order = self.order(e['id'], good, quantity, 'buy', price, 'Сырьё')
+            if order:
+                order['adaptive_input_budget'] = True
         e['production_plan']['input_orders'] = [o['id'] for o in self.report['orders'][first_order:]]
 
     def investment_demand(self, candidate, sells):

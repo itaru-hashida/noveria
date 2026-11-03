@@ -204,6 +204,8 @@ class ObservedEconomy(Economy):
                 buy.update(price=price, backing=buy['reserved'])
                 changed = True
         super().match(buy, sells)
+        changed = changed or (buy['purpose'] == 'Сырьё' and buy.get('adaptive_input_budget', False)
+            and buy['price'] > original+EPS)
         remaining = buy['remaining']
         executable = 0.0
         if remaining > EPS:
@@ -337,6 +339,10 @@ def capture(engine):
 def run(args):
     if not 1 <= args.months <= 10000 or not 0 <= args.warmup <= 10000:
         raise ValueError('Некорректная продолжительность опыта')
+    if args.variant == 'input_bid' and getattr(Economy, 'INPUT_BID_REVISION', 0):
+        raise ValueError('Политика input_bid уже включена в игровой движок. '
+            'Для исторического сравнения используйте ревизию a5b7ff9; '
+            'control теперь измеряет перенесённую политику.')
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=False)
     if args.checkpoint:
@@ -370,6 +376,7 @@ def run(args):
         observer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         engine=engine_version(), checkpoint=str(checkpoint), checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
         seed=engine.seed, initial_month=engine.meta['month'],
+        input_bid_revision=getattr(Economy, 'INPUT_BID_REVISION', 0),
         months=args.months, variant=args.variant, status='running', completed=0,
         shock='zero household needs and owner purchases in relative months 7..12; restoration in 13' if args.variant == 'shock' else None)
     (out/'metadata.json').write_text(json.dumps(config, indent=2))
