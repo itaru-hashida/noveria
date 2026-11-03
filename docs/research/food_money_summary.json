@@ -1,0 +1,130 @@
+{
+  "metadata": {
+    "commit": "cd7ecabb07f008744ef4a22f033476535cbad59f",
+    "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+    "engine": {
+      "version": 3,
+      "files": {
+        "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+        "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+        "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+        "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+        "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+        "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+        "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+        "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+        "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+        "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+        "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+      },
+      "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+    },
+    "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+    "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+    "seed": 73129,
+    "initial_month": 180,
+    "input_bid_revision": 1,
+    "months": 60,
+    "variant": "control",
+    "status": "completed",
+    "completed": 60,
+    "shock": null,
+    "observer_state_parity": true,
+    "money_observer_sha256": "ad7269a01be4081765ce48fb9abc5d38a1826d54403f56d46e88e6ad5c8dac02"
+  },
+  "trace_sha256": "260d2b9e5669ef4c4bd36b7d0a50143263e27ea304c6dea686fe4a6c20443b7e",
+  "first_month": 211,
+  "last_month": 240,
+  "averages": {
+    "need": 1664.252,
+    "requested": 1664.252,
+    "unfunded": 0.0,
+    "unfilled": 936.6889162792704,
+    "consumed": 727.5630837207295,
+    "bread_only_affordable": 1664.252,
+    "cash": 498028.265695778,
+    "incoming": 1490.9360153602356,
+    "outgoing": 5727.868212136186
+  },
+  "unfilled_bread_by_reason": {
+    "offer_exhausted": 936.6889162792717
+  },
+  "household_incoming": {
+    "Заработная плата": 299.9691264460649,
+    "Оплата транспортных услуг населению": 258.8026970812896,
+    "Оплата общественных услуг": 932.1641918328812
+  },
+  "household_outgoing": {
+    "Товар": 5088.618986268351,
+    "Налог с конечной потребительской продажи": 565.4021095853723,
+    "Перевозка": 73.84711628246212
+  },
+  "chain": {
+    "grain": {
+      "cash": 258165.5976615768,
+      "output": 826.912806388736,
+      "profit": 3396.9126929348604,
+      "wages": 49.61476838332422,
+      "revenue": 3447.5139720346447,
+      "plan": 826.912806388736,
+      "requested": 826.912806388736,
+      "positive_requested_plans": 370.0,
+      "funding_cuts": 0.0
+    },
+    "wood": {
+      "cash": 13882.568962962461,
+      "output": 242.90254129597207,
+      "profit": 26.934573898339874,
+      "wages": 20.40381346886165,
+      "revenue": 47.35879839227865,
+      "plan": 242.90254129597207,
+      "requested": 242.90254129597207,
+      "positive_requested_plans": 373.0,
+      "funding_cuts": 0.0
+    },
+    "flour": {
+      "cash": 46161.53425872579,
+      "output": 702.7955430525498,
+      "profit": 266.87588256552897,
+      "wages": 33.734186066522355,
+      "revenue": 3793.0234733024836,
+      "plan": 1083.5737404364436,
+      "requested": 1083.5737404364436,
+      "positive_requested_plans": 638.0,
+      "funding_cuts": 0.0
+    },
+    "bread": {
+      "cash": 54621.125547609394,
+      "output": 881.6279650247816,
+      "profit": 276.0684487023516,
+      "wages": 52.89767790148685,
+      "revenue": 4714.279572338167,
+      "plan": 2178.510334020083,
+      "requested": 2209.4473235741216,
+      "positive_requested_plans": 1087.0,
+      "funding_cuts": 20.0
+    }
+  },
+  "zero_plan_reasons": {
+    "bread": {
+      "Готовые запасы": 315,
+      "План": 20,
+      "Нет обеспеченного спроса": 148,
+      "Отрицательная ожидаемая маржа": 38
+    },
+    "flour": {
+      "Готовые запасы": 231,
+      "Нет обеспеченного спроса": 28,
+      "План": 3
+    },
+    "grain": {
+      "Готовые запасы": 200
+    },
+    "wood": {
+      "Готовые запасы": 224,
+      "Нет обеспеченного спроса": 3
+    }
+  },
+  "household_net_flow": -4236.93219677595,
+  "invariant_violations": 0
+}
