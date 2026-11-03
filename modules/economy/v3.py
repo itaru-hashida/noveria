@@ -1144,8 +1144,20 @@ class Economy(EconomyServices):
             row['freight'] += t['freight']
         self.meta['market_history'] = (self.meta.get('market_history', [])+[dict(month=self.meta['month'], markets=[dict(state_id=s, province_id=p, good=g, **r) for (s, p, g), r in sorted(rows.items(), key=lambda x: tuple(v or '' for v in x[0]))])])[-3:]
         self.meta['public_orders'] = public
-        self.meta['price_feedback'] = [copy.deepcopy(o) for o in self.report['orders']
-            if o['side'] == 'buy' and o['status'] != 'cancelled' and o.get('unfunded_need') and not o.get('superseded_by_top_up')]
+        # Ценовой сигнал отражает исходный бюджет, а не нулевую кассу после покупок.
+        # Допокупка заменяет заявки, но не отменяет ещё неудовлетворённую потребность.
+        feedback = {}
+        for o in self.report['orders']:
+            if o['side'] != 'buy' or not o.get('unfunded_need'):
+                continue
+            if o['status'] == 'cancelled' and not o.get('superseded_by_top_up'):
+                continue
+            a = self.accounts[o['participant']]
+            needed = a.get('needs', {}).get(o['good'], {}).get('needed', 0)
+            if needed <= self.free_stock(a['id'], o['good'])+EPS:
+                continue
+            feedback.setdefault((o['participant'], o['good']), copy.deepcopy(o))
+        self.meta['price_feedback'] = list(feedback.values())
 
     def step(self):
         self.__dict__.pop('_planning_orders', None)

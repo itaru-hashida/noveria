@@ -75,3 +75,28 @@ def test_step_uses_top_up_before_production_and_records_invariants(engine):
     assert seen == [True]
     assert all(report['invariants'].values())
     assert engine.meta['household_top_up_revision'] == 1
+
+
+def test_top_up_keeps_poor_buyer_price_signal_after_cash_is_spent(engine):
+    hs, sells = market(engine, stock=20)
+    engine.household_top_up(hs, sells)
+    engine.record_market()
+    assert engine.accounts['h']['balance'] == pytest.approx(0)
+    feedback = engine.meta['price_feedback']
+    assert [o['good'] for o in feedback] == ['fish']
+    assert feedback[0]['budget_price'] > 0
+    assert feedback[0]['superseded_by_top_up']
+    assert not engine.meta['public_orders']
+    fish = next(f for f in engine.enterprises.values() if f['good'] == 'fish')
+    fish.update(price=10, sales_history=[dict(sold=10), dict(sold=5)])
+    engine.update_prices()
+    assert fish['price'] == pytest.approx(10*(1-engine.rules['price_step']))
+
+
+def test_rebuilt_orders_do_not_duplicate_price_feedback(engine):
+    hs, sells = market(engine, stock=2)
+    engine.household_top_up(hs, sells)
+    engine.record_market()
+    keys = [(o['participant'], o['good']) for o in engine.meta['price_feedback']]
+    assert set(keys) == {('h', 'bread'), ('h', 'fish')}
+    assert len(keys) == len(set(keys))
