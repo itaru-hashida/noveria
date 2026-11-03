@@ -1,0 +1,23 @@
+{
+  "month": 303,
+  "quantity": 6.032562905709263,
+  "landed_price": 1.570117571731775,
+  "release": 9.471832740380423,
+  "actual_cost": 9.471833020831408,
+  "free_cash": 0.033782071820986914,
+  "failed_transfer": {
+    "sender": "stratum-city-4-0-1",
+    "recipient": "carrier:noweria",
+    "amount": 0.03378235227197187,
+    "reason": "Перевозка"
+  },
+  "original_status": "failed at month303",
+  "fix": "release actual cost only when otherwise unfunded, capped by this order reservation",
+  "replayed_month303": "passed all invariants",
+  "order_good": "bread",
+  "order_price": 1.57011752524225,
+  "order_reserved_after_release": 2.804509851017656e-07,
+  "original_engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a",
+  "repaired_engine_sha256": "7303899c23771d64fe08902bc433724f0db8cbf6aa9b29555112eb27627303f1",
+  "repaired_control_exact_parity": true
+}
