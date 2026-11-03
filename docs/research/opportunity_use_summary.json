@@ -1,0 +1,3102 @@
+{
+  "definition": "four conditional diagnostics; no global optimum or causal effect estimate",
+  "runs": [
+    {
+      "name": "current-73129",
+      "metadata": {
+        "commit": "aa98b3b4239cf08c45796d0308a5713cd1ee6944",
+        "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+        "engine": {
+          "version": 3,
+          "files": {
+            "modules/economy/v3.py": "6cdabe4725d354f1292e33ea6327dcdbdf26404e5c1a0b4e4be090342017ae99",
+            "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+            "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+            "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+            "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+            "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+            "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+            "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+            "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+            "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+            "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+          },
+          "fingerprint": "acb48ca1d685cb0fc8752550e3ce156d46e362e26f4bac5876d57dd2427cc600"
+        },
+        "checkpoint": "/workspace/audit-noveria/allocation-final/seed-73129/engine-180.pickle",
+        "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6",
+        "seed": 73129,
+        "initial_month": 180,
+        "input_bid_revision": 1,
+        "months": 60,
+        "variant": "control",
+        "status": "completed",
+        "completed": 60,
+        "shock": null,
+        "observer_state_parity": true,
+        "opportunity_observer_sha256": "c2b8b8e095639f17323ec10db3057f20c0968e3e215b3bb61e2fbcd5f19875bb"
+      },
+      "trace_sha256": "1edb5019fdf316049ee491fe1c728a070a3e881cf09a7100bc714670c97550dc",
+      "first_month": 211,
+      "last_month": 240,
+      "window": 30,
+      "months_observed": 60,
+      "invariant_failures": 0,
+      "basic_coverage": 0.527014631812173,
+      "input_refusals": {
+        "witnesses": 1,
+        "attempts": 4500,
+        "rate": 0.00022222222222222223
+      },
+      "strict_missed": 0,
+      "trade_attempts": 30817,
+      "shortfalls_by_limit": {
+        "bread": {
+          "Сырьё: flour": 50910.87160354151,
+          "Сырьё: wood": 4649.664898358387
+        },
+        "tools": {
+          "Сырьё: wood": 338.311477657649,
+          "Сырьё: iron": 408.7727980177998
+        },
+        "planks": {
+          "Сырьё: wood": 1203.1783269344626
+        },
+        "flour": {
+          "Сырьё: grain": 13714.651296517377
+        },
+        "cloth": {
+          "Сырьё: flax": 2868.44640512765
+        },
+        "iron": {
+          "Сырьё: wood": 921.8983908837887,
+          "Сырьё: ore": 10.193326599303962
+        },
+        "wood": {},
+        "ore": {},
+        "grain": {},
+        "flax": {},
+        "fish": {}
+      },
+      "unfilled_inputs_by_reason": {
+        "flour": {
+          "offer_exhausted": 41433.1977156029
+        },
+        "grain": {
+          "offer_exhausted": 15180.746092925483,
+          "landed_price_above_limit": 1276.8354628953682
+        },
+        "wood": {
+          "offer_exhausted": 2058.205926212736,
+          "landed_price_above_limit": 1112.419543645516
+        },
+        "flax": {
+          "offer_exhausted": 4005.8982983933683,
+          "landed_price_above_limit": 9.926668785342377
+        },
+        "iron": {
+          "landed_price_above_limit": 67.27217887264891,
+          "offer_exhausted": 237.80640819492461
+        },
+        "ore": {
+          "landed_price_above_limit": 173.89036983339616
+        }
+      },
+      "goods": {
+        "grain": {
+          "output_per_month": 1157.8808125454257,
+          "plan_per_month": 1157.8808125454257,
+          "execution": 1.0,
+          "extra_per_month": 80.88751821181178,
+          "reserve_share": 0.06529672756678132,
+          "nominal_utilization": 0.4391401420508308,
+          "stock_coverage_per_month": 443.11606986886557
+        },
+        "flour": {
+          "output_per_month": 953.1120922820071,
+          "plan_per_month": 1410.267135499253,
+          "execution": 0.6758379801175703,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.4772474822933502,
+          "stock_coverage_per_month": 666.5300122592511
+        },
+        "bread": {
+          "output_per_month": 1181.8799024433624,
+          "plan_per_month": 3033.897785840028,
+          "execution": 0.3895582468069611,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.14683109163475913,
+          "stock_coverage_per_month": 926.0753751577062
+        },
+        "wood": {
+          "output_per_month": 278.35676216696504,
+          "plan_per_month": 278.356762166965,
+          "execution": 1.0000000000000002,
+          "extra_per_month": 11.183098446926069,
+          "reserve_share": 0.038623692168723606,
+          "nominal_utilization": 0.14774775061940817,
+          "stock_coverage_per_month": 88.36907375164544
+        },
+        "planks": {
+          "output_per_month": 92.50374848482038,
+          "plan_per_month": 132.60969271596912,
+          "execution": 0.6975640059957767,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.308430817626303,
+          "stock_coverage_per_month": 22.470763423214642
+        },
+        "ore": {
+          "output_per_month": 10.330306128959394,
+          "plan_per_month": 10.330306128959394,
+          "execution": 1.0,
+          "extra_per_month": 0.6,
+          "reserve_share": 0.05489324753771761,
+          "nominal_utilization": 0.010966354701655408,
+          "stock_coverage_per_month": 2.6730235063877092
+        },
+        "iron": {
+          "output_per_month": 32.88579784076124,
+          "plan_per_month": 63.955521756864336,
+          "execution": 0.5141979447182231,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.019837901906540653,
+          "stock_coverage_per_month": 6.851755199956368
+        },
+        "tools": {
+          "output_per_month": 49.67494269208654,
+          "plan_per_month": 74.57775188126816,
+          "execution": 0.6660825975442616,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.22479233204508436,
+          "stock_coverage_per_month": 15.08730824964847
+        },
+        "flax": {
+          "output_per_month": 403.60470034994177,
+          "plan_per_month": 403.6047003499418,
+          "execution": 0.9999999999999999,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.8674074797978546,
+          "stock_coverage_per_month": 113.27621122594797
+        },
+        "cloth": {
+          "output_per_month": 287.7706230506016,
+          "plan_per_month": 383.38550322152327,
+          "execution": 0.7506038194780813,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.06757353497259731,
+          "stock_coverage_per_month": 172.29939285384268
+        },
+        "fish": {
+          "output_per_month": 172.50718773365213,
+          "plan_per_month": 172.50718773365213,
+          "execution": 1.0,
+          "extra_per_month": 6.268964441406427,
+          "reserve_share": 0.03506599938043092,
+          "nominal_utilization": 0.9583732651869562,
+          "stock_coverage_per_month": 172.00649726879678
+        }
+      },
+      "idle": {
+        "threshold_capacity_fraction": 0.01,
+        "eligible": 38,
+        "persistent": 0,
+        "fraction": 0.0,
+        "longest": 1,
+        "firms": [
+          {
+            "id": "firm-00001",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00002",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00004",
+            "good": "fish",
+            "longest": 0
+          },
+          {
+            "id": "firm-00006",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00007",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00010",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00011",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00014",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00015",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00018",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00019",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00022",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00023",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00025",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00029",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00031",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00034",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00035",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00037",
+            "good": "ore",
+            "longest": 1
+          },
+          {
+            "id": "firm-00039",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00042",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00043",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00045",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00046",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00049",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00051",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00052",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00054",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00055",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00057",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00060",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00064",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00068",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00070",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00071",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00073",
+            "good": "fish",
+            "longest": 0
+          },
+          {
+            "id": "firm-00075",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00076",
+            "good": "wood",
+            "longest": 0
+          }
+        ]
+      },
+      "idle_sensitivity": [
+        {
+          "threshold_capacity_fraction": 0.001,
+          "eligible": 38,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00001",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00002",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00004",
+              "good": "fish",
+              "longest": 0
+            },
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00007",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00010",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00011",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00014",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00015",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00018",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00019",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00023",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00025",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00029",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00031",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00035",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00037",
+              "good": "ore",
+              "longest": 1
+            },
+            {
+              "id": "firm-00039",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00042",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00043",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00045",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00046",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00049",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00051",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00052",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00054",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00055",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00057",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00060",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00064",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00068",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00070",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00071",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00073",
+              "good": "fish",
+              "longest": 0
+            },
+            {
+              "id": "firm-00075",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00076",
+              "good": "wood",
+              "longest": 1
+            }
+          ]
+        },
+        {
+          "threshold_capacity_fraction": 0.05,
+          "eligible": 38,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00001",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00002",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00004",
+              "good": "fish",
+              "longest": 0
+            },
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00007",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00010",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00011",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00014",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00015",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00018",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00019",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00023",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00025",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00029",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00031",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00035",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00037",
+              "good": "ore",
+              "longest": 1
+            },
+            {
+              "id": "firm-00039",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00042",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00043",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00045",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00046",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00049",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00051",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00052",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00054",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00055",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00057",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00060",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00064",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00068",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00070",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00071",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00073",
+              "good": "fish",
+              "longest": 0
+            },
+            {
+              "id": "firm-00075",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00076",
+              "good": "wood",
+              "longest": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "current-17",
+      "metadata": {
+        "commit": "aa98b3b4239cf08c45796d0308a5713cd1ee6944",
+        "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+        "engine": {
+          "version": 3,
+          "files": {
+            "modules/economy/v3.py": "6cdabe4725d354f1292e33ea6327dcdbdf26404e5c1a0b4e4be090342017ae99",
+            "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+            "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+            "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+            "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+            "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+            "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+            "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+            "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+            "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+            "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+          },
+          "fingerprint": "acb48ca1d685cb0fc8752550e3ce156d46e362e26f4bac5876d57dd2427cc600"
+        },
+        "checkpoint": "/workspace/audit-noveria/allocation-final/seed-17/engine-180.pickle",
+        "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a",
+        "seed": 17,
+        "initial_month": 180,
+        "input_bid_revision": 1,
+        "months": 60,
+        "variant": "control",
+        "status": "completed",
+        "completed": 60,
+        "shock": null,
+        "observer_state_parity": true,
+        "opportunity_observer_sha256": "c2b8b8e095639f17323ec10db3057f20c0968e3e215b3bb61e2fbcd5f19875bb"
+      },
+      "trace_sha256": "2b884574bcc8e9b0e2b3d1189bc99d63e051d9e50ebee7198c12b071a6234a40",
+      "first_month": 211,
+      "last_month": 240,
+      "window": 30,
+      "months_observed": 60,
+      "invariant_failures": 0,
+      "basic_coverage": 0.5705695080042583,
+      "input_refusals": {
+        "witnesses": 1,
+        "attempts": 4451,
+        "rate": 0.00022466861379465288
+      },
+      "strict_missed": 0,
+      "trade_attempts": 29655,
+      "shortfalls_by_limit": {
+        "tools": {
+          "Сырьё: wood": 1018.1826221688802,
+          "Сырьё: iron": 713.7399893401889
+        },
+        "bread": {
+          "Сырьё: wood": 7143.406283004813,
+          "Сырьё: flour": 26669.53857670324
+        },
+        "iron": {
+          "Сырьё: wood": 907.8441925326937
+        },
+        "cloth": {
+          "Сырьё: flax": 8887.71761467236
+        },
+        "flour": {
+          "Сырьё: grain": 9860.572776767518
+        },
+        "planks": {
+          "Сырьё: wood": 1345.877199750614
+        },
+        "wood": {},
+        "grain": {},
+        "ore": {},
+        "flax": {},
+        "fish": {}
+      },
+      "unfilled_inputs_by_reason": {
+        "grain": {
+          "landed_price_above_limit": 1926.235792724899,
+          "offer_exhausted": 9906.451539396116
+        },
+        "flour": {
+          "offer_exhausted": 21640.249551085606
+        },
+        "wood": {
+          "landed_price_above_limit": 496.4977720017623,
+          "offer_exhausted": 3494.1987957644355
+        },
+        "flax": {
+          "offer_exhausted": 12013.190046509608,
+          "landed_price_above_limit": 429.6146140316988
+        },
+        "iron": {
+          "landed_price_above_limit": 257.9785993442077,
+          "offer_exhausted": 248.00376120760927,
+          "stock_not_offered": 108.4783924327298
+        },
+        "ore": {
+          "landed_price_above_limit": 101.04479700485034
+        }
+      },
+      "goods": {
+        "grain": {
+          "output_per_month": 1184.8702897187318,
+          "plan_per_month": 1184.8702897187316,
+          "execution": 1.0000000000000002,
+          "extra_per_month": 22.882925449953873,
+          "reserve_share": 0.018946689739722893,
+          "nominal_utilization": 0.4493762239612894,
+          "stock_coverage_per_month": 350.7313328617989
+        },
+        "flour": {
+          "output_per_month": 966.7715567786786,
+          "plan_per_month": 1295.4573160042626,
+          "execution": 0.7462782021723497,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.48006659793124273,
+          "stock_coverage_per_month": 455.789774183929
+        },
+        "bread": {
+          "output_per_month": 1192.2986648187575,
+          "plan_per_month": 2319.3968268090266,
+          "execution": 0.5140554867702802,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.13850612576713117,
+          "stock_coverage_per_month": 851.6092287699793
+        },
+        "wood": {
+          "output_per_month": 284.18801953686665,
+          "plan_per_month": 284.18801953686665,
+          "execution": 1.0,
+          "extra_per_month": 19.710531496466103,
+          "reserve_share": 0.06485891896965372,
+          "nominal_utilization": 0.15084289784334748,
+          "stock_coverage_per_month": 104.7564376401872
+        },
+        "planks": {
+          "output_per_month": 94.4279748887075,
+          "plan_per_month": 139.290548213728,
+          "execution": 0.6779209077691103,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.3856088086232307,
+          "stock_coverage_per_month": 60.28590112005741
+        },
+        "ore": {
+          "output_per_month": 29.599540678648996,
+          "plan_per_month": 29.599540678648996,
+          "execution": 1.0,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.03142201770557218,
+          "stock_coverage_per_month": 3.0319262897485575
+        },
+        "iron": {
+          "output_per_month": 38.38625704878056,
+          "plan_per_month": 68.64773013320367,
+          "execution": 0.5591773679085394,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.024927215724613424,
+          "stock_coverage_per_month": 11.270355164130299
+        },
+        "tools": {
+          "output_per_month": 56.94032407370283,
+          "plan_per_month": 114.67107779067179,
+          "execution": 0.4965534916977538,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.21058643219143974,
+          "stock_coverage_per_month": 30.400938696554917
+        },
+        "flax": {
+          "output_per_month": 350.82122445170813,
+          "plan_per_month": 350.8212244517081,
+          "execution": 1.0000000000000002,
+          "extra_per_month": 1.8764695397257787,
+          "reserve_share": 0.0053203340188874414,
+          "nominal_utilization": 0.7539678152841351,
+          "stock_coverage_per_month": 192.61256419111845
+        },
+        "cloth": {
+          "output_per_month": 247.69292101363365,
+          "plan_per_month": 543.9501748360457,
+          "execution": 0.4553595760646494,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.04993164441061584,
+          "stock_coverage_per_month": 147.1955971316783
+        },
+        "fish": {
+          "output_per_month": 170.88037947756908,
+          "plan_per_month": 170.88037947756908,
+          "execution": 1.0,
+          "extra_per_month": 4.561871450950019,
+          "reserve_share": 0.0260021256385309,
+          "nominal_utilization": 0.9493354415420504,
+          "stock_coverage_per_month": 167.3989020630149
+        }
+      },
+      "idle": {
+        "threshold_capacity_fraction": 0.01,
+        "eligible": 35,
+        "persistent": 0,
+        "fraction": 0.0,
+        "longest": 1,
+        "firms": [
+          {
+            "id": "firm-00001",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00002",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00004",
+            "good": "fish",
+            "longest": 0
+          },
+          {
+            "id": "firm-00005",
+            "good": "flax",
+            "longest": 0
+          },
+          {
+            "id": "firm-00006",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00007",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00010",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00011",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00014",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00017",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00022",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00025",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00028",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00031",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00034",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00035",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00038",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00041",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00042",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00047",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00050",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00051",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00053",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00056",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00058",
+            "good": "fish",
+            "longest": 1
+          },
+          {
+            "id": "firm-00061",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00064",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00066",
+            "good": "fish",
+            "longest": 1
+          },
+          {
+            "id": "firm-00068",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00069",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00071",
+            "good": "fish",
+            "longest": 1
+          },
+          {
+            "id": "firm-00074",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00076",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00077",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00081",
+            "good": "wood",
+            "longest": 1
+          }
+        ]
+      },
+      "idle_sensitivity": [
+        {
+          "threshold_capacity_fraction": 0.001,
+          "eligible": 35,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00001",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00002",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00004",
+              "good": "fish",
+              "longest": 0
+            },
+            {
+              "id": "firm-00005",
+              "good": "flax",
+              "longest": 0
+            },
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00007",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00010",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00011",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00014",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00017",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00025",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00028",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00031",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00035",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00038",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00041",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00042",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00047",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00050",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00051",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00053",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00056",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00058",
+              "good": "fish",
+              "longest": 1
+            },
+            {
+              "id": "firm-00061",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00064",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00066",
+              "good": "fish",
+              "longest": 1
+            },
+            {
+              "id": "firm-00068",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00069",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00071",
+              "good": "fish",
+              "longest": 1
+            },
+            {
+              "id": "firm-00074",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00076",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00077",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00081",
+              "good": "wood",
+              "longest": 1
+            }
+          ]
+        },
+        {
+          "threshold_capacity_fraction": 0.05,
+          "eligible": 32,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00001",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00002",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00004",
+              "good": "fish",
+              "longest": 0
+            },
+            {
+              "id": "firm-00005",
+              "good": "flax",
+              "longest": 0
+            },
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00007",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00010",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00011",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00014",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00025",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00028",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00031",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00035",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00038",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00041",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00042",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00047",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00050",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00051",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00053",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00056",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00061",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00064",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00068",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00069",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00071",
+              "good": "fish",
+              "longest": 1
+            },
+            {
+              "id": "firm-00074",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00076",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00077",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00081",
+              "good": "wood",
+              "longest": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "current-2026",
+      "metadata": {
+        "commit": "aa98b3b4239cf08c45796d0308a5713cd1ee6944",
+        "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+        "engine": {
+          "version": 3,
+          "files": {
+            "modules/economy/v3.py": "6cdabe4725d354f1292e33ea6327dcdbdf26404e5c1a0b4e4be090342017ae99",
+            "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+            "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+            "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+            "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+            "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+            "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+            "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+            "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+            "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+            "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+          },
+          "fingerprint": "acb48ca1d685cb0fc8752550e3ce156d46e362e26f4bac5876d57dd2427cc600"
+        },
+        "checkpoint": "/workspace/audit-noveria/allocation-final/seed-2026/engine-180.pickle",
+        "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612",
+        "seed": 2026,
+        "initial_month": 180,
+        "input_bid_revision": 1,
+        "months": 60,
+        "variant": "control",
+        "status": "completed",
+        "completed": 60,
+        "shock": null,
+        "observer_state_parity": true,
+        "opportunity_observer_sha256": "c2b8b8e095639f17323ec10db3057f20c0968e3e215b3bb61e2fbcd5f19875bb"
+      },
+      "trace_sha256": "523ef35352c8110c5805e30e34488f0fe52884018e2122e17f44bd54ef5140d3",
+      "first_month": 211,
+      "last_month": 240,
+      "window": 30,
+      "months_observed": 60,
+      "invariant_failures": 0,
+      "basic_coverage": 0.5572316571865181,
+      "input_refusals": {
+        "witnesses": 2,
+        "attempts": 4575,
+        "rate": 0.0004371584699453552
+      },
+      "strict_missed": 0,
+      "trade_attempts": 30908,
+      "shortfalls_by_limit": {
+        "tools": {
+          "Сырьё: iron": 456.9176592500162,
+          "Сырьё: wood": 419.78973738001616
+        },
+        "bread": {
+          "Сырьё: wood": 4775.882587432828,
+          "Сырьё: flour": 115568.71240817104
+        },
+        "iron": {
+          "Сырьё: wood": 1216.691427064529,
+          "Сырьё: ore": 38.863811954957015
+        },
+        "cloth": {
+          "Сырьё: flax": 14164.887912152004
+        },
+        "flour": {
+          "Сырьё: grain": 15666.045388118413
+        },
+        "planks": {
+          "Сырьё: wood": 1085.5867626230786
+        },
+        "ore": {},
+        "wood": {},
+        "fish": {},
+        "flax": {},
+        "grain": {}
+      },
+      "unfilled_inputs_by_reason": {
+        "flour": {
+          "offer_exhausted": 87386.54673791408,
+          "landed_price_above_limit": 5893.534888886647
+        },
+        "flax": {
+          "offer_exhausted": 19134.5224566962,
+          "landed_price_above_limit": 696.3206203165932
+        },
+        "grain": {
+          "offer_exhausted": 18799.254465742128
+        },
+        "wood": {
+          "landed_price_above_limit": 524.5608133260614,
+          "offer_exhausted": 3327.7128727362806
+        },
+        "iron": {
+          "landed_price_above_limit": 48.07056561384762,
+          "offer_exhausted": 289.3570541863879
+        },
+        "ore": {
+          "landed_price_above_limit": 265.3020126996421
+        }
+      },
+      "goods": {
+        "grain": {
+          "output_per_month": 1538.2771559908188,
+          "plan_per_month": 1538.2771559908188,
+          "execution": 1.0,
+          "extra_per_month": 37.54525280966452,
+          "reserve_share": 0.023825814761857578,
+          "nominal_utilization": 0.5834100034098755,
+          "stock_coverage_per_month": 577.9808336148002
+        },
+        "flour": {
+          "output_per_month": 1272.7627882748407,
+          "plan_per_month": 1794.964301212121,
+          "execution": 0.7090741511769102,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.61110463959273,
+          "stock_coverage_per_month": 1129.8355526631044
+        },
+        "bread": {
+          "output_per_month": 1608.4457350122095,
+          "plan_per_month": 5619.932234865675,
+          "execution": 0.28620375972392015,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.11882240351967599,
+          "stock_coverage_per_month": 1263.2339630618865
+        },
+        "wood": {
+          "output_per_month": 400.1434046764755,
+          "plan_per_month": 400.1434046764755,
+          "execution": 1.0,
+          "extra_per_month": 9.277698973647977,
+          "reserve_share": 0.022660529442508574,
+          "nominal_utilization": 0.21239034218496577,
+          "stock_coverage_per_month": 107.42965918996477
+        },
+        "planks": {
+          "output_per_month": 126.87728535962505,
+          "plan_per_month": 163.06351078039432,
+          "execution": 0.7780850832440186,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.4322153519954636,
+          "stock_coverage_per_month": 74.69547391936602
+        },
+        "ore": {
+          "output_per_month": 43.183627913676204,
+          "plan_per_month": 43.18362791367621,
+          "execution": 0.9999999999999998,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.04584249247736327,
+          "stock_coverage_per_month": 8.843400423321404
+        },
+        "iron": {
+          "output_per_month": 57.11018477836012,
+          "plan_per_month": 98.96202607900965,
+          "execution": 0.5770919113232816,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.034918039036150365,
+          "stock_coverage_per_month": 8.174359175775566
+        },
+        "tools": {
+          "output_per_month": 72.46098874827547,
+          "plan_per_month": 101.6845686359432,
+          "execution": 0.7126055577587626,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.34382150231459846,
+          "stock_coverage_per_month": 41.08483371100303
+        },
+        "flax": {
+          "output_per_month": 430.29019184039674,
+          "plan_per_month": 430.29019184039674,
+          "execution": 1.0,
+          "extra_per_month": 3.8614119914543843,
+          "reserve_share": 0.008894155768107969,
+          "nominal_utilization": 0.9247586327968981,
+          "stock_coverage_per_month": 267.99336205422384
+        },
+        "cloth": {
+          "output_per_month": 300.38640668972147,
+          "plan_per_month": 772.5493370947883,
+          "execution": 0.3888248844007039,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.05312633957735959,
+          "stock_coverage_per_month": 168.6449114315221
+        },
+        "fish": {
+          "output_per_month": 180.0,
+          "plan_per_month": 180.0,
+          "execution": 1.0,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 1.0,
+          "stock_coverage_per_month": 180.0
+        }
+      },
+      "idle": {
+        "threshold_capacity_fraction": 0.01,
+        "eligible": 38,
+        "persistent": 0,
+        "fraction": 0.0,
+        "longest": 1,
+        "firms": [
+          {
+            "id": "firm-00001",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00002",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00006",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00013",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00014",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00016",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00017",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00019",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00022",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00025",
+            "good": "flax",
+            "longest": 0
+          },
+          {
+            "id": "firm-00027",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00030",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00033",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00034",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00036",
+            "good": "flax",
+            "longest": 0
+          },
+          {
+            "id": "firm-00038",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00040",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00043",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00046",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00050",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00051",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00052",
+            "good": "flax",
+            "longest": 1
+          },
+          {
+            "id": "firm-00054",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00056",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00059",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00061",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00062",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00064",
+            "good": "flax",
+            "longest": 1
+          },
+          {
+            "id": "firm-00065",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00066",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00069",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00070",
+            "good": "flax",
+            "longest": 1
+          },
+          {
+            "id": "firm-00071",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00072",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00075",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00076",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00080",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00084",
+            "good": "flax",
+            "longest": 1
+          }
+        ]
+      },
+      "idle_sensitivity": [
+        {
+          "threshold_capacity_fraction": 0.001,
+          "eligible": 38,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00001",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00002",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00013",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00014",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00016",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00017",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00019",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00025",
+              "good": "flax",
+              "longest": 0
+            },
+            {
+              "id": "firm-00027",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00030",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00033",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00036",
+              "good": "flax",
+              "longest": 0
+            },
+            {
+              "id": "firm-00038",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00040",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00043",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00046",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00050",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00051",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00052",
+              "good": "flax",
+              "longest": 1
+            },
+            {
+              "id": "firm-00054",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00056",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00059",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00061",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00062",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00064",
+              "good": "flax",
+              "longest": 1
+            },
+            {
+              "id": "firm-00065",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00066",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00069",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00070",
+              "good": "flax",
+              "longest": 1
+            },
+            {
+              "id": "firm-00071",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00072",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00075",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00076",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00080",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00084",
+              "good": "flax",
+              "longest": 1
+            }
+          ]
+        },
+        {
+          "threshold_capacity_fraction": 0.05,
+          "eligible": 28,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00013",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00014",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00016",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00017",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00019",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00025",
+              "good": "flax",
+              "longest": 0
+            },
+            {
+              "id": "firm-00027",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00030",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00033",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00036",
+              "good": "flax",
+              "longest": 0
+            },
+            {
+              "id": "firm-00038",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00040",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00043",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00046",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00050",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00051",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00054",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00056",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00061",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00062",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00069",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00071",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00072",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00075",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00084",
+              "good": "flax",
+              "longest": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fresh-73129",
+      "metadata": {
+        "commit": "aa98b3b4239cf08c45796d0308a5713cd1ee6944",
+        "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+        "engine": {
+          "version": 3,
+          "files": {
+            "modules/economy/v3.py": "6cdabe4725d354f1292e33ea6327dcdbdf26404e5c1a0b4e4be090342017ae99",
+            "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+            "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+            "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+            "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+            "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+            "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+            "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+            "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+            "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+            "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+          },
+          "fingerprint": "acb48ca1d685cb0fc8752550e3ce156d46e362e26f4bac5876d57dd2427cc600"
+        },
+        "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+        "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+        "seed": 73129,
+        "initial_month": 180,
+        "input_bid_revision": 1,
+        "months": 60,
+        "variant": "control",
+        "status": "completed",
+        "completed": 60,
+        "shock": null,
+        "observer_state_parity": true,
+        "opportunity_observer_sha256": "c2b8b8e095639f17323ec10db3057f20c0968e3e215b3bb61e2fbcd5f19875bb"
+      },
+      "trace_sha256": "d89887eadcef7e24f545e1c2cd20932bd3778b7a392329a0f303a52283182308",
+      "first_month": 211,
+      "last_month": 240,
+      "window": 30,
+      "months_observed": 60,
+      "invariant_failures": 0,
+      "basic_coverage": 0.4175767145768661,
+      "input_refusals": {
+        "witnesses": 5,
+        "attempts": 4612,
+        "rate": 0.0010841283607979184
+      },
+      "strict_missed": 0,
+      "trade_attempts": 30970,
+      "shortfalls_by_limit": {
+        "bread": {
+          "Сырьё: flour": 30138.500444657217,
+          "Сырьё: wood": 8767.970625202062
+        },
+        "tools": {
+          "Сырьё: wood": 333.1509054811471,
+          "Сырьё: iron": 144.97495282497513
+        },
+        "cloth": {
+          "Сырьё: flax": 28455.09276115004
+        },
+        "planks": {
+          "Сырьё: wood": 782.760263790789
+        },
+        "flour": {
+          "Сырьё: grain": 11423.34592151684
+        },
+        "iron": {
+          "Сырьё: wood": 422.8689928666867,
+          "Сырьё: ore": 75.20658544579614
+        },
+        "grain": {},
+        "ore": {},
+        "wood": {},
+        "flax": {},
+        "fish": {}
+      },
+      "unfilled_inputs_by_reason": {
+        "flour": {
+          "landed_price_above_limit": 9691.107332599471,
+          "offer_exhausted": 16226.849717610043
+        },
+        "wood": {
+          "landed_price_above_limit": 971.6616634557037,
+          "offer_exhausted": 2287.294521669546
+        },
+        "flax": {
+          "offer_exhausted": 39837.12986561005
+        },
+        "grain": {
+          "offer_exhausted": 11396.304158949626,
+          "landed_price_above_limit": 2311.71094687056
+        },
+        "iron": {
+          "offer_exhausted": 101.89569382933445
+        },
+        "ore": {
+          "landed_price_above_limit": 135.37185380243304
+        }
+      },
+      "goods": {
+        "grain": {
+          "output_per_month": 826.9128063887359,
+          "plan_per_month": 826.9128063887359,
+          "execution": 1.0,
+          "extra_per_month": 38.008698277808115,
+          "reserve_share": 0.0439446794567349,
+          "nominal_utilization": 0.3136165685852527,
+          "stock_coverage_per_month": 321.1005008296122
+        },
+        "flour": {
+          "output_per_month": 702.7955430525493,
+          "plan_per_month": 1083.5737404364438,
+          "execution": 0.6485904159780359,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.3519076152792913,
+          "stock_coverage_per_month": 344.79094579276494
+        },
+        "bread": {
+          "output_per_month": 881.6279650247803,
+          "plan_per_month": 2178.5103340200903,
+          "execution": 0.40469303783281935,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.16271393894881167,
+          "stock_coverage_per_month": 653.5711830199108
+        },
+        "wood": {
+          "output_per_month": 242.90254129597204,
+          "plan_per_month": 242.90254129597204,
+          "execution": 1.0,
+          "extra_per_month": 13.189151515122635,
+          "reserve_share": 0.05150167649073872,
+          "nominal_utilization": 0.12892916204669427,
+          "stock_coverage_per_month": 83.74799242331605
+        },
+        "planks": {
+          "output_per_month": 89.89092704904786,
+          "plan_per_month": 115.98293584207416,
+          "execution": 0.7750357963989293,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.32819955105113924,
+          "stock_coverage_per_month": 24.622359122525918
+        },
+        "ore": {
+          "output_per_month": 17.063435141708077,
+          "plan_per_month": 17.063435141708077,
+          "execution": 1.0,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.01811405004427609,
+          "stock_coverage_per_month": 3.0
+        },
+        "iron": {
+          "output_per_month": 34.65918678632428,
+          "plan_per_month": 51.26170606340704,
+          "execution": 0.6761223815581431,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.020907674217207163,
+          "stock_coverage_per_month": 3.3939628063458787
+        },
+        "tools": {
+          "output_per_month": 52.72915084197327,
+          "plan_per_month": 68.66667945217735,
+          "execution": 0.7679001119996823,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.3073328820896697,
+          "stock_coverage_per_month": 14.827064279788608
+        },
+        "flax": {
+          "output_per_month": 465.3,
+          "plan_per_month": 465.30000000000007,
+          "execution": 0.9999999999999999,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.9999999999999999,
+          "stock_coverage_per_month": 430.34608520626483
+        },
+        "cloth": {
+          "output_per_month": 332.35714285714295,
+          "plan_per_month": 1280.8602348954778,
+          "execution": 0.25947963236149985,
+          "extra_per_month": 0.0,
+          "reserve_share": 0.0,
+          "nominal_utilization": 0.0384031600739656,
+          "stock_coverage_per_month": 278.9099676928748
+        },
+        "fish": {
+          "output_per_month": 179.63590541634935,
+          "plan_per_month": 179.63590541634935,
+          "execution": 1.0,
+          "extra_per_month": 0.36409458365066977,
+          "reserve_share": 0.0020227476869481655,
+          "nominal_utilization": 0.9979772523130519,
+          "stock_coverage_per_month": 179.63590541634935
+        }
+      },
+      "idle": {
+        "threshold_capacity_fraction": 0.01,
+        "eligible": 38,
+        "persistent": 0,
+        "fraction": 0.0,
+        "longest": 1,
+        "firms": [
+          {
+            "id": "firm-00002",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00006",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00010",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00011",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00014",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00015",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00018",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00019",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00022",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00023",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00025",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00028",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00029",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00031",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00034",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00035",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00038",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00039",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00042",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00043",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00045",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00046",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00049",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00051",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00052",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00054",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00055",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00057",
+            "good": "grain",
+            "longest": 0
+          },
+          {
+            "id": "firm-00060",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00063",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00064",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00067",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00068",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00070",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00071",
+            "good": "wood",
+            "longest": 1
+          },
+          {
+            "id": "firm-00075",
+            "good": "grain",
+            "longest": 1
+          },
+          {
+            "id": "firm-00076",
+            "good": "wood",
+            "longest": 0
+          },
+          {
+            "id": "firm-00078",
+            "good": "fish",
+            "longest": 0
+          }
+        ]
+      },
+      "idle_sensitivity": [
+        {
+          "threshold_capacity_fraction": 0.001,
+          "eligible": 40,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00002",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00007",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00010",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00011",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00014",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00015",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00018",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00019",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00023",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00025",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00028",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00029",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00031",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00035",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00038",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00039",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00042",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00043",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00045",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00046",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00049",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00051",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00052",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00054",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00055",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00057",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00060",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00063",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00064",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00067",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00068",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00070",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00071",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00073",
+              "good": "fish",
+              "longest": 0
+            },
+            {
+              "id": "firm-00075",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00076",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00078",
+              "good": "fish",
+              "longest": 0
+            }
+          ]
+        },
+        {
+          "threshold_capacity_fraction": 0.05,
+          "eligible": 36,
+          "persistent": 0,
+          "fraction": 0.0,
+          "longest": 1,
+          "firms": [
+            {
+              "id": "firm-00006",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00010",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00011",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00014",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00015",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00018",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00019",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00022",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00023",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00025",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00028",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00029",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00031",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00034",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00035",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00038",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00039",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00042",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00043",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00045",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00046",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00049",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00051",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00052",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00054",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00055",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00057",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00060",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00063",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00064",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00067",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00068",
+              "good": "wood",
+              "longest": 1
+            },
+            {
+              "id": "firm-00070",
+              "good": "grain",
+              "longest": 0
+            },
+            {
+              "id": "firm-00075",
+              "good": "grain",
+              "longest": 1
+            },
+            {
+              "id": "firm-00076",
+              "good": "wood",
+              "longest": 0
+            },
+            {
+              "id": "firm-00078",
+              "good": "fish",
+              "longest": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
