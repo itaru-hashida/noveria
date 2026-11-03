@@ -124,6 +124,9 @@ def capture(engine, report, detail='full'):
     data['lifecycle'] = [dict(a, entity_id=a['enterprise']) for a in report.get('lifecycle', [])]
     data['diagnostics'] = anomalies(engine, data)
     data['diagnostics'].extend(report.get('diagnostics', []))
+    if food := report.get('food_diagnostics'):
+        evidence = food if detail == 'full' else {k: food[k] for k in ('schema', 'month', 'rules', 'totals')}
+        data['diagnostics'].append(dict(kind='food_diagnostics', evidence=evidence))
     data['diagnostics'].extend(dict(kind='sector_flow', **row) for row in report.get('sector_flows', []))
     return data
 

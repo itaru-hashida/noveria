@@ -4,6 +4,7 @@ import math
 from collections import defaultdict
 
 from .support import EPS, EconomyServices
+from .food_diagnostics import FoodDiagnostics
 
 
 OWNER_KINDS = ('private', 'merchant', 'treasury', 'municipal')
@@ -14,6 +15,7 @@ CONSUMPTION_PURPOSES = ('Базовые нужды', 'Дополнительны
 
 class Economy(EconomyServices):
     RULES_VERSION = 3
+    FOOD_DIAGNOSTICS = True
     INPUT_BID_REVISION = 1
     STOCK_PLANNING_REVISION = 1
     PROFIT_DISTRIBUTION_REVISION = 1
@@ -1173,6 +1175,7 @@ class Economy(EconomyServices):
         self.prepare_recovery_quotes()
         sells = self.sell_orders()
         households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')
+        food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS else None
         self.household_requests(households, self.cfg['basic_needs'], 'Базовые нужды', sells)
         self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
         self.owner_requests(sells)
@@ -1194,6 +1197,8 @@ class Economy(EconomyServices):
         if self.HOUSEHOLD_TOP_UP_REVISION:
             self.household_top_up(households, sells)
         self.record_market()
+        if food_trace:
+            food_trace.clearing(self, sells)
         self._planning_orders = copy.deepcopy(self.report['orders'])
         planning_sells = copy.deepcopy(sells)
         # Снимок спроса сделан до поздних доходов; остатки заявок больше не блокируют кассу.
@@ -1261,6 +1266,8 @@ class Economy(EconomyServices):
         self.report['open_enterprises'] = sum(e['status'] != 'closed' for e in self.enterprises.values())
         self.meta['rng_state'] = self.rng.getstate()
         self.validate(before)
+        if food_trace:
+            self.report['food_diagnostics'] = food_trace.finish(self)
         return self.report
 
     def validate(self, before=None):

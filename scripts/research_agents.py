@@ -332,6 +332,7 @@ def capture(engine):
         forecast_rows=len(forecast_rows), forecast_uncensored=sum(not x['censored'] for x in forecast_rows),
         policy_changes=sum(d['changed'] for d in p.decisions))
     return dict(month=engine.meta['month'], relative_month=p.month, macro=macro, goods=by_good,
+        food_diagnostics=r.get('food_diagnostics'),
         micro=micro, firms=plan_rows, decisions=p.decisions, forecasts=forecast_rows, responses=responses,
         invariants=r['invariants'])
 

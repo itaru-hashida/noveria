@@ -30,7 +30,7 @@ def now():
 
 
 def engine_version():
-    paths = [ROOT/p for p in ('modules/economy/v3.py', 'modules/economy/support.py', 'modules/economy/simulation.py', 'modules/geography/logic.py',
+    paths = [ROOT/p for p in ('modules/economy/v3.py', 'modules/economy/food_diagnostics.py', 'modules/economy/support.py', 'modules/economy/simulation.py', 'modules/geography/logic.py',
         'modules/population/logic.py', 'core/turn_service.py', 'core/world_service.py',
         'core/db.py', 'loader.py', 'content/economy.json', 'content/initial_world.json')]
     hashes = {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
