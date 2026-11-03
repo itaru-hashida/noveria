@@ -360,6 +360,11 @@ class Economy(EconomyServices):
             freight, distance, path = quote[1:]
             # Освобождается только резерв исполненной части, остальной остаётся защищён.
             release = q*buy['price']
+            # Допуск цены задан на единицу. На большой партии разница может
+            # превысить денежный EPS: освобождаем обеспеченную фактическую сумму,
+            # не затрагивая резервы других заявок и не меняя обычные сделки.
+            if q*price > self.free_cash(buy['participant'])+release+EPS:
+                release = min(buy['reserved'], max(release, q*price))
             buyer['reserved'] = max(0, buyer['reserved']-release)
             buy['reserved'] = max(0, buy['reserved']-release)
             seller['stock_reserved'][buy['good']] = max(0, seller['stock_reserved'][buy['good']]-q)
