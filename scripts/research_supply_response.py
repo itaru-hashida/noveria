@@ -28,6 +28,8 @@ def expected_stock_sales(engine, firm, sells):
 
 
 class SupplyEconomy(research.ObservedEconomy):
+    # Историческая независимая реализация эксперимента до переноса в игру.
+    STOCK_PLANNING_REVISION = 0
     def production_outlook(self, firm, sells=None):
         result = super().production_outlook(firm, sells)
         variant = self.probe.variant
@@ -91,6 +93,8 @@ def diagnostic(engine):
 
 
 def run(args):
+    if research.Economy.STOCK_PLANNING_REVISION:
+        raise ValueError('Поправка склада уже включена в игру. Исторические опыты: ревизия 49eb0d0; новые длинные сравнения: scripts/validate_stock_planning.py')
     original_class, original_capture = research.ObservedEconomy, research.capture
     def capture(engine):
         row = original_capture(engine)

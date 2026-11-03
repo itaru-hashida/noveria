@@ -15,6 +15,7 @@ CONSUMPTION_PURPOSES = ('Базовые нужды', 'Дополнительны
 class Economy(EconomyServices):
     RULES_VERSION = 3
     INPUT_BID_REVISION = 1
+    STOCK_PLANNING_REVISION = 1
 
     def reset_report(self):
         super().reset_report()
@@ -31,6 +32,7 @@ class Economy(EconomyServices):
         self.meta.setdefault('previous_rules_version', previous)
         self.meta.update(version=3, rules_version=3, rng_seed=self.seed,
             input_bid_revision=self.INPUT_BID_REVISION,
+            stock_planning_revision=self.STOCK_PLANNING_REVISION,
             rule_changes=['Обеспеченные заявки и один проход торговли существующими товарами',
                 'Налог с конечных продаж вместо налога на прибыль',
                 'Выпуск по доступному спросу и неотрицательной ожидаемой марже',
@@ -578,6 +580,15 @@ class Economy(EconomyServices):
                 a['operating_protected'] = hold
                 a['protected'] += hold
 
+    def expected_stock_sales(self, e, sells):
+        """Продажа старого склада до поступления планируемого нового выпуска."""
+        offered = sum(o['remaining'] for o in sells.get(e['good'], [])
+            if o['participant'] == e['id'] and o['status'] not in ('cancelled', 'expired'))
+        if offered <= EPS:
+            return 0.0
+        return min(self.accounts[e['id']]['stock'].get(e['good'], 0), offered,
+            self.reachable_demand(e, sells))
+
     def production_outlook(self, e, sells=None):
         e = dict(e)
         sells = sells or defaultdict(list)
@@ -591,11 +602,15 @@ class Economy(EconomyServices):
         sold_now = sum(t['quantity'] for t in self.report['trades'] if t['seller'] == e['id'] and t['good'] == e['good'])
         forecast = max(own, sold_now+demand)
         stock = self.accounts[e['id']]['stock'].get(e['good'], 0)
+        # Начальный склад сначала участвует в торгах этого месяца; новый выпуск
+        # продаётся в следующем. Восполняем прогнозируемый остаток после торгов.
+        expected_sales = self.expected_stock_sales(e, sells) if self.STOCK_PLANNING_REVISION else 0.0
+        projected_stock = max(0, stock-expected_sales)
         e.update(sales_forecast=forecast, reachable_demand=demand,
             expected_unit_cost=cost, expected_price=self.net_price(quote), planned_price=price)
         e['expected_margin'] = e['expected_price']-e['expected_unit_cost']
-        target = max(0, min(e['capacity'], forecast-stock))
-        e['production_limit'] = 'Готовые запасы' if stock >= forecast and forecast > EPS else 'Нет обеспеченного спроса' if forecast <= EPS else 'План'
+        target = max(0, min(e['capacity'], forecast-projected_stock))
+        e['production_limit'] = 'Готовые запасы' if projected_stock >= forecast and forecast > EPS else 'Нет обеспеченного спроса' if forecast <= EPS else 'План'
         if e['expected_margin'] < -EPS:
             target, e['production_limit'] = 0, 'Отрицательная ожидаемая маржа'
         e['planned_output'] = target

@@ -1,0 +1,2538 @@
+{
+  "73129": {
+    "legacy": {
+      "metadata": {
+        "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6",
+        "seed": 73129,
+        "variant": "legacy",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "fbee53f85aa6c65f45dd21b60b1f16d0cac5ccf118d37460d9dfdee80a16ae7b",
+      "windows": {
+        "211-240": {
+          "coverage": 0.527014631812173,
+          "household_cash_end": 439571.99035465927,
+          "household_net": -3955.9352520011953,
+          "open_end": 287,
+          "goods": {
+            "grain": {
+              "output": 1157.8808125454257,
+              "used": 1143.7345107384085,
+              "stock": 1186.599289234596,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 953.1120922820071,
+              "used": 945.5039219546902,
+              "stock": 1108.030611019326,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1181.8799024433624,
+              "used": 1180.845536493822,
+              "stock": 1184.2830388970067,
+              "household_consumed": 929.5855644024458,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 278.35676216696504,
+              "used": 273.0768247866855,
+              "stock": 592.2418451039929,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 92.50374848482038,
+              "used": 88.0639305841962,
+              "stock": 254.08687401269933,
+              "household_consumed": 60.52412533333334,
+              "need": 66.57008,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 10.330306128959394,
+              "used": 59.19443611337022,
+              "stock": 3178.4849020159213,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 17
+            },
+            "iron": {
+              "output": 32.88579784076124,
+              "used": 34.77245988446057,
+              "stock": 105.91636265446597,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 3
+            },
+            "tools": {
+              "output": 49.67494269208654,
+              "used": 52.851502456717974,
+              "stock": 138.9360566749229,
+              "household_consumed": 39.08159983128654,
+              "need": 41.606300000000005,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 403.60470034994177,
+              "used": 402.8788722708421,
+              "stock": 494.15963211568095,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 287.7706230506016,
+              "used": 281.9657168203949,
+              "stock": 305.32597619421585,
+              "household_consumed": 101.53888493365679,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 172.50718773365213,
+              "used": 172.91572516316987,
+              "stock": 172.50718773365227,
+              "household_consumed": 101.91645787285181,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.44725982878664483,
+          "household_cash_end": 95907.69414092855,
+          "household_net": -2934.094914874518,
+          "open_end": 287,
+          "goods": {
+            "grain": {
+              "output": 1060.9003228788551,
+              "used": 1062.716138788134,
+              "stock": 1236.931776267611,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 885.5967823234452,
+              "used": 889.4228422688677,
+              "stock": 1455.1873876560646,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1111.7785528360844,
+              "used": 1108.4582143571934,
+              "stock": 1142.1515761235357,
+              "household_consumed": 784.1370383858867,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 189.9866956354801,
+              "used": 193.77977706628965,
+              "stock": 702.6513551900978,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 46.42734106230865,
+              "used": 47.682593881381614,
+              "stock": 73.99548681460331,
+              "household_consumed": 46.611154327124005,
+              "need": 66.57008,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 41.17253721280562,
+              "used": 39.27401343929008,
+              "stock": 317.96648203351793,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 6
+            },
+            "iron": {
+              "output": 21.818896355161154,
+              "used": 21.361761373360903,
+              "stock": 70.33664719047084,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "tools": {
+              "output": 30.51680196194415,
+              "used": 31.26066451367225,
+              "stock": 39.0020208593148,
+              "household_consumed": 30.724944736543453,
+              "need": 41.606300000000005,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 313.9233618556766,
+              "used": 317.55714200467565,
+              "stock": 412.6350933055574,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 226.8265300033398,
+              "used": 228.67793956503482,
+              "stock": 262.27223095688714,
+              "household_consumed": 82.7459122756071,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 132.578632187208,
+              "used": 131.978632187208,
+              "stock": 132.57863218720817,
+              "household_consumed": 93.17304958428844,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.11522164161921837,
+          "household_cash_end": 483.14670747192713,
+          "household_net": -104.23293965444165,
+          "open_end": 291,
+          "goods": {
+            "grain": {
+              "output": 482.37508586235185,
+              "used": 486.2530926873748,
+              "stock": 1093.4019322939134,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 405.21091057281234,
+              "used": 407.7664882762634,
+              "stock": 1065.219051455051,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 509.7081103453291,
+              "used": 510.55895285154423,
+              "stock": 1175.976992455889,
+              "household_consumed": 190.46638787639603,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 48.508500230075896,
+              "used": 52.411204225837714,
+              "stock": 359.80175036879734,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 3
+            },
+            "planks": {
+              "output": 1.0814545522673795,
+              "used": 1.2131350060189219,
+              "stock": 58.533548638406494,
+              "household_consumed": 1.213135006018922,
+              "need": 66.57008,
+              "zero_output_months": 8
+            },
+            "ore": {
+              "output": 0.0,
+              "used": 0.018333095538999564,
+              "stock": 469.8916496754402,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "iron": {
+              "output": 0.010185053077221711,
+              "used": 0.06624623019203378,
+              "stock": 91.45570453695323,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 55
+            },
+            "tools": {
+              "output": 0.09463747170290521,
+              "used": 0.7582093787618259,
+              "stock": 44.19035629715712,
+              "household_consumed": 0.758209378761826,
+              "need": 41.606300000000005,
+              "zero_output_months": 25
+            },
+            "flax": {
+              "output": 142.47188901017395,
+              "used": 142.71076186212335,
+              "stock": 335.54278729086906,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 101.93625847294524,
+              "used": 102.76334660600757,
+              "stock": 226.34980464872262,
+              "household_consumed": 2.272412232378495,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 82.8960107552532,
+              "used": 84.66127407165253,
+              "stock": 104.05736271500737,
+              "household_consumed": 40.15961298595342,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 500.35485271832977,
+        "flour": 547.0031830061332,
+        "bread": 703.9229983156298,
+        "wood": 45.17155574353685,
+        "planks": 0.06272000000000001,
+        "ore": 0.0,
+        "iron": 0.002008946897297778,
+        "tools": 0.0392,
+        "flax": 215.05617464017368,
+        "cloth": 123.1291857343878,
+        "fish": 111.56723130046554
+      },
+      "invariant_failures": 0
+    },
+    "current": {
+      "metadata": {
+        "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6",
+        "seed": 73129,
+        "variant": "current",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "db6232028506fda70c227eda81312658c7950162d080ef1a1078fdd2346ca03b",
+      "windows": {
+        "211-240": {
+          "coverage": 0.7284407330758782,
+          "household_cash_end": 361796.0762144742,
+          "household_net": -5583.092410792622,
+          "open_end": 288,
+          "goods": {
+            "grain": {
+              "output": 1458.291962949613,
+              "used": 1457.7718016768767,
+              "stock": 1534.5049631041443,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 1214.809834730731,
+              "used": 1207.0665349545732,
+              "stock": 1303.4513084088512,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1508.8331686932163,
+              "used": 1510.3094414748655,
+              "stock": 1520.7665380007047,
+              "household_consumed": 1307.613294080377,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 283.53654097650735,
+              "used": 280.81315599690765,
+              "stock": 658.1846445514715,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 77.368675056919,
+              "used": 82.75867094541981,
+              "stock": 300.31649013325216,
+              "household_consumed": 66.57008,
+              "need": 66.57008,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 14.14016464548735,
+              "used": 49.92795988716863,
+              "stock": 2924.2707513458668,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 17
+            },
+            "iron": {
+              "output": 27.73775549287147,
+              "used": 29.65178593502622,
+              "stock": 153.25301254620587,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "tools": {
+              "output": 42.3596941928946,
+              "used": 49.7005954727099,
+              "stock": 105.61740956517426,
+              "household_consumed": 41.606300000000005,
+              "need": 41.606300000000005,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 464.3543765494909,
+              "used": 459.75939698922815,
+              "stock": 473.3838353549179,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 328.3995692780202,
+              "used": 330.2673149660547,
+              "stock": 333.11044145855993,
+              "household_consumed": 94.71422174971843,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 179.58799423968918,
+              "used": 179.58799423968918,
+              "stock": 179.5879942396893,
+              "household_consumed": 109.03570333226651,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.33959974490029937,
+          "household_cash_end": 37076.61960926062,
+          "household_net": -1420.431516592942,
+          "open_end": 294,
+          "goods": {
+            "grain": {
+              "output": 1251.4211492334273,
+              "used": 1252.9281369261682,
+              "stock": 1571.02684430522,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 1044.1067807718068,
+              "used": 1054.726238110691,
+              "stock": 1954.8170494276724,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1318.4077976383637,
+              "used": 1257.5862807847477,
+              "stock": 2579.283913230321,
+              "household_consumed": 584.4541079559842,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 152.09465440087746,
+              "used": 158.03535248675652,
+              "stock": 712.1299684805218,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 15.925418986855549,
+              "used": 18.455697596128648,
+              "stock": 315.3542683857106,
+              "household_consumed": 18.455697596128665,
+              "need": 66.57008,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 7.172308235814522,
+              "used": 9.340817318182804,
+              "stock": 656.0278379927199,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 52
+            },
+            "iron": {
+              "output": 5.189342954546002,
+              "used": 5.548485290320787,
+              "stock": 63.50545619660015,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 19
+            },
+            "tools": {
+              "output": 7.926407557601125,
+              "used": 11.274568625118158,
+              "stock": 82.02777910034742,
+              "household_consumed": 11.274568625118158,
+              "need": 41.606300000000005,
+              "zero_output_months": 3
+            },
+            "flax": {
+              "output": 292.6698319489061,
+              "used": 293.64585962443357,
+              "stock": 497.94700841169885,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 209.74704258888113,
+              "used": 214.4267933131812,
+              "stock": 447.1141100710709,
+              "household_consumed": 34.376677323548805,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 155.20192367633862,
+              "used": 155.20192367633862,
+              "stock": 161.6926971282962,
+              "household_consumed": 86.05153630132286,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.18065604973956192,
+          "household_cash_end": 6337.973146196568,
+          "household_net": -49.57083971123096,
+          "open_end": 295,
+          "goods": {
+            "grain": {
+              "output": 604.16692552424,
+              "used": 604.9135359760342,
+              "stock": 1349.6310276395754,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "flour": {
+              "output": 504.09461331336183,
+              "used": 507.0521161711345,
+              "stock": 1220.6221469410686,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 633.815145213918,
+              "used": 641.901751933746,
+              "stock": 1532.9980238691842,
+              "household_consumed": 298.0552708157876,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 64.29189863319382,
+              "used": 65.87830348982703,
+              "stock": 248.86951574155702,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 1.5114866828715976,
+              "used": 1.5496511492772764,
+              "stock": 181.65082243050483,
+              "household_consumed": 1.5496511492772753,
+              "need": 66.57008,
+              "zero_output_months": 5
+            },
+            "ore": {
+              "output": 0.0,
+              "used": 0.7035244685525289,
+              "stock": 432.6099367407527,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "iron": {
+              "output": 0.3908469269736272,
+              "used": 0.6938122905419648,
+              "stock": 31.24242146726908,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 7
+            },
+            "tools": {
+              "output": 0.9911604150599497,
+              "used": 0.968531968298297,
+              "stock": 8.87082912394793,
+              "household_consumed": 0.968531968298297,
+              "need": 41.606300000000005,
+              "zero_output_months": 6
+            },
+            "flax": {
+              "output": 107.01252026198132,
+              "used": 109.5058309412853,
+              "stock": 403.1000400650868,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 78.21845067234666,
+              "used": 80.4206539676174,
+              "stock": 295.0975133482786,
+              "household_consumed": 2.905595904894891,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 101.10976813799644,
+              "used": 101.78727872980281,
+              "stock": 159.33685766288758,
+              "household_consumed": 63.774128203762004,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 577.2163023576226,
+        "flour": 728.6660483138736,
+        "bread": 708.314644173637,
+        "wood": 99.01077457354329,
+        "planks": 1.5412,
+        "ore": 0.9714121373792234,
+        "iron": 0.5345366228105058,
+        "tools": 0.96325,
+        "flax": 241.34792585137822,
+        "cloth": 84.09370099917113,
+        "fish": 107.21984120137454
+      },
+      "invariant_failures": 0
+    }
+  },
+  "17": {
+    "legacy": {
+      "metadata": {
+        "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a",
+        "seed": 17,
+        "variant": "legacy",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "c4e8067c727651e03eb4e7bf3817af8f3acc3346e8e01fa83cebf4505fae84fc",
+      "windows": {
+        "211-240": {
+          "coverage": 0.5705695080042583,
+          "household_cash_end": 168555.88739937166,
+          "household_net": -5001.021691587444,
+          "open_end": 290,
+          "goods": {
+            "grain": {
+              "output": 1184.8702897187318,
+              "used": 1160.1258681344145,
+              "stock": 1256.3800611551726,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 966.7715567786786,
+              "used": 953.8389318550059,
+              "stock": 1276.4290676143219,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1192.2986648187575,
+              "used": 1198.0809523881153,
+              "stock": 1222.9690744261293,
+              "household_consumed": 1014.2003640551501,
+              "need": 1678.19,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 284.18801953686665,
+              "used": 282.1000852885747,
+              "stock": 446.29057856642754,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 94.4279748887075,
+              "used": 72.71626606752861,
+              "stock": 322.3822820196139,
+              "household_consumed": 52.18729247061562,
+              "need": 67.1276,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 29.599540678648996,
+              "used": 69.095262687805,
+              "stock": 2526.59683202677,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 12
+            },
+            "iron": {
+              "output": 38.38625704878056,
+              "used": 39.85822685159198,
+              "stock": 163.884382149578,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 2
+            },
+            "tools": {
+              "output": 56.94032407370283,
+              "used": 43.29781132574626,
+              "stock": 177.7329373169624,
+              "household_consumed": 33.03332452728976,
+              "need": 41.954750000000004,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 350.82122445170813,
+              "used": 346.7700894190871,
+              "stock": 468.75726232548345,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 247.69292101363365,
+              "used": 256.13860646087306,
+              "stock": 281.4721398755648,
+              "household_consumed": 93.8171547043579,
+              "need": 125.86424999999998,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 170.88037947756908,
+              "used": 170.88037947756908,
+              "stock": 170.88037947756942,
+              "household_consumed": 112.15795854305576,
+              "need": 335.63800000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.2034873992984654,
+          "household_cash_end": 6585.622924641736,
+          "household_net": -681.6649311451445,
+          "open_end": 293,
+          "goods": {
+            "grain": {
+              "output": 943.7919257855123,
+              "used": 941.7158211511652,
+              "stock": 1185.3464666186974,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 784.7631842926378,
+              "used": 793.1652265984587,
+              "stock": 1556.6314987689802,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 991.4565332480732,
+              "used": 983.7010876529314,
+              "stock": 1498.2008967204874,
+              "household_consumed": 348.61999268751316,
+              "need": 1678.19,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 115.45330294127363,
+              "used": 115.42993230767024,
+              "stock": 590.9975326737648,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 2
+            },
+            "planks": {
+              "output": 9.986035204285125,
+              "used": 10.035867417408173,
+              "stock": 33.17103214088992,
+              "household_consumed": 10.035867417408173,
+              "need": 67.1276,
+              "zero_output_months": 1
+            },
+            "ore": {
+              "output": 2.7264812118339647,
+              "used": 4.5601352136872135,
+              "stock": 1048.7671006802404,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 55
+            },
+            "iron": {
+              "output": 2.533408452048454,
+              "used": 4.158905674147385,
+              "stock": 79.82476699533892,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 29
+            },
+            "tools": {
+              "output": 5.941293820210548,
+              "used": 6.3584941768726075,
+              "stock": 16.085333324220432,
+              "household_consumed": 6.3584941768726075,
+              "need": 41.954750000000004,
+              "zero_output_months": 2
+            },
+            "flax": {
+              "output": 218.70572344973075,
+              "used": 221.65272007595394,
+              "stock": 385.8129045175818,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 158.32337148282426,
+              "used": 159.1981366009627,
+              "stock": 307.17187054557127,
+              "household_consumed": 18.963773692619963,
+              "need": 125.86424999999998,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 112.75004145321213,
+              "used": 112.80702275782063,
+              "stock": 121.49532551260003,
+              "household_consumed": 58.31684004338816,
+              "need": 335.63800000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.07870582759082365,
+          "household_cash_end": 295.19493632926196,
+          "household_net": -5.747567451884639,
+          "open_end": 294,
+          "goods": {
+            "grain": {
+              "output": 424.1494652012409,
+              "used": 423.0722429272599,
+              "stock": 1094.0256886480156,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 352.5602024393832,
+              "used": 345.9409859353757,
+              "stock": 956.0536795275409,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 432.4262324192197,
+              "used": 443.8626871082444,
+              "stock": 1130.1485982092224,
+              "household_consumed": 132.44504817645054,
+              "need": 1678.19,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 44.78594086539759,
+              "used": 43.24470483483665,
+              "stock": 217.2213436843494,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "planks": {
+              "output": 0.0005467770668786774,
+              "used": 0.05074517554376546,
+              "stock": 72.12025481992004,
+              "household_consumed": 0.050745175543765425,
+              "need": 67.1276,
+              "zero_output_months": 57
+            },
+            "ore": {
+              "output": 0.0,
+              "used": 0.00015265397043625248,
+              "stock": 946.8303988316086,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "iron": {
+              "output": 8.480776135410627e-05,
+              "used": 0.003079762165499626,
+              "stock": 27.02306145532135,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 57
+            },
+            "tools": {
+              "output": 0.004399660236427989,
+              "used": 0.03171573471485318,
+              "stock": 2.1395492971601358,
+              "household_consumed": 0.03171573471485318,
+              "need": 41.954750000000004,
+              "zero_output_months": 51
+            },
+            "flax": {
+              "output": 119.46365576420978,
+              "used": 120.70292231927182,
+              "stock": 349.37605324689997,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 86.21637308519416,
+              "used": 88.54511211486114,
+              "stock": 237.52455599423507,
+              "household_consumed": 0.09435857976897803,
+              "need": 125.86424999999998,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 42.998353782653844,
+              "used": 42.2886689626418,
+              "stock": 54.38393454148639,
+              "household_consumed": 25.910265040400184,
+              "need": 335.63800000000003,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 542.8099890015518,
+        "flour": 696.9083790154609,
+        "bread": 507.9145118059317,
+        "wood": 79.68474182470733,
+        "planks": 0.0,
+        "ore": 0.0,
+        "iron": 0.0,
+        "tools": 0.0,
+        "flax": 119.55318129435163,
+        "cloth": 100.3674066011605,
+        "fish": 54.30484620875546
+      },
+      "invariant_failures": 0
+    },
+    "current": {
+      "metadata": {
+        "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a",
+        "seed": 17,
+        "variant": "current",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "b8d1c8173c4d854a4837361fe3c0596c8befade06e99c28d103fb42a956ace7d",
+      "windows": {
+        "211-240": {
+          "coverage": 0.6467298773878604,
+          "household_cash_end": 121747.59790425535,
+          "household_net": -5233.801212185058,
+          "open_end": 286,
+          "goods": {
+            "grain": {
+              "output": 1427.8414702391358,
+              "used": 1427.5445723583448,
+              "stock": 1494.2045208231314,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 1189.6204769652875,
+              "used": 1180.1116457514768,
+              "stock": 1317.5475004922253,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1475.1395571893456,
+              "used": 1433.0639560459604,
+              "stock": 1580.679606199329,
+              "household_consumed": 1162.520997490178,
+              "need": 1678.19,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 263.3728787991612,
+              "used": 250.46123664395756,
+              "stock": 562.3449710669776,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 59.555408164751746,
+              "used": 64.5788414748993,
+              "stock": 222.40009815839306,
+              "household_consumed": 59.04642661424917,
+              "need": 67.1276,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 18.301277244668213,
+              "used": 45.998829289778904,
+              "stock": 2922.1111000967176,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 9
+            },
+            "iron": {
+              "output": 25.554905160988287,
+              "used": 23.782050166589624,
+              "stock": 95.39525723948604,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "tools": {
+              "output": 33.97435738084233,
+              "used": 37.46880384544023,
+              "stock": 61.86403207532698,
+              "household_consumed": 34.70259641511516,
+              "need": 41.954750000000004,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 437.9023288042138,
+              "used": 427.0584456507132,
+              "stock": 520.1662873137393,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 305.04174689336656,
+              "used": 307.02830627582256,
+              "stock": 361.2225670273013,
+              "household_consumed": 99.86172104463243,
+              "need": 125.86424999999998,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 180.0,
+              "used": 180.0,
+              "stock": 180.00000000000028,
+              "household_consumed": 109.00758420740416,
+              "need": 335.63800000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.20544495550718042,
+          "household_cash_end": 3991.9660714737633,
+          "household_net": -538.1923529784857,
+          "open_end": 288,
+          "goods": {
+            "grain": {
+              "output": 1065.6477109551756,
+              "used": 1080.7030426837562,
+              "stock": 1405.471913372345,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 900.58586890313,
+              "used": 903.6620902565372,
+              "stock": 1901.1346286822593,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1129.5776128206714,
+              "used": 1133.8717157459891,
+              "stock": 2438.7491539910316,
+              "household_consumed": 340.44867068217036,
+              "need": 1678.19,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 120.6841402070911,
+              "used": 122.68230607496426,
+              "stock": 443.87692686866137,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 5.717884387899494,
+              "used": 8.366444659041926,
+              "stock": 80.99261156022158,
+              "household_consumed": 7.348077879425245,
+              "need": 67.1276,
+              "zero_output_months": 1
+            },
+            "ore": {
+              "output": 0.7262604986563755,
+              "used": 3.375503208664577,
+              "stock": 1719.9363367459393,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 57
+            },
+            "iron": {
+              "output": 1.8752795603692114,
+              "used": 2.720963822281186,
+              "stock": 44.445748203523486,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 20
+            },
+            "tools": {
+              "output": 3.8870911746874084,
+              "used": 5.038155133281573,
+              "stock": 34.32637660312474,
+              "household_consumed": 4.528971743473233,
+              "need": 41.954750000000004,
+              "zero_output_months": 1
+            },
+            "flax": {
+              "output": 196.87504319701793,
+              "used": 217.55305718381166,
+              "stock": 955.3267701577308,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "cloth": {
+              "output": 155.39504084557976,
+              "used": 163.4307076385796,
+              "stock": 608.8999549508155,
+              "household_consumed": 13.719708900933494,
+              "need": 125.86424999999998,
+              "zero_output_months": 2
+            },
+            "fish": {
+              "output": 144.00572531283984,
+              "used": 143.19303156203617,
+              "stock": 170.45695911404152,
+              "household_consumed": 75.01293285711364,
+              "need": 335.63800000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.10652116079385944,
+          "household_cash_end": 168.99466262147854,
+          "household_net": -2.6333069905034914,
+          "open_end": 290,
+          "goods": {
+            "grain": {
+              "output": 425.98239671684337,
+              "used": 431.5610074839886,
+              "stock": 1106.9278796995748,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 359.6341729033238,
+              "used": 367.17058134426117,
+              "stock": 870.3524579377499,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 458.96322668032644,
+              "used": 461.80861206516516,
+              "stock": 953.6810721462665,
+              "household_consumed": 178.15745764263372,
+              "need": 1678.19,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 46.91660011071539,
+              "used": 45.910839566290846,
+              "stock": 240.33833450858182,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "planks": {
+              "output": 0.009290123314745572,
+              "used": 0.16548730941353373,
+              "stock": 103.92834111345725,
+              "household_consumed": 0.1654873094135337,
+              "need": 67.1276,
+              "zero_output_months": 54
+            },
+            "ore": {
+              "output": 0.0,
+              "used": 0.0,
+              "stock": 1477.154478600758,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "iron": {
+              "output": 0.0,
+              "used": 0.005692721881053823,
+              "stock": 325.22210437184043,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "tools": {
+              "output": 0.008132459830077104,
+              "used": 0.10302725724548126,
+              "stock": 112.9538401738807,
+              "household_consumed": 0.1030272572454813,
+              "need": 41.954750000000004,
+              "zero_output_months": 52
+            },
+            "flax": {
+              "output": 38.274523105594014,
+              "used": 35.365076249751596,
+              "stock": 1046.0848801958919,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 3
+            },
+            "cloth": {
+              "output": 25.26076874982257,
+              "used": 25.334166072944807,
+              "stock": 94.85611971540081,
+              "household_consumed": 0.2828672104354503,
+              "need": 125.86424999999998,
+              "zero_output_months": 2
+            },
+            "fish": {
+              "output": 50.661187851173445,
+              "used": 51.120386375136626,
+              "stock": 87.54057846332876,
+              "household_consumed": 36.59995423254793,
+              "need": 335.63800000000003,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 303.0417788916619,
+        "flour": 357.20562089439073,
+        "bread": 414.6519282741006,
+        "wood": 44.754334263358686,
+        "planks": 0.0,
+        "ore": 0.0,
+        "iron": 0.0,
+        "tools": 0.0,
+        "flax": 24.37378154930522,
+        "cloth": 18.502504770843903,
+        "fish": 53.95831829019483
+      },
+      "invariant_failures": 0
+    }
+  },
+  "2026": {
+    "legacy": {
+      "metadata": {
+        "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612",
+        "seed": 2026,
+        "variant": "legacy",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "811f2ee273b1b3d4c8e8cb6ba65322d798d4de8d5b504fc315e7da7a650261ae",
+      "windows": {
+        "211-240": {
+          "coverage": 0.5572316571865181,
+          "household_cash_end": 352805.4651479288,
+          "household_net": -2895.328989896175,
+          "open_end": 284,
+          "goods": {
+            "grain": {
+              "output": 1538.2771559908188,
+              "used": 1527.3153459298087,
+              "stock": 1554.0440190171223,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 1272.7627882748407,
+              "used": 1286.7565880097675,
+              "stock": 1420.9117144162792,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1608.4457350122095,
+              "used": 1595.1944812744537,
+              "stock": 1634.5304707165328,
+              "household_consumed": 1036.3496591260123,
+              "need": 1735.604,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 400.1434046764755,
+              "used": 381.7894519602322,
+              "stock": 1025.175669676092,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 126.87728535962505,
+              "used": 90.06881621082057,
+              "stock": 468.28211803415036,
+              "household_consumed": 58.67368994788766,
+              "need": 69.42416,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 43.183627913676204,
+              "used": 102.79833260104822,
+              "stock": 1868.9484543830733,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 8
+            },
+            "iron": {
+              "output": 57.11018477836012,
+              "used": 50.722692123792825,
+              "stock": 133.89839150140944,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "tools": {
+              "output": 72.46098874827547,
+              "used": 52.124337027827195,
+              "stock": 243.21746737383017,
+              "household_consumed": 36.42677389636074,
+              "need": 43.390100000000004,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 430.29019184039674,
+              "used": 420.5409693656101,
+              "stock": 469.4872438693282,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 300.38640668972147,
+              "used": 303.3990029187627,
+              "stock": 337.4096428215084,
+              "household_consumed": 105.50870399565527,
+              "need": 130.1703,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 180.0,
+              "used": 180.0,
+              "stock": 180.0000000000003,
+              "household_consumed": 96.52406624686195,
+              "need": 347.12080000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.30536072664050184,
+          "household_cash_end": 74327.73496826742,
+          "household_net": -1602.7722024466916,
+          "open_end": 291,
+          "goods": {
+            "grain": {
+              "output": 1042.1494639677433,
+              "used": 1041.5583673282874,
+              "stock": 1247.5606125493043,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 867.9653061069062,
+              "used": 871.2051839495064,
+              "stock": 1369.495543218156,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1089.006479936883,
+              "used": 1077.3138898727818,
+              "stock": 1431.8831117313525,
+              "household_consumed": 559.2768897224529,
+              "need": 1735.604,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 173.17268628066873,
+              "used": 157.35709474276518,
+              "stock": 793.8997477951111,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 27.536672643414775,
+              "used": 29.881002298052405,
+              "stock": 107.9484330583492,
+              "household_consumed": 20.652056033648755,
+              "need": 69.42416,
+              "zero_output_months": 2
+            },
+            "ore": {
+              "output": 25.806890396995477,
+              "used": 24.912643946365286,
+              "stock": 538.8906638656591,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 36
+            },
+            "iron": {
+              "output": 13.84035774798071,
+              "used": 10.16063454898162,
+              "stock": 170.66978610955994,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 21
+            },
+            "tools": {
+              "output": 14.515192212830888,
+              "used": 17.322749694068918,
+              "stock": 79.5877461508451,
+              "household_consumed": 12.708276561867093,
+              "need": 43.390100000000004,
+              "zero_output_months": 2
+            },
+            "flax": {
+              "output": 271.68586244121167,
+              "used": 271.1824448939846,
+              "stock": 416.44616198223787,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 193.70174635284613,
+              "used": 197.55216258644109,
+              "stock": 310.7785728409597,
+              "household_consumed": 38.217923517760504,
+              "need": 130.1703,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 127.13282946438176,
+              "used": 125.76382349932877,
+              "stock": 131.18194238903877,
+              "household_consumed": 64.98883214882443,
+              "need": 347.12080000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.12206525331274518,
+          "household_cash_end": 502.9973511506115,
+          "household_net": -6.816688375339435,
+          "open_end": 291,
+          "goods": {
+            "grain": {
+              "output": 532.2410594588043,
+              "used": 540.532447645359,
+              "stock": 1224.6934614138675,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "flour": {
+              "output": 450.44370637113235,
+              "used": 450.6900136711122,
+              "stock": 1377.1367951262284,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "bread": {
+              "output": 563.3625170888903,
+              "used": 562.433314663451,
+              "stock": 1577.0535533303312,
+              "household_consumed": 214.97957587587234,
+              "need": 1735.604,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 61.1422664444761,
+              "used": 62.216600241760275,
+              "stock": 304.95228377274054,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 6
+            },
+            "planks": {
+              "output": 1.3431304949779943,
+              "used": 1.1674390262914305,
+              "stock": 36.04130980219003,
+              "household_consumed": 0.2947895908378429,
+              "need": 69.42416,
+              "zero_output_months": 43
+            },
+            "ore": {
+              "output": 13.505248139566836,
+              "used": 10.185961901943653,
+              "stock": 652.149750585638,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 55
+            },
+            "iron": {
+              "output": 5.65886772330203,
+              "used": 1.724235929310151,
+              "stock": 63.30824264520328,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 48
+            },
+            "tools": {
+              "output": 2.4631941847287875,
+              "used": 0.6145771865288021,
+              "stock": 32.86730019939443,
+              "household_consumed": 0.17825246880200749,
+              "need": 43.390100000000004,
+              "zero_output_months": 43
+            },
+            "flax": {
+              "output": 145.4514153525557,
+              "used": 148.25956291298897,
+              "stock": 392.56702862904814,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 105.89968779499212,
+              "used": 104.02141395802687,
+              "stock": 232.64789737858536,
+              "household_consumed": 0.5225376118873062,
+              "need": 130.1703,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 73.95911763697089,
+              "used": 74.96193649243573,
+              "stock": 98.94618027902823,
+              "household_consumed": 37.99970083076073,
+              "need": 347.12080000000003,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 472.5652219168314,
+        "flour": 703.7520077828923,
+        "bread": 641.875273945384,
+        "wood": 75.32370855368445,
+        "planks": 0.0,
+        "ore": 0.0,
+        "iron": 0.0,
+        "tools": 0.0,
+        "flax": 161.21526304544005,
+        "cloth": 113.47224610078706,
+        "fish": 99.66511616808513
+      },
+      "invariant_failures": 0
+    },
+    "current": {
+      "metadata": {
+        "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612",
+        "seed": 2026,
+        "variant": "current",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "3e92919be96ed83c1247b60be035a0337ced226532168f1b8ca09fb06e4d9fcb",
+      "windows": {
+        "211-240": {
+          "coverage": 0.6682275545567202,
+          "household_cash_end": 334512.7120188196,
+          "household_net": -3326.4753497561655,
+          "open_end": 289,
+          "goods": {
+            "grain": {
+              "output": 1767.0900179980506,
+              "used": 1771.9702063471939,
+              "stock": 1910.5066646942237,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 1476.6418386226615,
+              "used": 1478.207152385739,
+              "stock": 1681.0454787275426,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1847.7589404821738,
+              "used": 1843.7070342010825,
+              "stock": 1880.4121666795459,
+              "household_consumed": 1254.1198274254643,
+              "need": 1735.604,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 337.037930735184,
+              "used": 326.24251655683634,
+              "stock": 992.8938797830572,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 80.83989047444248,
+              "used": 87.60187092430219,
+              "stock": 366.31997539928716,
+              "household_consumed": 68.28987106848106,
+              "need": 69.42416,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 37.17587020279392,
+              "used": 64.7888916356574,
+              "stock": 1923.7574843178265,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 17
+            },
+            "iron": {
+              "output": 35.993828686476334,
+              "used": 34.48309125323505,
+              "stock": 231.65645798574428,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "tools": {
+              "output": 49.26155893319292,
+              "used": 48.823535558245325,
+              "stock": 148.33344944959939,
+              "household_consumed": 39.16753563033477,
+              "need": 43.390100000000004,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 448.5430334547036,
+              "used": 443.7913041218611,
+              "stock": 483.28130361846416,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 316.9937886584723,
+              "used": 315.4024959606033,
+              "stock": 373.8233951652862,
+              "household_consumed": 116.54904742778947,
+              "need": 130.1703,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 180.0,
+              "used": 180.0,
+              "stock": 180.00000000000028,
+              "household_consumed": 99.87770816252862,
+              "need": 347.12080000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.272296083622483,
+          "household_cash_end": 70501.31580223778,
+          "household_net": -1070.726466480288,
+          "open_end": 295,
+          "goods": {
+            "grain": {
+              "output": 1181.0405909766057,
+              "used": 1175.0656109148997,
+              "stock": 1541.4490627155315,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 979.2213424290832,
+              "used": 945.3831523575736,
+              "stock": 2119.6091916156897,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1181.728940446967,
+              "used": 1166.3972199718942,
+              "stock": 2669.377194858618,
+              "household_consumed": 484.10829855883003,
+              "need": 1735.604,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 145.11416354659863,
+              "used": 147.27808826931542,
+              "stock": 775.7159718958142,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "planks": {
+              "output": 16.682178913225574,
+              "used": 15.700191479255006,
+              "stock": 139.31973482459145,
+              "household_consumed": 15.574795773932303,
+              "need": 69.42416,
+              "zero_output_months": 2
+            },
+            "ore": {
+              "output": 12.284111198630063,
+              "used": 12.944751574590267,
+              "stock": 507.4969035045239,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 30
+            },
+            "iron": {
+              "output": 7.191528652550148,
+              "used": 7.241370373755919,
+              "stock": 75.89267108511106,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 6
+            },
+            "tools": {
+              "output": 10.344814819651313,
+              "used": 9.790954777607771,
+              "stock": 42.40717223111151,
+              "household_consumed": 9.72825692494642,
+              "need": 43.390100000000004,
+              "zero_output_months": 2
+            },
+            "flax": {
+              "output": 348.779223529026,
+              "used": 326.9130488605884,
+              "stock": 1049.4011527510663,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 233.50932061470604,
+              "used": 233.99921244101654,
+              "stock": 726.0279245503052,
+              "household_consumed": 29.171460694058446,
+              "need": 130.1703,
+              "zero_output_months": 1
+            },
+            "fish": {
+              "output": 156.71680144126964,
+              "used": 157.61680144126964,
+              "stock": 163.8991341278563,
+              "household_consumed": 78.40545708886339,
+              "need": 347.12080000000003,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.12556574826111483,
+          "household_cash_end": 275.30870046808195,
+          "household_net": -3.4978702752435713,
+          "open_end": 297,
+          "goods": {
+            "grain": {
+              "output": 601.388183697025,
+              "used": 612.9800337511555,
+              "stock": 1456.561497755431,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 510.81669479262956,
+              "used": 502.9582109256355,
+              "stock": 1353.7950450885558,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 628.6977636570443,
+              "used": 628.6063418619802,
+              "stock": 1827.520656937619,
+              "household_consumed": 217.1537438556238,
+              "need": 1735.604,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 67.01696072046245,
+              "used": 62.91219819484827,
+              "stock": 427.5751216719821,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 3
+            },
+            "planks": {
+              "output": 0.02889547775859683,
+              "used": 0.1456758584771583,
+              "stock": 18.44864890680769,
+              "household_consumed": 0.0924870062577129,
+              "need": 69.42416,
+              "zero_output_months": 52
+            },
+            "ore": {
+              "output": 0.0,
+              "used": 0.0,
+              "stock": 543.3086646572176,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "iron": {
+              "output": 0.0,
+              "used": 0.01133465213454817,
+              "stock": 19.14868799382313,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "tools": {
+              "output": 0.016192360192211614,
+              "used": 0.08439880502079246,
+              "stock": 8.77245798014741,
+              "household_consumed": 0.05780437891106976,
+              "need": 43.390100000000004,
+              "zero_output_months": 50
+            },
+            "flax": {
+              "output": 25.273080529928816,
+              "used": 30.83774209049496,
+              "stock": 1413.5009086621703,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 10
+            },
+            "cloth": {
+              "output": 22.026958636067828,
+              "used": 23.691426105259165,
+              "stock": 84.84523842780074,
+              "household_consumed": 0.11871937485006918,
+              "need": 130.1703,
+              "zero_output_months": 3
+            },
+            "fish": {
+              "output": 77.7937084059421,
+              "used": 78.9045654051147,
+              "stock": 153.22973083031172,
+              "household_consumed": 44.676622514100984,
+              "need": 347.12080000000003,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 578.2026588170768,
+        "flour": 352.6512612458535,
+        "bread": 616.1030406749231,
+        "wood": 31.06857632486272,
+        "planks": 0.0,
+        "ore": 0.0,
+        "iron": 0.0,
+        "tools": 0.0,
+        "flax": 27.468746067476513,
+        "cloth": 13.25938161970897,
+        "fish": 80.99846116559817
+      },
+      "invariant_failures": 0
+    }
+  },
+  "fresh-73129": {
+    "legacy": {
+      "metadata": {
+        "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+        "seed": 73129,
+        "variant": "legacy",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "292c1751c8203eb99ea211b89b7dc4270abb55ceb34f2451f99067616018501b",
+      "windows": {
+        "211-240": {
+          "coverage": 0.41757671457686607,
+          "household_cash_end": 429915.8714919733,
+          "household_net": -4236.93219677595,
+          "open_end": 290,
+          "goods": {
+            "grain": {
+              "output": 826.9128063887359,
+              "used": 843.3546516630591,
+              "stock": 1042.3577584074867,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 702.7955430525493,
+              "used": 705.3023720198245,
+              "stock": 1089.3448077450512,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 881.6279650247803,
+              "used": 879.706698070893,
+              "stock": 896.636534695027,
+              "household_consumed": 727.5630837207295,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 242.90254129597204,
+              "used": 241.6352589906268,
+              "stock": 439.4842890465461,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 89.89092704904786,
+              "used": 86.18890433390973,
+              "stock": 201.01582790682858,
+              "household_consumed": 56.14100886316792,
+              "need": 66.57008,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 17.063435141708077,
+              "used": 62.38653621538371,
+              "stock": 2076.122220688537,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 10
+            },
+            "iron": {
+              "output": 34.65918678632428,
+              "used": 36.910405589381284,
+              "stock": 132.26621963189837,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "tools": {
+              "output": 52.72915084197327,
+              "used": 52.86779008565334,
+              "stock": 111.35641776753108,
+              "household_consumed": 37.84384235028242,
+              "need": 41.606300000000005,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 465.3,
+              "used": 465.3,
+              "stock": 465.38105993846534,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 332.35714285714295,
+              "used": 332.35714285714295,
+              "stock": 332.3571428571431,
+              "household_consumed": 38.97337565388495,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 179.63590541634935,
+              "used": 179.63590541634935,
+              "stock": 179.6359054163495,
+              "household_consumed": 93.33629461174418,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.2601799334860396,
+          "household_cash_end": 21969.17097793009,
+          "household_net": -2299.8214577969698,
+          "open_end": 298,
+          "goods": {
+            "grain": {
+              "output": 777.7052304397082,
+              "used": 785.7365593013624,
+              "stock": 1252.5483480352545,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 654.7804660844687,
+              "used": 641.0416552224392,
+              "stock": 1205.7457659189365,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 801.3020690280489,
+              "used": 788.9195444725199,
+              "stock": 1130.7900062384117,
+              "household_consumed": 447.247601795192,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 127.1972933266145,
+              "used": 128.11716725340597,
+              "stock": 416.7972050001881,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 27.984813014982823,
+              "used": 30.643556141270103,
+              "stock": 117.72092403889482,
+              "household_consumed": 19.744780284170346,
+              "need": 66.57008,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 21.91690102275358,
+              "used": 19.95020116779546,
+              "stock": 540.9653047334479,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 31
+            },
+            "iron": {
+              "output": 11.083445093219698,
+              "used": 11.565484875447046,
+              "stock": 68.51662043613194,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 7
+            },
+            "tools": {
+              "output": 16.522121250638637,
+              "used": 17.15987969902518,
+              "stock": 52.99290737948296,
+              "household_consumed": 11.710491770475304,
+              "need": 41.606300000000005,
+              "zero_output_months": 2
+            },
+            "flax": {
+              "output": 465.3,
+              "used": 465.3,
+              "stock": 468.0830198354441,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 332.35714285714295,
+              "used": 332.35714285714295,
+              "stock": 333.98205226969725,
+              "household_consumed": 16.579723754286555,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 173.4212270561513,
+              "used": 173.4212270561513,
+              "stock": 173.42122705615142,
+              "household_consumed": 66.66131694914469,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.1008619371086823,
+          "household_cash_end": 772.0710066689286,
+          "household_net": -4.963569052838541,
+          "open_end": 298,
+          "goods": {
+            "grain": {
+              "output": 450.17535404371887,
+              "used": 453.8800801884673,
+              "stock": 1200.510452110373,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 378.23340015705605,
+              "used": 382.8054168372609,
+              "stock": 1056.9155072632823,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 478.50677104657615,
+              "used": 488.35128745873436,
+              "stock": 1148.1048704976974,
+              "household_consumed": 169.32174567378968,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 47.15299536061596,
+              "used": 47.85215075598397,
+              "stock": 194.1469109801856,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "planks": {
+              "output": 0.0,
+              "used": 0.07489672830094586,
+              "stock": 148.8110410096787,
+              "household_consumed": 0.0069439543922275825,
+              "need": 66.57008,
+              "zero_output_months": 60
+            },
+            "ore": {
+              "output": 0.0,
+              "used": 2.256516173323083e-06,
+              "stock": 677.3512623351324,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "iron": {
+              "output": 1.253620096081305e-06,
+              "used": 0.0034367646933579485,
+              "stock": 202.33266558426394,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 59
+            },
+            "tools": {
+              "output": 0.0049096638476540675,
+              "used": 0.03831635844950139,
+              "stock": 17.096382601699936,
+              "household_consumed": 0.004339971495142216,
+              "need": 41.606300000000005,
+              "zero_output_months": 57
+            },
+            "flax": {
+              "output": 150.65151850310068,
+              "used": 150.6854229607532,
+              "stock": 361.19759593621313,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 107.63244497196658,
+              "used": 111.67065301941805,
+              "stock": 251.1146201072469,
+              "household_consumed": 0.011902016908703657,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 75.31653502117429,
+              "used": 77.17979573174563,
+              "stock": 96.79853267923475,
+              "household_consumed": 31.525044947892436,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 633.0491604544545,
+        "flour": 638.8840081806013,
+        "bread": 709.6144466982249,
+        "wood": 77.40576888023905,
+        "planks": 0.0,
+        "ore": 0.0,
+        "iron": 0.0,
+        "tools": 0.0,
+        "flax": 88.75884368981578,
+        "cloth": 119.42449501087664,
+        "fish": 115.87771919717689
+      },
+      "invariant_failures": 0
+    },
+    "current": {
+      "metadata": {
+        "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+        "seed": 73129,
+        "variant": "current",
+        "months": 360,
+        "initial_month": 180,
+        "status": "completed",
+        "engine_sha256": "050b14b281e470a7a1a91d4957f17542d57db08b503829030802d5c7ea0d817a"
+      },
+      "trace_sha256": "6704a8b9794fe49d450f97e659a2342d9207a2ea507eec8e8675fef6e40a1c08",
+      "windows": {
+        "211-240": {
+          "coverage": 0.5210456408807779,
+          "household_cash_end": 360105.99378000316,
+          "household_net": -5641.907294803361,
+          "open_end": 289,
+          "goods": {
+            "grain": {
+              "output": 1039.9089966876757,
+              "used": 1022.949489834081,
+              "stock": 1213.3013121047056,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 852.4579081950674,
+              "used": 829.1533863365573,
+              "stock": 1025.1812015771065,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 1036.4417329206967,
+              "used": 1039.0972402156726,
+              "stock": 1039.5842657123708,
+              "household_consumed": 912.4795264703292,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 254.68835934262052,
+              "used": 248.45167766001563,
+              "stock": 534.7313965534947,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 82.21651424018218,
+              "used": 81.5146026257264,
+              "stock": 204.1720524340121,
+              "household_consumed": 66.12417762151394,
+              "need": 66.57008,
+              "zero_output_months": 0
+            },
+            "ore": {
+              "output": 33.57018591353401,
+              "used": 66.90868212164938,
+              "stock": 2598.6624843792374,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 4
+            },
+            "iron": {
+              "output": 37.17149006758299,
+              "used": 36.45399756870514,
+              "stock": 133.6340094455518,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "tools": {
+              "output": 52.077139383864484,
+              "used": 49.30151250210622,
+              "stock": 187.60382406741695,
+              "household_consumed": 41.606300000000005,
+              "need": 41.606300000000005,
+              "zero_output_months": 0
+            },
+            "flax": {
+              "output": 465.30000000000007,
+              "used": 465.30000000000007,
+              "stock": 465.30000000000007,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 332.35714285714295,
+              "used": 332.35714285714295,
+              "stock": 332.3571428571432,
+              "household_consumed": 43.089384496235596,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 180.0,
+              "used": 180.0,
+              "stock": 180.0000000000001,
+              "household_consumed": 109.97066282492536,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "301-360": {
+          "coverage": 0.1751565168761453,
+          "household_cash_end": 14424.119908370812,
+          "household_net": -776.737578859351,
+          "open_end": 292,
+          "goods": {
+            "grain": {
+              "output": 900.2498092434575,
+              "used": 902.7723426851222,
+              "stock": 1599.4547557343067,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 752.3102855709351,
+              "used": 737.5169847750747,
+              "stock": 1597.2570790517914,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 921.8962309688433,
+              "used": 922.3816913053291,
+              "stock": 1921.8644638125563,
+              "household_consumed": 299.2618972467045,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 106.47881356221554,
+              "used": 105.11109885308556,
+              "stock": 416.5361655210605,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 1
+            },
+            "planks": {
+              "output": 7.674407524056169,
+              "used": 9.4754610223293,
+              "stock": 33.21824911567161,
+              "household_consumed": 6.619997140179425,
+              "need": 66.57008,
+              "zero_output_months": 5
+            },
+            "ore": {
+              "output": 3.1346517946216994,
+              "used": 4.429058811304022,
+              "stock": 1051.958756483057,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 54
+            },
+            "iron": {
+              "output": 2.4605882285022327,
+              "used": 3.426250421596029,
+              "stock": 51.464176667465146,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 22
+            },
+            "tools": {
+              "output": 4.894643459422898,
+              "used": 5.5187918178093245,
+              "stock": 42.721740751924735,
+              "household_consumed": 4.091059876734387,
+              "need": 41.606300000000005,
+              "zero_output_months": 2
+            },
+            "flax": {
+              "output": 465.30000000000007,
+              "used": 465.30000000000007,
+              "stock": 465.30000000000007,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 332.35714285714295,
+              "used": 332.35714285714295,
+              "stock": 332.8497427825655,
+              "household_consumed": 6.275844251305334,
+              "need": 124.81889999999999,
+              "zero_output_months": 0
+            },
+            "fish": {
+              "output": 179.85497630456211,
+              "used": 179.85497630456211,
+              "stock": 179.85497630456226,
+              "household_consumed": 47.44067749326735,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        },
+        "481-540": {
+          "coverage": 0.15248517729495364,
+          "household_cash_end": 352.5382468648938,
+          "household_net": -8.436955618638752,
+          "open_end": 294,
+          "goods": {
+            "grain": {
+              "output": 539.6310792358001,
+              "used": 548.9832904565862,
+              "stock": 1202.8555932180807,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "flour": {
+              "output": 457.4860753804886,
+              "used": 459.9003344248897,
+              "stock": 1088.322859580593,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "bread": {
+              "output": 574.8754180311121,
+              "used": 582.2792060355561,
+              "stock": 1338.54122983557,
+              "household_consumed": 251.34774799473047,
+              "need": 1664.252,
+              "zero_output_months": 0
+            },
+            "wood": {
+              "output": 60.43395777997922,
+              "used": 57.912717355767946,
+              "stock": 185.30009626193896,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "planks": {
+              "output": 0.32459446207687365,
+              "used": 0.19387698069914805,
+              "stock": 112.64212247329773,
+              "household_consumed": 0.023212959057921295,
+              "need": 66.57008,
+              "zero_output_months": 57
+            },
+            "ore": {
+              "output": 0.0,
+              "used": 0.0,
+              "stock": 1002.0603936310928,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "iron": {
+              "output": 0.0,
+              "used": 0.007473087899178192,
+              "stock": 268.11436507162233,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 60
+            },
+            "tools": {
+              "output": 0.010675839855969017,
+              "used": 0.09984011023181362,
+              "stock": 135.0542096619836,
+              "household_consumed": 0.014508099411200766,
+              "need": 41.606300000000005,
+              "zero_output_months": 58
+            },
+            "flax": {
+              "output": 55.71222597864768,
+              "used": 56.81091481130158,
+              "stock": 760.8930069804161,
+              "household_consumed": 0,
+              "need": 0,
+              "zero_output_months": 0
+            },
+            "cloth": {
+              "output": 40.579224865215416,
+              "used": 42.61379189323854,
+              "stock": 140.19074849261895,
+              "household_consumed": 0.04352429823360242,
+              "need": 124.81889999999999,
+              "zero_output_months": 1
+            },
+            "fish": {
+              "output": 92.26614542834366,
+              "used": 92.82620798949932,
+              "stock": 145.97653269313665,
+              "household_consumed": 54.15117086094725,
+              "need": 332.85040000000004,
+              "zero_output_months": 0
+            }
+          }
+        }
+      },
+      "funded_requested_last3": {
+        "grain": 819.2451332822044,
+        "flour": 959.3170534822351,
+        "bread": 670.3917579897517,
+        "wood": 98.85730880027904,
+        "planks": 0.0,
+        "ore": 0.0,
+        "iron": 0.0,
+        "tools": 0.0,
+        "flax": 33.38330633261358,
+        "cloth": 25.467524214051988,
+        "fish": 116.12870606718309
+      },
+      "invariant_failures": 0
+    }
+  }
+}

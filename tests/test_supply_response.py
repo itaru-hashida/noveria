@@ -96,6 +96,7 @@ def test_constant_funded_demand_reproduces_half_supply(engine, stock):
 
 
 def test_supply_observer_preserves_control_and_rng(engine):
+    engine.STOCK_PLANNING_REVISION = 0
     observed = copy.deepcopy(engine)
     observed.__class__ = SupplyEconomy
     observed.probe = Probe('control')

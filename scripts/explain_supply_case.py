@@ -14,6 +14,8 @@ from scripts.research_supply_response import SupplyEconomy, diagnostic
 
 
 def explain(checkpoint):
+    if Economy.STOCK_PLANNING_REVISION:
+        raise ValueError('Исторический разбор использует старые правила. Воспроизведение: ревизия 49eb0d0.')
     path = Path(checkpoint)
     engine = pickle.loads(path.read_bytes())
     reference = copy.deepcopy(engine)

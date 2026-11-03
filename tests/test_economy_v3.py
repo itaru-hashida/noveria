@@ -414,7 +414,7 @@ def test_zero_cash_and_profitable_idle_firm_do_not_force_closure(engine):
     assert e['status'] == 'closed'
 
 
-def test_frozen_plan_replenishes_stock_on_following_month_without_transfers(engine):
+def test_frozen_plan_replenishes_expected_sales_every_month_without_transfers(engine):
     e = firm(engine, 'fish')
     engine.enterprises = {e['id']: e}
     ids = {'h', e['id'], e['owner_id'], 'treasury:s', 'carrier:s'}
@@ -433,15 +433,13 @@ def test_frozen_plan_replenishes_stock_on_following_month_without_transfers(engi
     gold = engine.gold()
     for month in range(10):
         r = engine.step()
-        # Продажа готового склада не увеличивает уже закрытый план текущего месяца.
-        output = month % 2
-        assert r['production'].get('fish', 0) == output
-        assert r['consumed'].get('fish', 0) == 1-output
-        assert engine.accounts[e['id']]['stock']['fish'] == output
-        assert e['production_plan']['output'] == output
+        # План учитывает ожидаемую продажу до торгов и затем остаётся фиксированным.
+        assert r['production'].get('fish', 0) == 1
+        assert r['consumed'].get('fish', 0) == 1
+        assert engine.accounts[e['id']]['stock']['fish'] == 1
+        assert e['production_plan']['output'] == e['planned_output'] == 1
         assert engine.gold() == pytest.approx(gold)
-        if output:
-            assert engine.accounts[e['id']]['balance'] == pytest.approx(before[e['id']])
+        assert engine.accounts[e['id']]['balance'] == pytest.approx(before[e['id']])
         assert e['profit'] == pytest.approx(0)
 
 

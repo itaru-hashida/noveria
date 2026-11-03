@@ -1,0 +1,58 @@
+import copy
+from types import SimpleNamespace
+
+import pytest
+
+from modules.economy import Economy
+from scripts.research_agents import Probe
+from scripts.research_supply_response import SupplyEconomy
+from test_supply_response import market
+from test_economy_v3 import engine
+from core.db import WorldDB
+from scripts import research_supply_response, explain_supply_case
+
+
+def test_game_replenishes_stock_sold_in_current_month(engine):
+    f,sells,_=market(engine,'control')
+    engine.__class__=Economy
+    assert engine.production_outlook(f,sells)['planned_output']==4
+
+
+def test_game_matches_independent_previous_experiment(engine):
+    expected=copy.deepcopy(engine)
+    expected.__class__=SupplyEconomy
+    expected.probe=Probe('lead_time')
+    for month in range(1,13):
+        expected.probe.begin(month)
+        engine.step();expected.step()
+        assert engine.accounts==expected.accounts
+        assert engine.enterprises==expected.enterprises
+        a,b=copy.deepcopy(engine.meta),copy.deepcopy(expected.meta)
+        a.pop('stock_planning_revision');b.pop('stock_planning_revision')
+        assert a==b
+        assert engine.rng.getstate()==expected.rng.getstate()
+
+
+def test_existing_save_gets_new_revision_and_roundtrips(engine, tmp_path):
+    engine.meta.pop('stock_planning_revision',None)
+    engine.step()
+    assert engine.meta['stock_planning_revision']==1
+    with WorldDB(tmp_path/'stock.lbug') as db:
+        for entity in engine.entities.values():
+            db.create_entity(entity['id'],entity['kind'],entity['name'],entity['properties'])
+        for target,owner in engine.owners.items():
+            db.put_link(owner,target,'owns')
+        db.store_tiles(list(engine.tiles.values()))
+        engine.save(db)
+        restored=Economy.load(db)
+    assert restored.meta['stock_planning_revision']==1
+    restored.step();engine.step()
+    assert restored.accounts==engine.accounts
+    assert restored.enterprises==engine.enterprises
+
+
+def test_historical_cli_cannot_silently_reapply_promoted_policy():
+    with pytest.raises(ValueError,match='49eb0d0'):
+        research_supply_response.run(SimpleNamespace())
+    with pytest.raises(ValueError,match='49eb0d0'):
+        explain_supply_case.explain('/unused/historical-checkpoint')
