@@ -1,0 +1,2916 @@
+{
+  "checkpoint_sha256": "aa6b2ce554e72a8d0b8117fe0165f5875c8fe4b25b8ac3b7c1c1c54c58a267b1",
+  "month": 240,
+  "seed": 73129,
+  "actual": {
+    "first_month": 211,
+    "last_month": 240,
+    "bread_output": 881.6279650247803,
+    "bread_household": 727.5630837207297,
+    "trace_sha256": "d89887eadcef7e24f545e1c2cd20932bd3778b7a392329a0f303a52283182308"
+  },
+  "observer_sha256": "d8ee7f84ced60bbe0eb71ee4a0f76b4054c524fac51e5eebb24334b832cb10d8",
+  "owner_bread_preserved": 152.1436143501634,
+  "assumptions": "steady monthly flow; no initial stocks, no new factories; unlimited transport capacity as in game; money, asks and profitability excluded; preserved scenario also supplies existing owner bread consumption",
+  "bread_only": {
+    "success": true,
+    "bread": 1664.252,
+    "cost": 306.6404968313235,
+    "max_constraint_error": 1.4210854715202004e-14,
+    "need": 1664.252,
+    "coverage": 1.0,
+    "freight": 33.037468047763504,
+    "wages": 273.60302878356,
+    "preserve_others": false,
+    "external": {},
+    "witness": [
+      {
+        "kind": "production",
+        "firm": "firm-00001",
+        "good": "grain",
+        "quantity": 328.63776
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00006",
+        "good": "grain",
+        "quantity": 176.51889041504046
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00007",
+        "good": "wood",
+        "quantity": 11.487720000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00010",
+        "good": "grain",
+        "quantity": 103.1808
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00014",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00018",
+        "good": "grain",
+        "quantity": 101.52384
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00023",
+        "good": "wood",
+        "quantity": 20.345000000000002
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00025",
+        "good": "wood",
+        "quantity": 7.0748000000000015
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00028",
+        "good": "grain",
+        "quantity": 10.2
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00031",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00034",
+        "good": "wood",
+        "quantity": 3.5258000000000003
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00035",
+        "good": "wood",
+        "quantity": 6.0
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00038",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00039",
+        "good": "wood",
+        "quantity": 9.4876
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00042",
+        "good": "grain",
+        "quantity": 76.5
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00045",
+        "good": "grain",
+        "quantity": 20.4
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00046",
+        "good": "wood",
+        "quantity": 2.1689999899999974
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00049",
+        "good": "wood",
+        "quantity": 10.182004428233382
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00051",
+        "good": "grain",
+        "quantity": 15.299999999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00052",
+        "good": "wood",
+        "quantity": 6.23616
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00054",
+        "good": "grain",
+        "quantity": 20.4
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00055",
+        "good": "wood",
+        "quantity": 7.353400000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00057",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00060",
+        "good": "grain",
+        "quantity": 30.07824
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00063",
+        "good": "grain",
+        "quantity": 230.26080000000005
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00064",
+        "good": "wood",
+        "quantity": 11.709800000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00067",
+        "good": "grain",
+        "quantity": 56.1
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00068",
+        "good": "wood",
+        "quantity": 11.4007
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00070",
+        "good": "grain",
+        "quantity": 251.7361494889595
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00071",
+        "good": "wood",
+        "quantity": 26.222515571766618
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00075",
+        "good": "grain",
+        "quantity": 13.645439999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00076",
+        "good": "wood",
+        "quantity": 33.2307
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00080",
+        "good": "flour",
+        "quantity": 165.70559999999998
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00081",
+        "good": "bread",
+        "quantity": 165.70559999999998
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00086",
+        "good": "flour",
+        "quantity": 39.192800000000034
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00087",
+        "good": "bread",
+        "quantity": 66.17940000000004
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00092",
+        "good": "flour",
+        "quantity": 105.12117325333332
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00093",
+        "good": "bread",
+        "quantity": 114.8772
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00099",
+        "good": "bread",
+        "quantity": 24.238000000000003
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00104",
+        "good": "flour",
+        "quantity": 20.01920000000004
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00105",
+        "good": "bread",
+        "quantity": 34.644
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00109",
+        "good": "flour",
+        "quantity": 17.84640000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00113",
+        "good": "flour",
+        "quantity": 25.051199999999998
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00114",
+        "good": "bread",
+        "quantity": 31.313999999999997
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00117",
+        "good": "flour",
+        "quantity": 24.862400000000004
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00118",
+        "good": "bread",
+        "quantity": 31.078000000000003
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00123",
+        "good": "bread",
+        "quantity": 35.258
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00126",
+        "good": "bread",
+        "quantity": 30.374
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00131",
+        "good": "bread",
+        "quantity": 21.014000000000006
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00134",
+        "good": "flour",
+        "quantity": 40.087199999999996
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00138",
+        "good": "flour",
+        "quantity": 85.98400000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00144",
+        "good": "flour",
+        "quantity": 41.16160000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00150",
+        "good": "flour",
+        "quantity": 49.66720000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00151",
+        "good": "bread",
+        "quantity": 49.11688073752822
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00156",
+        "good": "flour",
+        "quantity": 34.93600000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00157",
+        "good": "bread",
+        "quantity": 43.67000000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00161",
+        "good": "bread",
+        "quantity": 21.689999899999975
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00164",
+        "good": "flour",
+        "quantity": 46.236
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00165",
+        "good": "bread",
+        "quantity": 46.236
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00168",
+        "good": "flour",
+        "quantity": 43.6536
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00169",
+        "good": "bread",
+        "quantity": 43.6536
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00174",
+        "good": "flour",
+        "quantity": 30.621902092533727
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00175",
+        "good": "bread",
+        "quantity": 38.277377615667156
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00179",
+        "good": "flour",
+        "quantity": 14.9664
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00180",
+        "good": "bread",
+        "quantity": 18.708
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00183",
+        "good": "flour",
+        "quantity": 9.83839999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00187",
+        "good": "flour",
+        "quantity": 34.0
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00188",
+        "good": "bread",
+        "quantity": 28.703999999999997
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00192",
+        "good": "flour",
+        "quantity": 68.96640000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00193",
+        "good": "bread",
+        "quantity": 86.208
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00197",
+        "good": "flour",
+        "quantity": 140.5176
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00198",
+        "good": "bread",
+        "quantity": 38.567077180808425
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00203",
+        "good": "flour",
+        "quantity": 71.8152
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00204",
+        "good": "bread",
+        "quantity": 43.985674198056586
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00207",
+        "good": "flour",
+        "quantity": 90.29492457413293
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00208",
+        "good": "bread",
+        "quantity": 119.48519999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00213",
+        "good": "flour",
+        "quantity": 119.48519999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00214",
+        "good": "bread",
+        "quantity": 101.00635571766617
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00220",
+        "good": "bread",
+        "quantity": 41.733599999999996
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00225",
+        "good": "flour",
+        "quantity": 11.3712
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00226",
+        "good": "bread",
+        "quantity": 14.213999999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00231",
+        "good": "bread",
+        "quantity": 45.78332580194342
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00237",
+        "good": "bread",
+        "quantity": 12.967119262471783
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00242",
+        "good": "bread",
+        "quantity": 0.4438837200313017
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00243",
+        "good": "bread",
+        "quantity": 14.646116279968698
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00244",
+        "good": "bread",
+        "quantity": 12.722323383196038
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00245",
+        "good": "bread",
+        "quantity": 20.68367661680396
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00255",
+        "good": "bread",
+        "quantity": 17.306666666666665
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00271",
+        "good": "bread",
+        "quantity": 51.452000000000005
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00279",
+        "good": "bread",
+        "quantity": 78.53092281919159
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00289",
+        "good": "bread",
+        "quantity": 22.082
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00290",
+        "good": "bread",
+        "quantity": 97.696
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-10-24",
+        "dest": "tile-7-24",
+        "freight": 0.0084,
+        "quantity": 103.1808
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-12-15",
+        "dest": "tile-12-16",
+        "freight": 0.0028,
+        "quantity": 56.1
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-13-15",
+        "dest": "tile-12-16",
+        "freight": 0.0056,
+        "quantity": 30.07824
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-13-25",
+        "dest": "tile-13-24",
+        "freight": 0.0028,
+        "quantity": 41.92320000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-13-25",
+        "dest": "tile-13-28",
+        "freight": 0.0084,
+        "quantity": 59.600640000000006
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-16-10",
+        "dest": "tile-20-10",
+        "freight": 0.021,
+        "quantity": 13.645439999999999
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-18-16",
+        "dest": "tile-18-15",
+        "freight": 0.0028,
+        "quantity": 82.75968
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-18-16",
+        "dest": "tile-20-19",
+        "freight": 0.016800000000000002,
+        "quantity": 198.84671999999998
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-18-16",
+        "dest": "tile-21-22",
+        "freight": 0.028000000000000004,
+        "quantity": 47.03136000000004
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-22-5",
+        "dest": "tile-21-5",
+        "freight": 0.0042,
+        "quantity": 143.38224
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-22-5",
+        "dest": "tile-21-7",
+        "freight": 0.015399999999999999,
+        "quantity": 108.35390948895952
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-28-5",
+        "dest": "tile-29-2",
+        "freight": 0.012599999999999998,
+        "quantity": 36.74628251104047
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-28-5",
+        "dest": "tile-31-5",
+        "freight": 0.0084,
+        "quantity": 39.75371748895953
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-31-10",
+        "dest": "tile-31-12",
+        "freight": 0.0056,
+        "quantity": 126.14540790399998
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-31-10",
+        "dest": "tile-33-6",
+        "freight": 0.016800000000000002,
+        "quantity": 47.71380251104046
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-31-10",
+        "dest": "tile-36-8",
+        "freight": 0.030800000000000004,
+        "quantity": 2.65968
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-32-5",
+        "dest": "tile-31-5",
+        "freight": 0.0028,
+        "quantity": 15.729482511040466
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-32-5",
+        "dest": "tile-33-6",
+        "freight": 0.0056,
+        "quantity": 4.670517488959533
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-34-8",
+        "dest": "tile-36-8",
+        "freight": 0.0056,
+        "quantity": 15.299999999999999
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-3",
+        "dest": "tile-4-1",
+        "freight": 0.0168,
+        "quantity": 10.965119999999992
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-3",
+        "dest": "tile-5-3",
+        "freight": 0.0028,
+        "quantity": 29.834880000000005
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-4-1",
+        "freight": 0.0648,
+        "quantity": 10.45056000000002
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-7-10",
+        "freight": 0.0112,
+        "quantity": 168.62112
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-8-5",
+        "freight": 0.022400000000000003,
+        "quantity": 48.104639999999996
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-9-6",
+        "freight": 0.022400000000000003,
+        "quantity": 3.084480000000049
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-5-19",
+        "dest": "tile-2-21",
+        "freight": 0.014,
+        "quantity": 8.593920000000011
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-5-19",
+        "dest": "tile-6-19",
+        "freight": 0.0028,
+        "quantity": 11.806079999999987
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-7-6",
+        "dest": "tile-8-1",
+        "freight": 0.026600000000000002,
+        "quantity": 24.023040000000048
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-7-6",
+        "dest": "tile-9-6",
+        "freight": 0.0056,
+        "quantity": 16.77695999999995
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-17",
+        "dest": "tile-12-16",
+        "freight": 0.005879999999999999,
+        "quantity": 8.9769
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-17",
+        "dest": "tile-32-22",
+        "freight": 0.11955999999999992,
+        "quantity": 2.4238000000000004
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-22",
+        "dest": "tile-13-24",
+        "freight": 0.013719999999999998,
+        "quantity": 4.367000000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-22",
+        "dest": "tile-13-28",
+        "freight": 0.0294,
+        "quantity": 6.208400000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-22",
+        "dest": "tile-7-24",
+        "freight": 0.0294,
+        "quantity": 9.7696
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-18-15",
+        "freight": 0.03332,
+        "quantity": 8.620800000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-20-10",
+        "freight": 0.023519999999999996,
+        "quantity": 1.4214
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-20-19",
+        "freight": 0.06075999999999999,
+        "quantity": 16.570559999999997
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-21-22",
+        "freight": 0.07643999999999997,
+        "quantity": 6.617940000000004
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-20-7",
+        "dest": "tile-20-8",
+        "freight": 0.00784,
+        "quantity": 4.17336
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-20-7",
+        "dest": "tile-21-5",
+        "freight": 0.023519999999999996,
+        "quantity": 10.100635571766617
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-20-7",
+        "dest": "tile-21-7",
+        "freight": 0.00784,
+        "quantity": 11.94852
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-28-12",
+        "dest": "tile-31-12",
+        "freight": 0.0392,
+        "quantity": 11.487720000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-29-2",
+        "dest": "tile-31-5",
+        "freight": 0.021559999999999996,
+        "quantity": 6.354266666666666
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-35-3",
+        "dest": "tile-36-1",
+        "freight": 0.045079999999999995,
+        "quantity": 2.1689999899999974
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-35-7",
+        "dest": "tile-33-6",
+        "freight": 0.013719999999999998,
+        "quantity": 4.36536
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-35-7",
+        "dest": "tile-36-8",
+        "freight": 0.0098,
+        "quantity": 1.8708
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-15",
+        "dest": "tile-7-10",
+        "freight": 0.04116,
+        "quantity": 11.709800000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-16",
+        "dest": "tile-2-21",
+        "freight": 0.04508,
+        "quantity": 5.145200000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-16",
+        "dest": "tile-6-19",
+        "freight": 0.021559999999999996,
+        "quantity": 2.2082
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-3",
+        "dest": "tile-5-3",
+        "freight": 0.005879999999999999,
+        "quantity": 3.1078000000000006
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-1",
+        "dest": "tile-4-0",
+        "freight": 0.06859999999999998,
+        "quantity": 2.101400000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-1",
+        "dest": "tile-4-1",
+        "freight": 0.06467999999999999,
+        "quantity": 1.5090000000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-2-10",
+        "freight": 0.06467999999999997,
+        "quantity": 2.8704
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-6-3",
+        "freight": 0.05264,
+        "quantity": 0.14520000000000044
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-8-5",
+        "freight": 0.021559999999999996,
+        "quantity": 3.3406000000000002
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-9-6",
+        "freight": 0.0294,
+        "quantity": 3.1313999999999997
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-2-10",
+        "dest": "tile-4-1",
+        "freight": 0.07319999999999999,
+        "quantity": 11.0368
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-20-19",
+        "dest": "tile-21-22",
+        "freight": 0.0112,
+        "quantity": 13.750719999999998
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-20-19",
+        "dest": "tile-32-22",
+        "freight": 0.041999999999999996,
+        "quantity": 19.390400000000003
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-21-5",
+        "dest": "tile-20-8",
+        "freight": 0.0224,
+        "quantity": 33.38688
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-21-5",
+        "dest": "tile-21-7",
+        "freight": 0.0112,
+        "quantity": 5.293235425867067
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-31-12",
+        "dest": "tile-31-5",
+        "freight": 0.019600000000000003,
+        "quantity": 4.598133333333333
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-31-12",
+        "dest": "tile-36-1",
+        "freight": 0.08680000000000002,
+        "quantity": 8.621279919999981
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-33-6",
+        "dest": "tile-36-1",
+        "freight": 0.06440000000000001,
+        "quantity": 8.730719999999998
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-4-1",
+        "dest": "tile-4-0",
+        "freight": 0.0028,
+        "quantity": 16.811200000000007
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-10",
+        "dest": "tile-6-3",
+        "freight": 0.047200000000000006,
+        "quantity": 24.2992
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-10",
+        "dest": "tile-8-1",
+        "freight": 0.03780000000000001,
+        "quantity": 7.695999999999957
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-10",
+        "dest": "tile-8-5",
+        "freight": 0.016800000000000002,
+        "quantity": 14.844000000000007
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-24",
+        "dest": "tile-6-19",
+        "freight": 0.016800000000000002,
+        "quantity": 7.827200000000012
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-8-5",
+        "dest": "tile-10-1",
+        "freight": 0.032200000000000006,
+        "quantity": 28.206400000000002
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-12-16",
+        "dest": "tile-20-19",
+        "freight": 0.0392,
+        "quantity": 29.92300000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-18-15",
+        "dest": "tile-20-19",
+        "freight": 0.0196,
+        "quantity": 14.36800000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-22",
+        "dest": "tile-20-19",
+        "freight": 0.0112,
+        "quantity": 53.52140000000004
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-5",
+        "dest": "tile-20-8",
+        "freight": 0.0224,
+        "quantity": 13.608400000000003
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-5",
+        "dest": "tile-21-7",
+        "freight": 0.0112,
+        "quantity": 51.678799999999995
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-5",
+        "dest": "tile-31-5",
+        "freight": 0.029400000000000003,
+        "quantity": 7.741155717666167
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-29-2",
+        "dest": "tile-31-12",
+        "freight": 0.035,
+        "quantity": 12.317377615667155
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-31-5",
+        "dest": "tile-31-12",
+        "freight": 0.019600000000000003,
+        "quantity": 32.753822384332835
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-33-6",
+        "dest": "tile-31-12",
+        "freight": 0.022400000000000003,
+        "quantity": 7.275599999999997
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-10-1",
+        "need": 35.258,
+        "quantity": 35.258
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-12-16",
+        "need": 59.846,
+        "quantity": 59.846
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-13-24",
+        "need": 43.67000000000001,
+        "quantity": 43.67000000000001
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-13-28",
+        "need": 62.084,
+        "quantity": 62.084
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-18-15",
+        "need": 71.83999999999999,
+        "quantity": 71.83999999999999
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-2-10",
+        "need": 28.703999999999997,
+        "quantity": 28.703999999999997
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-2-21",
+        "need": 51.452000000000005,
+        "quantity": 51.452000000000005
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-20-10",
+        "need": 14.213999999999999,
+        "quantity": 14.213999999999999
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-20-19",
+        "need": 263.51800000000003,
+        "quantity": 263.51800000000003
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-20-8",
+        "need": 55.342,
+        "quantity": 55.342
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-21-22",
+        "need": 12.658000000000001,
+        "quantity": 12.658000000000001
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-21-5",
+        "need": 27.978,
+        "quantity": 27.978
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-21-7",
+        "need": 171.164,
+        "quantity": 171.164
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-29-2",
+        "need": 25.96,
+        "quantity": 25.96
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-31-12",
+        "need": 167.224,
+        "quantity": 167.224
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-31-5",
+        "need": 38.529999999999994,
+        "quantity": 38.529999999999994
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-32-22",
+        "need": 24.238000000000003,
+        "quantity": 24.238000000000003
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-33-6",
+        "need": 36.378,
+        "quantity": 36.378
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-36-1",
+        "need": 21.689999999999998,
+        "quantity": 21.689999899999975
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-36-8",
+        "need": 18.708,
+        "quantity": 18.708
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-4-0",
+        "need": 21.014000000000006,
+        "quantity": 21.014000000000006
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-4-1",
+        "need": 15.09,
+        "quantity": 15.09
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-5-3",
+        "need": 31.078000000000003,
+        "quantity": 31.078000000000003
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-6-19",
+        "need": 22.082,
+        "quantity": 22.082
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-6-3",
+        "need": 30.374,
+        "quantity": 30.374
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-7-10",
+        "need": 117.09800000000001,
+        "quantity": 117.09800000000001
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-7-24",
+        "need": 97.696,
+        "quantity": 97.696
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-8-1",
+        "need": 34.644,
+        "quantity": 34.644
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-8-5",
+        "need": 33.406,
+        "quantity": 33.406
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-9-6",
+        "need": 31.313999999999997,
+        "quantity": 31.313999999999997
+      }
+    ]
+  },
+  "other_industries_preserved": {
+    "success": true,
+    "bread": 1664.252,
+    "cost": 354.3875826480537,
+    "max_constraint_error": 7.105427357601002e-15,
+    "need": 1664.252,
+    "coverage": 1.0,
+    "freight": 42.88045681632229,
+    "wages": 311.5071258317314,
+    "preserve_others": true,
+    "external": {
+      "('tile-8-1', 'bread')": 13.02650557472742,
+      "('tile-21-7', 'bread')": 22.281249403496705,
+      "('tile-36-1', 'bread')": 8.998275753951022,
+      "('tile-6-19', 'bread')": 38.939225299288836,
+      "('tile-20-19', 'bread')": 50.54492750779945,
+      "('tile-7-24', 'bread')": 18.353430810899958,
+      "('tile-20-19', 'wood')": 8.012235548663083,
+      "('tile-21-22', 'wood')": 4.776257139193186,
+      "('tile-31-12', 'wood')": 4.703719780112118,
+      "('tile-32-22', 'wood')": 2.8880102674302113,
+      "('tile-8-1', 'wood')": 14.18463572145433,
+      "('tile-4-1', 'wood')": 1.3421213963619707,
+      "('tile-9-6', 'wood')": 9.512578694420842,
+      "('tile-5-3', 'wood')": 0.5514820526784319,
+      "('tile-10-1', 'wood')": 2.500963111111112,
+      "('tile-6-3', 'wood')": 3.4800361603698104,
+      "('tile-4-0', 'wood')": 0.6904784416079246,
+      "('tile-8-5', 'wood')": 7.74751567912963,
+      "('tile-7-24', 'wood')": 5.0049104532482245,
+      "('tile-2-21', 'wood')": 5.282521779307921,
+      "('tile-13-28', 'wood')": 2.6368809167549423,
+      "('tile-13-24', 'wood')": 3.1942387042509726,
+      "('tile-36-1', 'wood')": 0.6007931538738649,
+      "('tile-31-5', 'wood')": 3.2396766518518527,
+      "('tile-33-6', 'wood')": 3.8588577237483443,
+      "('tile-29-2', 'wood')": 3.0013356492395733,
+      "('tile-36-8', 'wood')": 1.402803614814815,
+      "('tile-6-19', 'wood')": 5.869052536986275,
+      "('tile-2-10', 'wood')": 1.140413714604956,
+      "('tile-18-15', 'wood')": 21.46570691933114,
+      "('tile-7-10', 'wood')": 8.032128076901584,
+      "('tile-12-16', 'wood')": 2.4356195226425905,
+      "('tile-21-7', 'wood')": 5.927500098149931,
+      "('tile-21-5', 'wood')": 3.3813243477924146,
+      "('tile-20-8', 'wood')": 7.692500190663025,
+      "('tile-20-10', 'wood')": 8.916164441453695
+    },
+    "witness": [
+      {
+        "kind": "production",
+        "firm": "firm-00001",
+        "good": "grain",
+        "quantity": 377.1608904074875
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00006",
+        "good": "grain",
+        "quantity": 184.27530651104047
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00007",
+        "good": "wood",
+        "quantity": 16.19143978011212
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00010",
+        "good": "grain",
+        "quantity": 158.18174986578126
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00014",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00018",
+        "good": "grain",
+        "quantity": 101.52384
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00023",
+        "good": "wood",
+        "quantity": 33.01637315534414
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00025",
+        "good": "wood",
+        "quantity": 18.0
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00028",
+        "good": "grain",
+        "quantity": 10.2
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00031",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00034",
+        "good": "wood",
+        "quantity": 6.026763111111112
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00035",
+        "good": "wood",
+        "quantity": 6.0
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00038",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00039",
+        "good": "wood",
+        "quantity": 38.514312418100644
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00042",
+        "good": "grain",
+        "quantity": 76.5
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00045",
+        "good": "grain",
+        "quantity": 20.4
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00046",
+        "good": "wood",
+        "quantity": 3.2035931538738653
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00049",
+        "good": "wood",
+        "quantity": 16.423016729324807
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00051",
+        "good": "grain",
+        "quantity": 15.299999999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00052",
+        "good": "wood",
+        "quantity": 11.87198133856316
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00054",
+        "good": "grain",
+        "quantity": 20.4
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00055",
+        "good": "wood",
+        "quantity": 22.39889684622308
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00057",
+        "good": "grain",
+        "quantity": 40.8
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00060",
+        "good": "grain",
+        "quantity": 30.07824
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00063",
+        "good": "grain",
+        "quantity": 242.76624535173838
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00064",
+        "good": "wood",
+        "quantity": 19.741928076901587
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00067",
+        "good": "grain",
+        "quantity": 56.1
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00068",
+        "good": "wood",
+        "quantity": 16.7243297900728
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00070",
+        "good": "grain",
+        "quantity": 269.47584
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00071",
+        "good": "wood",
+        "quantity": 45.07172463660537
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00075",
+        "good": "grain",
+        "quantity": 18.177677544109326
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00076",
+        "good": "wood",
+        "quantity": 81.92766487693244
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00080",
+        "good": "flour",
+        "quantity": 165.70559999999998
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00081",
+        "good": "bread",
+        "quantity": 165.70559999999998
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00086",
+        "good": "flour",
+        "quantity": 79.6287420062396
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00087",
+        "good": "bread",
+        "quantity": 116.7243275077995
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00092",
+        "good": "flour",
+        "quantity": 108.59157333333334
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00093",
+        "good": "bread",
+        "quantity": 114.8772
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00099",
+        "good": "bread",
+        "quantity": 24.238000000000003
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00104",
+        "good": "flour",
+        "quantity": 30.440404459781973
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00105",
+        "good": "bread",
+        "quantity": 41.572799999999994
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00109",
+        "good": "flour",
+        "quantity": 17.84640000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00113",
+        "good": "flour",
+        "quantity": 25.051199999999998
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00114",
+        "good": "bread",
+        "quantity": 31.313999999999997
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00117",
+        "good": "flour",
+        "quantity": 24.862400000000004
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00118",
+        "good": "bread",
+        "quantity": 31.078000000000003
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00123",
+        "good": "bread",
+        "quantity": 35.258
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00126",
+        "good": "bread",
+        "quantity": 30.374
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00131",
+        "good": "bread",
+        "quantity": 21.014000000000006
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00134",
+        "good": "flour",
+        "quantity": 40.087199999999996
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00138",
+        "good": "flour",
+        "quantity": 117.23519999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00144",
+        "good": "flour",
+        "quantity": 41.16160000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00150",
+        "good": "flour",
+        "quantity": 49.66720000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00151",
+        "good": "bread",
+        "quantity": 49.11688073752822
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00156",
+        "good": "flour",
+        "quantity": 34.93600000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00157",
+        "good": "bread",
+        "quantity": 43.67000000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00161",
+        "good": "bread",
+        "quantity": 26.028000000000002
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00164",
+        "good": "flour",
+        "quantity": 46.236
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00165",
+        "good": "bread",
+        "quantity": 46.236
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00168",
+        "good": "flour",
+        "quantity": 43.6536
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00169",
+        "good": "bread",
+        "quantity": 43.6536
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00174",
+        "good": "flour",
+        "quantity": 30.621902092533727
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00175",
+        "good": "bread",
+        "quantity": 38.277377615667156
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00179",
+        "good": "flour",
+        "quantity": 17.959680000000002
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00180",
+        "good": "bread",
+        "quantity": 22.4496
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00183",
+        "good": "flour",
+        "quantity": 24.421324888151062
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00187",
+        "good": "flour",
+        "quantity": 34.0
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00188",
+        "good": "bread",
+        "quantity": 28.703999999999997
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00192",
+        "good": "flour",
+        "quantity": 68.96640000000001
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00193",
+        "good": "bread",
+        "quantity": 86.208
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00197",
+        "good": "flour",
+        "quantity": 140.5176
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00198",
+        "good": "bread",
+        "quantity": 38.567077180808425
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00203",
+        "good": "flour",
+        "quantity": 71.8152
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00204",
+        "good": "bread",
+        "quantity": 43.985674198056586
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00207",
+        "good": "flour",
+        "quantity": 105.078
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00208",
+        "good": "bread",
+        "quantity": 119.48519999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00213",
+        "good": "flour",
+        "quantity": 119.48519999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00214",
+        "good": "bread",
+        "quantity": 119.48519999999999
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00220",
+        "good": "bread",
+        "quantity": 41.733599999999996
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00225",
+        "good": "flour",
+        "quantity": 15.148064620091105
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00226",
+        "good": "bread",
+        "quantity": 18.93508077511388
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00231",
+        "good": "bread",
+        "quantity": 45.78332580194342
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00237",
+        "good": "bread",
+        "quantity": 12.967119262471783
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00242",
+        "good": "bread",
+        "quantity": 0.4438837200313017
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00243",
+        "good": "bread",
+        "quantity": 14.646116279968698
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00244",
+        "good": "bread",
+        "quantity": 18.820028957923462
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00245",
+        "good": "bread",
+        "quantity": 20.68367661680396
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00255",
+        "good": "bread",
+        "quantity": 17.306666666666665
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00271",
+        "good": "bread",
+        "quantity": 51.452000000000005
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00279",
+        "good": "bread",
+        "quantity": 78.53092281919159
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00289",
+        "good": "bread",
+        "quantity": 61.02122529928884
+      },
+      {
+        "kind": "production",
+        "firm": "firm-00290",
+        "good": "bread",
+        "quantity": 116.04943081089996
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-10-24",
+        "dest": "tile-6-19",
+        "freight": 0.025200000000000004,
+        "quantity": 17.499509865781285
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-10-24",
+        "dest": "tile-7-24",
+        "freight": 0.0084,
+        "quantity": 140.68223999999998
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-12-15",
+        "dest": "tile-12-16",
+        "freight": 0.0028,
+        "quantity": 56.1
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-13-15",
+        "dest": "tile-12-16",
+        "freight": 0.0056,
+        "quantity": 30.07824
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-13-25",
+        "dest": "tile-13-24",
+        "freight": 0.0028,
+        "quantity": 41.92320000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-13-25",
+        "dest": "tile-13-28",
+        "freight": 0.0084,
+        "quantity": 59.600640000000006
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-16-10",
+        "dest": "tile-20-10",
+        "freight": 0.021,
+        "quantity": 18.177677544109326
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-18-16",
+        "dest": "tile-18-15",
+        "freight": 0.0028,
+        "quantity": 82.75968
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-18-16",
+        "dest": "tile-20-19",
+        "freight": 0.016800000000000002,
+        "quantity": 198.84671999999998
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-18-16",
+        "dest": "tile-21-22",
+        "freight": 0.028000000000000004,
+        "quantity": 95.55449040748752
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-22-5",
+        "dest": "tile-21-5",
+        "freight": 0.0042,
+        "quantity": 143.38224
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-22-5",
+        "dest": "tile-21-7",
+        "freight": 0.015399999999999999,
+        "quantity": 126.0936
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-28-5",
+        "dest": "tile-29-2",
+        "freight": 0.012599999999999998,
+        "quantity": 36.74628251104047
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-28-5",
+        "dest": "tile-31-5",
+        "freight": 0.0084,
+        "quantity": 39.75371748895953
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-31-10",
+        "dest": "tile-31-12",
+        "freight": 0.0056,
+        "quantity": 130.309888
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-31-10",
+        "dest": "tile-33-6",
+        "freight": 0.016800000000000002,
+        "quantity": 47.71380251104046
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-31-10",
+        "dest": "tile-36-8",
+        "freight": 0.030800000000000004,
+        "quantity": 6.251616000000004
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-32-5",
+        "dest": "tile-31-5",
+        "freight": 0.0028,
+        "quantity": 15.729482511040466
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-32-5",
+        "dest": "tile-33-6",
+        "freight": 0.0056,
+        "quantity": 4.670517488959533
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-34-8",
+        "dest": "tile-36-8",
+        "freight": 0.0056,
+        "quantity": 15.299999999999999
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-3",
+        "dest": "tile-4-1",
+        "freight": 0.0168,
+        "quantity": 10.965119999999992
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-3",
+        "dest": "tile-5-3",
+        "freight": 0.0028,
+        "quantity": 29.834880000000005
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-4-1",
+        "freight": 0.0648,
+        "quantity": 10.45056000000002
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-7-10",
+        "freight": 0.0112,
+        "quantity": 168.62112
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-8-5",
+        "freight": 0.022400000000000003,
+        "quantity": 48.104639999999996
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-4-9",
+        "dest": "tile-9-6",
+        "freight": 0.022400000000000003,
+        "quantity": 15.58992535173837
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-5-19",
+        "dest": "tile-2-21",
+        "freight": 0.014,
+        "quantity": 8.593920000000011
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-5-19",
+        "dest": "tile-6-19",
+        "freight": 0.0028,
+        "quantity": 11.806079999999987
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-7-6",
+        "dest": "tile-8-1",
+        "freight": 0.026600000000000002,
+        "quantity": 36.52848535173837
+      },
+      {
+        "kind": "shipping",
+        "good": "grain",
+        "source": "tile-7-6",
+        "dest": "tile-9-6",
+        "freight": 0.0056,
+        "quantity": 4.271514648261629
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-17",
+        "dest": "tile-12-16",
+        "freight": 0.005879999999999999,
+        "quantity": 11.41251952264259
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-17",
+        "dest": "tile-32-22",
+        "freight": 0.11955999999999992,
+        "quantity": 5.311810267430212
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-22",
+        "dest": "tile-13-24",
+        "freight": 0.013719999999999998,
+        "quantity": 7.561238704250973
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-22",
+        "dest": "tile-13-28",
+        "freight": 0.0294,
+        "quantity": 8.845280916754943
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-12-22",
+        "dest": "tile-7-24",
+        "freight": 0.0294,
+        "quantity": 16.60985353433822
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-18-15",
+        "freight": 0.03332,
+        "quantity": 30.086506919331143
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-20-10",
+        "freight": 0.023519999999999996,
+        "quantity": 10.809672518965083
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-20-19",
+        "freight": 0.06075999999999999,
+        "quantity": 24.58279554866308
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-17-10",
+        "dest": "tile-21-22",
+        "freight": 0.07643999999999997,
+        "quantity": 16.44868988997314
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-20-7",
+        "dest": "tile-20-8",
+        "freight": 0.00784,
+        "quantity": 11.865860190663025
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-20-7",
+        "dest": "tile-21-5",
+        "freight": 0.023519999999999996,
+        "quantity": 15.329844347792415
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-20-7",
+        "dest": "tile-21-7",
+        "freight": 0.00784,
+        "quantity": 17.87602009814993
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-28-12",
+        "dest": "tile-31-12",
+        "freight": 0.0392,
+        "quantity": 16.19143978011212
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-29-2",
+        "dest": "tile-31-5",
+        "freight": 0.021559999999999996,
+        "quantity": 9.59394331851852
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-35-3",
+        "dest": "tile-36-1",
+        "freight": 0.045079999999999995,
+        "quantity": 3.2035931538738653
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-35-7",
+        "dest": "tile-33-6",
+        "freight": 0.013719999999999998,
+        "quantity": 8.224217723748344
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-35-7",
+        "dest": "tile-36-8",
+        "freight": 0.0098,
+        "quantity": 3.6477636148148154
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-15",
+        "dest": "tile-7-10",
+        "freight": 0.04116,
+        "quantity": 19.741928076901587
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-16",
+        "dest": "tile-2-21",
+        "freight": 0.04508,
+        "quantity": 10.427721779307923
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-16",
+        "dest": "tile-6-19",
+        "freight": 0.021559999999999996,
+        "quantity": 11.971175066915158
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-6-3",
+        "dest": "tile-5-3",
+        "freight": 0.005879999999999999,
+        "quantity": 3.6592820526784324
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-2-10",
+        "freight": 0.06467999999999997,
+        "quantity": 4.010813714604956
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-4-0",
+        "freight": 0.07643999999999998,
+        "quantity": 2.7918784416079254
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-4-1",
+        "freight": 0.07252,
+        "quantity": 2.851121396361971
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-6-3",
+        "freight": 0.05264,
+        "quantity": 4.176718213048243
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-8-1",
+        "freight": 0.00784,
+        "quantity": 0.34191572145432936
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-8-5",
+        "freight": 0.021559999999999996,
+        "quantity": 11.697886236602372
+      },
+      {
+        "kind": "shipping",
+        "good": "wood",
+        "source": "tile-8-2",
+        "dest": "tile-9-6",
+        "freight": 0.0294,
+        "quantity": 12.643978694420841
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-2-10",
+        "dest": "tile-4-1",
+        "freight": 0.07319999999999999,
+        "quantity": 11.0368
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-20-19",
+        "dest": "tile-21-22",
+        "freight": 0.0112,
+        "quantity": 13.750719999999998
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-20-19",
+        "dest": "tile-32-22",
+        "freight": 0.041999999999999996,
+        "quantity": 19.390400000000003
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-21-5",
+        "dest": "tile-20-8",
+        "freight": 0.0224,
+        "quantity": 23.89703999999999
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-21-7",
+        "dest": "tile-20-8",
+        "freight": 0.0112,
+        "quantity": 9.489840000000008
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-31-12",
+        "dest": "tile-31-5",
+        "freight": 0.019600000000000003,
+        "quantity": 4.598133333333333
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-31-12",
+        "dest": "tile-36-1",
+        "freight": 0.08680000000000002,
+        "quantity": 12.091680000000004
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-33-6",
+        "dest": "tile-36-1",
+        "freight": 0.06440000000000001,
+        "quantity": 8.730719999999998
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-4-1",
+        "dest": "tile-4-0",
+        "freight": 0.0028,
+        "quantity": 16.811200000000007
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-10",
+        "dest": "tile-6-3",
+        "freight": 0.047200000000000006,
+        "quantity": 24.2992
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-10",
+        "dest": "tile-8-1",
+        "freight": 0.03780000000000001,
+        "quantity": 2.81783554021802
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-10",
+        "dest": "tile-8-5",
+        "freight": 0.016800000000000002,
+        "quantity": 19.722164459781943
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-7-24",
+        "dest": "tile-6-19",
+        "freight": 0.016800000000000002,
+        "quantity": 24.395655351280013
+      },
+      {
+        "kind": "shipping",
+        "good": "flour",
+        "source": "tile-8-5",
+        "dest": "tile-10-1",
+        "freight": 0.032200000000000006,
+        "quantity": 28.206400000000002
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-12-16",
+        "dest": "tile-20-19",
+        "freight": 0.0392,
+        "quantity": 29.92300000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-18-15",
+        "dest": "tile-20-19",
+        "freight": 0.0196,
+        "quantity": 14.36800000000001
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-20-10",
+        "dest": "tile-20-8",
+        "freight": 0.0112,
+        "quantity": 4.721080775113883
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-22",
+        "dest": "tile-20-19",
+        "freight": 0.0112,
+        "quantity": 104.0663275077995
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-5",
+        "dest": "tile-20-8",
+        "freight": 0.0224,
+        "quantity": 8.88731922488612
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-5",
+        "dest": "tile-21-7",
+        "freight": 0.0112,
+        "quantity": 73.9600494034967
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-21-5",
+        "dest": "tile-31-5",
+        "freight": 0.029400000000000003,
+        "quantity": 8.659831371617166
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-29-2",
+        "dest": "tile-31-12",
+        "freight": 0.035,
+        "quantity": 12.317377615667155
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-31-5",
+        "dest": "tile-31-12",
+        "freight": 0.019600000000000003,
+        "quantity": 33.672498038283834
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-33-6",
+        "dest": "tile-31-12",
+        "freight": 0.022400000000000003,
+        "quantity": 6.356924346049002
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-33-6",
+        "dest": "tile-36-1",
+        "freight": 0.06440000000000001,
+        "quantity": 0.918675653950995
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-36-8",
+        "dest": "tile-36-1",
+        "freight": 0.061599999999999995,
+        "quantity": 3.741600000000002
+      },
+      {
+        "kind": "shipping",
+        "good": "bread",
+        "source": "tile-8-5",
+        "dest": "tile-8-1",
+        "freight": 0.021,
+        "quantity": 6.097705574727424
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-10-1",
+        "need": 35.258,
+        "quantity": 35.258
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-12-16",
+        "need": 59.846,
+        "quantity": 59.846
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-13-24",
+        "need": 43.67000000000001,
+        "quantity": 43.67000000000001
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-13-28",
+        "need": 62.084,
+        "quantity": 62.084
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-18-15",
+        "need": 71.83999999999999,
+        "quantity": 71.83999999999999
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-2-10",
+        "need": 28.703999999999997,
+        "quantity": 28.703999999999997
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-2-21",
+        "need": 51.452000000000005,
+        "quantity": 51.452000000000005
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-20-10",
+        "need": 14.213999999999999,
+        "quantity": 14.213999999999999
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-20-19",
+        "need": 263.51800000000003,
+        "quantity": 263.51800000000003
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-20-8",
+        "need": 55.342,
+        "quantity": 55.342
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-21-22",
+        "need": 12.658000000000001,
+        "quantity": 12.658000000000001
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-21-5",
+        "need": 27.978,
+        "quantity": 27.978
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-21-7",
+        "need": 171.164,
+        "quantity": 171.164
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-29-2",
+        "need": 25.96,
+        "quantity": 25.96
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-31-12",
+        "need": 167.224,
+        "quantity": 167.224
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-31-5",
+        "need": 38.529999999999994,
+        "quantity": 38.529999999999994
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-32-22",
+        "need": 24.238000000000003,
+        "quantity": 24.238000000000003
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-33-6",
+        "need": 36.378,
+        "quantity": 36.378
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-36-1",
+        "need": 21.689999999999998,
+        "quantity": 21.689999899999975
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-36-8",
+        "need": 18.708,
+        "quantity": 18.708
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-4-0",
+        "need": 21.014000000000006,
+        "quantity": 21.014000000000006
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-4-1",
+        "need": 15.09,
+        "quantity": 15.09
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-5-3",
+        "need": 31.078000000000003,
+        "quantity": 31.078000000000003
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-6-19",
+        "need": 22.082,
+        "quantity": 22.082
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-6-3",
+        "need": 30.374,
+        "quantity": 30.374
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-7-10",
+        "need": 117.09800000000001,
+        "quantity": 117.09800000000001
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-7-24",
+        "need": 97.696,
+        "quantity": 97.696
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-8-1",
+        "need": 34.644,
+        "quantity": 34.644
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-8-5",
+        "need": 33.406,
+        "quantity": 33.406
+      },
+      {
+        "kind": "consumption",
+        "good": "bread",
+        "tile": "tile-9-6",
+        "need": 31.313999999999997,
+        "quantity": 31.313999999999997
+      }
+    ]
+  }
+}
