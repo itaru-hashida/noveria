@@ -27,6 +27,7 @@ def weighted_median(values):
 
 
 class MoneyCycleEconomy(Economy):
+    PROFIT_DISTRIBUTION_REVISION = 0
     def household_requests(self, households, needs, purpose, sells):
         if purpose == 'Базовые нужды':
             self.basic_signals = []
@@ -150,6 +151,8 @@ def record(e):
 
 
 def run(args):
+    if Economy.PROFIT_DISTRIBUTION_REVISION:
+        raise ValueError('Доход от бизнеса уже включён в игру; историческое исследование: 9feffca.')
     if args.months < 1:
         raise ValueError('Нужен положительный горизонт')
     out, path = Path(args.out), Path(args.checkpoint)

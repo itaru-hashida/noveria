@@ -61,6 +61,8 @@ def run_one(checkpoint, out, months, variant):
 
 
 if __name__ == '__main__':
+    if Economy.PROFIT_DISTRIBUTION_REVISION:
+        raise ValueError('Историческая проверка склада: используйте commit d446f27 до изменения доходов.')
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--out',required=True)
     p.add_argument('--months',type=int,default=360)

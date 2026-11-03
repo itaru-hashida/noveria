@@ -19,7 +19,9 @@ def engine():
     tile = dict(id='t', x=0, y=0, passable=True, cost=1, road=True, province_id='p',
         resources=['зерно', 'лес', 'железо', 'рыба'], terrain='plain')
     cfg = json.loads(Path('content/economy.json').read_text(encoding='utf-8'))
-    result = Economy(dict(entities=entities,
+    class LegacyOwnerEconomy(Economy):
+        PROFIT_DISTRIBUTION_REVISION = 0
+    result = LegacyOwnerEconomy(dict(entities=entities,
         links=[dict(source='s', target=i, kind='owns') for i in ('p', 'c')]),
         [tile], meta=dict(id='game', version=3, month=0, config=cfg))
     result.seed = 17

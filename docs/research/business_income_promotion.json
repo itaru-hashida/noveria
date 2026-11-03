@@ -1,0 +1,26 @@
+[
+  {
+    "case": "pilot",
+    "months": 60,
+    "exact_numeric_parity": true,
+    "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151"
+  },
+  {
+    "case": "73129",
+    "months": 60,
+    "exact_numeric_parity": true,
+    "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6"
+  },
+  {
+    "case": "17",
+    "months": 60,
+    "exact_numeric_parity": true,
+    "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a"
+  },
+  {
+    "case": "2026",
+    "months": 60,
+    "exact_numeric_parity": true,
+    "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612"
+  }
+]

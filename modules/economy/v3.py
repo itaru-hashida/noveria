@@ -16,6 +16,7 @@ class Economy(EconomyServices):
     RULES_VERSION = 3
     INPUT_BID_REVISION = 1
     STOCK_PLANNING_REVISION = 1
+    PROFIT_DISTRIBUTION_REVISION = 1
 
     def reset_report(self):
         super().reset_report()
@@ -33,6 +34,7 @@ class Economy(EconomyServices):
         self.meta.update(version=3, rules_version=3, rng_seed=self.seed,
             input_bid_revision=self.INPUT_BID_REVISION,
             stock_planning_revision=self.STOCK_PLANNING_REVISION,
+            profit_distribution_revision=self.PROFIT_DISTRIBUTION_REVISION,
             rule_changes=['Обеспеченные заявки и один проход торговли существующими товарами',
                 'Налог с конечных продаж вместо налога на прибыль',
                 'Выпуск по доступному спросу и неотрицательной ожидаемой марже',
@@ -41,6 +43,7 @@ class Economy(EconomyServices):
                 'Дивиденды после резервов и рыночное потребление собственников'])
         self.cfg.setdefault('consumption_tax', 0.10)
         self.cfg.setdefault('dividend_profit_share', 0.50)
+        self.cfg.setdefault('business_income_share', 1.0)
         self.cfg.setdefault('working_reserve_months', 1)
         self.cfg.setdefault('owner_consumption_rate', 0.05)
         self.cfg.setdefault('project_stall_months', 12)
@@ -50,7 +53,7 @@ class Economy(EconomyServices):
             raise ValueError('Срок пересмотра стройки должен быть положительным целым')
         if not 0 <= self.cfg['consumption_tax'] < 1:
             raise ValueError('Налог с потребительских продаж должен быть от 0 до 1')
-        for key in ('dividend_profit_share', 'owner_consumption_rate'):
+        for key in ('dividend_profit_share', 'business_income_share', 'owner_consumption_rate'):
             if not math.isfinite(self.cfg[key]) or not 0 <= self.cfg[key] <= 1:
                 raise ValueError('Некорректная доля: '+key)
         if not math.isfinite(self.cfg['working_reserve_months']) or self.cfg['working_reserve_months'] < 0:
@@ -118,18 +121,27 @@ class Economy(EconomyServices):
             e.update(dividends=0.0, dividend_month=self.meta['month'])
             if e['status'] == 'closed' or self.accounts[e['owner_id']]['kind'] not in OWNER_KINDS:
                 continue
+            recipients = [a for a in self.accounts.values() if a['kind'] == 'household'
+                and a['state_id'] == e['state_id']] if self.PROFIT_DISTRIBUTION_REVISION else []
+            if self.PROFIT_DISTRIBUTION_REVISION and not sum(self.population(a) for a in recipients):
+                continue
             working = self.working_cash_reserve(e, sells)
             project = self.project_cash_reserve(e['id'], sells)
             available = self.cash_after_commitments(e['id'], project, working)
-            limit = self.cfg['dividend_profit_share']*max(0, e['profit'])
+            share = self.cfg['business_income_share'] if self.PROFIT_DISTRIBUTION_REVISION else self.cfg['dividend_profit_share']
+            limit = share*max(0, e['profit'])
             amount = min(limit, available)
-            self.transfer(e['id'], e['owner_id'], amount, 'Дивиденды')
+            if self.PROFIT_DISTRIBUTION_REVISION:
+                self.distribute(e['id'], recipients, amount, 'Доход населения от бизнеса')
+            else:
+                self.transfer(e['id'], e['owner_id'], amount, 'Дивиденды')
             self.accounts[e['id']].update(working_reserve=working, project_reserve=project)
             e.update(dividends=amount, working_reserve=working, project_reserve=project,
                 dividend_available_cash=available)
             row = dict(enterprise=e['id'], owner=e['owner_id'],
                 owner_kind=self.accounts[e['owner_id']]['kind'], profit=e['profit'], dividends=amount,
                 profit_limit=limit, available_cash=available, working_reserve=working, project_reserve=project)
+            row['recipient_kind'] = 'household' if self.PROFIT_DISTRIBUTION_REVISION else self.accounts[e['owner_id']]['kind']
             self.report['dividends'].append(row)
             self.report['diagnostics'].append(dict(kind='dividend', **row))
 
