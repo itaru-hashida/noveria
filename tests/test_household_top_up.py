@@ -4,6 +4,7 @@ from test_economy_v3 import engine, clear
 
 
 def market(engine, stock=10, protected=0, distance=0):
+    engine.BASIC_BUDGET_REVISION = 0  # Изолированный тест допокупки после старой корзины.
     clear(engine)
     for a in engine.accounts.values():
         a['stock'] = {}

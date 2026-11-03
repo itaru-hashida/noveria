@@ -1,0 +1,7 @@
+{
+  "months": 60,
+  "exact_parity": true,
+  "final_month": 1320,
+  "checkpoint_sha256": "ca90f5d624e918c0bf3c7ef385a0653331bbf53cca384d29000784bfa84f59a4",
+  "engine_sha256": "b574ae123c3224f3769aa3fffb6e58228d339262cda40152fc01082e54812a0b"
+}

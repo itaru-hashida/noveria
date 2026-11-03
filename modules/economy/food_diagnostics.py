@@ -75,7 +75,7 @@ class FoodDiagnostics:
                     foods=foods))
         base = dict(schema=1, month=engine.meta['month'],
             rules={k: engine.meta.get(k) for k in ('rules_version', 'input_bid_revision',
-                'stock_planning_revision', 'profit_distribution_revision', 'household_top_up_revision')},
+                'stock_planning_revision', 'profit_distribution_revision', 'household_top_up_revision', 'basic_budget_revision')},
             totals=totals, households=households)
         if not households:
             return dict(base, market={}, producers=[], goods={}, cross_border=[])

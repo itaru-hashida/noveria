@@ -20,6 +20,7 @@ class Economy(EconomyServices):
     STOCK_PLANNING_REVISION = 1
     PROFIT_DISTRIBUTION_REVISION = 1
     HOUSEHOLD_TOP_UP_REVISION = 1
+    BASIC_BUDGET_REVISION = 1
 
     def reset_report(self):
         super().reset_report()
@@ -39,6 +40,7 @@ class Economy(EconomyServices):
             stock_planning_revision=self.STOCK_PLANNING_REVISION,
             profit_distribution_revision=self.PROFIT_DISTRIBUTION_REVISION,
             household_top_up_revision=self.HOUSEHOLD_TOP_UP_REVISION,
+            basic_budget_revision=self.BASIC_BUDGET_REVISION,
             rule_changes=['Обеспеченные заявки и торговля существующими товарами',
                 'Налог с конечных продаж вместо налога на прибыль',
                 'Выпуск по доступному спросу и неотрицательной ожидаемой марже',
@@ -694,6 +696,17 @@ class Economy(EconomyServices):
             target[price_key] = min(self.rules['maximum_price'], max(self.rules['minimum_price'], price))
 
     def household_requests(self, households, needs, purpose, sells):
+        if self.BASIC_BUDGET_REVISION and purpose == 'Базовые нужды':
+            for a in households:
+                # Стоимость полной месячной потребности с доставкой, не цена тонны.
+                goods = sorted(needs, key=lambda g: self.population(a)*needs[g]*
+                    self.quoted_cost(a, g, max(0, self.population(a)*needs[g]-a['stock'].get(g, 0)), sells)[1])
+                for good in goods:
+                    self._balanced_household_requests([a], {good: needs[good]}, purpose, sells)
+            return
+        self._balanced_household_requests(households, needs, purpose, sells)
+
+    def _balanced_household_requests(self, households, needs, purpose, sells):
         for a in households:
             requests = []
             for good, rate in needs.items():
@@ -736,8 +749,8 @@ class Economy(EconomyServices):
         # Новая книга остаточного спроса обеспечена оставшейся кассой.
         # Это не повторное наблюдение начального бюджета исследовательскими классами.
         first = len(self.report['orders'])
-        Economy.household_requests(self, households, self.cfg['basic_needs'], 'Базовые нужды', sells)
-        Economy.household_requests(self, households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
+        Economy._balanced_household_requests(self, households, self.cfg['basic_needs'], 'Базовые нужды', sells)
+        Economy._balanced_household_requests(self, households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
         for buy in self.report['orders'][first:]:
             buy['household_top_up_residual'] = True
             buy['household_top_up'] = True

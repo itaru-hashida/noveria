@@ -381,6 +381,7 @@ def run(args):
         stock_planning_revision=getattr(Economy, 'STOCK_PLANNING_REVISION', 0),
         profit_distribution_revision=getattr(Economy, 'PROFIT_DISTRIBUTION_REVISION', 0),
         household_top_up_revision=getattr(Economy, 'HOUSEHOLD_TOP_UP_REVISION', 0),
+        basic_budget_revision=getattr(Economy, 'BASIC_BUDGET_REVISION', 0),
         months=args.months, variant=args.variant, status='running', completed=0,
         shock='zero household needs and owner purchases in relative months 7..12; restoration in 13' if args.variant == 'shock' else None)
     (out/'metadata.json').write_text(json.dumps(config, indent=2))

@@ -17,6 +17,7 @@ def policy(engine, variant):
 def test_control_observer_changes_no_state_or_rng(engine):
     engine.PROFIT_DISTRIBUTION_REVISION=0
     engine.HOUSEHOLD_TOP_UP_REVISION=0
+    engine.BASIC_BUDGET_REVISION = 0
     observed=policy(copy.deepcopy(engine),'control')
     for _ in range(4):
         engine.step();observed.step();record(observed)
