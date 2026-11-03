@@ -315,6 +315,10 @@ class Economy(EconomyServices):
             buy.setdefault('initial_input_limit', buy['price'])
             buy.update(price=price, backing=buy['reserved'])
 
+    def purchase_quantity(self, buy, sells):
+        """Обычный рынок не ограничивает количество сверх самой заявки."""
+        return buy['remaining']
+
     def match(self, buy, sells):
         if buy is None or buy['status'] in ('cancelled', 'expired', 'filled'):
             return
@@ -346,7 +350,8 @@ class Economy(EconomyServices):
         for price, sell, quote in ordered:
             if price > buy['price']+EPS:
                 continue
-            q = min(buy['remaining'], sell['remaining'], buy['reserved']/price)
+            q = min(buy['remaining'], sell['remaining'], buy['reserved']/price,
+                self.purchase_quantity(buy, sells))
             if q <= EPS:
                 continue
             seller = self.accounts[sell['participant']]

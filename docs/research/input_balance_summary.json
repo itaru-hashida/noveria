@@ -1,0 +1,874 @@
+{
+  "primary": "basic coverage; last 30 of 60 months; three migrated seeds; fresh history separate",
+  "primary_test": {
+    "n": 3,
+    "mean_difference": -0.5142312725745909,
+    "seed_range": [
+      -5.079904424247239,
+      7.2462224792383845
+    ],
+    "p_two_sided": 1.0
+  },
+  "pairs": [
+    {
+      "label": "73129",
+      "control": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "80c4e6f29684ec63f5bce12829790a3d194352880d1a1d0fff24eda03ea6ca17",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.527014631812173,
+        "household_bread": 929.5855644024458,
+        "unpaired_value": 3692.2976360671782,
+        "input_value": 3692.2976360671782,
+        "unpaired_share": 1.0,
+        "open_firms_end": 287,
+        "limited_orders": 0,
+        "intentional_missed": 0,
+        "strict_missed": 0,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 1157.8808125454257,
+            "execution": 1.0,
+            "demand": 1692.3205625991036
+          },
+          "flour": {
+            "output": 953.1120922820072,
+            "execution": 0.6758379801175703,
+            "demand": 2347.3659998581966
+          },
+          "bread": {
+            "output": 1181.8799024433627,
+            "execution": 0.3895582468069611,
+            "demand": 2838.8167684925957
+          },
+          "wood": {
+            "output": 278.356762166965,
+            "execution": 1.0000000000000002,
+            "demand": 413.4038344321315
+          },
+          "planks": {
+            "output": 92.50374848482038,
+            "execution": 0.6975640059957767,
+            "demand": 135.20599272345754
+          },
+          "ore": {
+            "output": 10.330306128959394,
+            "execution": 1.0,
+            "demand": 74.70528373953925
+          },
+          "iron": {
+            "output": 32.88579784076124,
+            "execution": 0.5141979447182231,
+            "demand": 45.83777639434701
+          },
+          "tools": {
+            "output": 49.67494269208654,
+            "execution": 0.6660825975442616,
+            "demand": 84.51417931352688
+          },
+          "flax": {
+            "output": 403.60470034994177,
+            "execution": 0.9999999999999999,
+            "demand": 536.7397045101325
+          },
+          "cloth": {
+            "output": 287.77062305060156,
+            "execution": 0.7506038194780813,
+            "demand": 543.8186830203988
+          },
+          "fish": {
+            "output": 172.50718773365213,
+            "execution": 1.0,
+            "demand": 624.6471118542659
+          }
+        }
+      },
+      "balanced": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5bc5ba7ace64247a388ec54c43de8c0f05bcb3c7069668e999fb9f81281423e6",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "balanced",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "7a5da99318a9a84cc231ffb509df075d5424b3b19e67e6d56e239360b5dc87fa",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.5994768566045569,
+        "household_bread": 1067.5341648656886,
+        "unpaired_value": 3111.320502182183,
+        "input_value": 3111.320502182183,
+        "unpaired_share": 1.0,
+        "open_firms_end": 285,
+        "limited_orders": 225,
+        "intentional_missed": 223,
+        "strict_missed": 223,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 1159.3625801158857,
+            "execution": 1.0,
+            "demand": 1540.2277997967226
+          },
+          "flour": {
+            "output": 969.7108645088803,
+            "execution": 0.7555070993811653,
+            "demand": 1737.7506845928838
+          },
+          "bread": {
+            "output": 1226.1222792624683,
+            "execution": 0.5540735095364722,
+            "demand": 2588.472857886656
+          },
+          "wood": {
+            "output": 246.2032594879214,
+            "execution": 1.0,
+            "demand": 317.35756476308313
+          },
+          "planks": {
+            "output": 72.64527590081283,
+            "execution": 0.8598203828544552,
+            "demand": 86.16392427659072
+          },
+          "ore": {
+            "output": 9.770391401411011,
+            "execution": 1.0,
+            "demand": 33.06713772144476
+          },
+          "iron": {
+            "output": 24.232292802757545,
+            "execution": 0.8354081132729576,
+            "demand": 33.11442579714208
+          },
+          "tools": {
+            "output": 44.08440599825202,
+            "execution": 0.9001891266869737,
+            "demand": 52.317223808178824
+          },
+          "flax": {
+            "output": 363.3699451333107,
+            "execution": 1.0,
+            "demand": 641.6886082137615
+          },
+          "cloth": {
+            "output": 258.93158970743696,
+            "execution": 0.5649223329669163,
+            "demand": 524.3813965424918
+          },
+          "fish": {
+            "output": 174.92644518802794,
+            "execution": 1.0,
+            "demand": 628.3319860139534
+          }
+        }
+      },
+      "coverage_delta_pp": 7.2462224792383845,
+      "bread_delta_pct": 14.839795898930364,
+      "unpaired_delta_pct": -15.734840230914271
+    },
+    {
+      "label": "17",
+      "control": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-17/engine-180.pickle",
+          "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a",
+          "seed": 17,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "442e1dd54b5383892c4d3ccdd4a8eb28605ac8834a6b1fd21184de76373fd49c",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.5705695080042583,
+        "household_bread": 1014.2003640551501,
+        "unpaired_value": 2965.8944091075177,
+        "input_value": 2965.8944091075177,
+        "unpaired_share": 1.0,
+        "open_firms_end": 290,
+        "limited_orders": 0,
+        "intentional_missed": 0,
+        "strict_missed": 0,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 1184.8702897187318,
+            "execution": 1.0000000000000002,
+            "demand": 1554.548779205115
+          },
+          "flour": {
+            "output": 966.7715567786787,
+            "execution": 0.7462782021723497,
+            "demand": 1690.4291909606152
+          },
+          "bread": {
+            "output": 1192.2986648187575,
+            "execution": 0.5140554867702802,
+            "demand": 2986.904105561508
+          },
+          "wood": {
+            "output": 284.18801953686665,
+            "execution": 1.0,
+            "demand": 427.5435758453314
+          },
+          "planks": {
+            "output": 94.4279748887075,
+            "execution": 0.6779209077691103,
+            "demand": 254.49548333788633
+          },
+          "ore": {
+            "output": 29.599540678648992,
+            "execution": 1.0,
+            "demand": 91.22499222074474
+          },
+          "iron": {
+            "output": 38.38625704878056,
+            "execution": 0.5591773679085394,
+            "demand": 62.86054051859904
+          },
+          "tools": {
+            "output": 56.940324073702826,
+            "execution": 0.4965534916977538,
+            "demand": 132.1036221832011
+          },
+          "flax": {
+            "output": 350.82122445170813,
+            "execution": 1.0000000000000002,
+            "demand": 761.5302447704638
+          },
+          "cloth": {
+            "output": 247.69292101363365,
+            "execution": 0.4553595760646494,
+            "demand": 505.8885779090038
+          },
+          "fish": {
+            "output": 170.88037947756908,
+            "execution": 1.0,
+            "demand": 616.8925270843141
+          }
+        }
+      },
+      "balanced": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-17/engine-180.pickle",
+          "checkpoint_sha256": "a566c80abe9b6ca66356a30700692ada9297cecd9f3902f0b54fdc861dc3662a",
+          "seed": 17,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "balanced",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "3f4ccae3f98308dc5f8ff87926615b8bcff772f0d3e762bd64755c2b03cc783d",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.5197704637617859,
+        "household_bread": 918.9256704641621,
+        "unpaired_value": 2513.050417196844,
+        "input_value": 2513.050417196844,
+        "unpaired_share": 1.0,
+        "open_firms_end": 287,
+        "limited_orders": 203,
+        "intentional_missed": 200,
+        "strict_missed": 200,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 1026.1604406894285,
+            "execution": 1.0,
+            "demand": 1323.8284884044633
+          },
+          "flour": {
+            "output": 855.8537924801435,
+            "execution": 0.7757987986902953,
+            "demand": 1579.326816524221
+          },
+          "bread": {
+            "output": 1070.2434692435215,
+            "execution": 0.5326434897998353,
+            "demand": 2815.4690595433976
+          },
+          "wood": {
+            "output": 226.38915098913654,
+            "execution": 1.0,
+            "demand": 292.6516895323804
+          },
+          "planks": {
+            "output": 60.895310335138255,
+            "execution": 0.8571199714374987,
+            "demand": 65.62752883148681
+          },
+          "ore": {
+            "output": 18.448808170787625,
+            "execution": 1.0,
+            "demand": 59.37639511510847
+          },
+          "iron": {
+            "output": 25.802680108127138,
+            "execution": 0.6188477151453797,
+            "demand": 34.04626538326882
+          },
+          "tools": {
+            "output": 38.57147971402229,
+            "execution": 0.7360370834655213,
+            "demand": 40.53359099637641
+          },
+          "flax": {
+            "output": 344.91986475251724,
+            "execution": 1.0000000000000002,
+            "demand": 489.24105180012407
+          },
+          "cloth": {
+            "output": 249.38632498235847,
+            "execution": 0.7136376918712473,
+            "demand": 506.4047939283108
+          },
+          "fish": {
+            "output": 162.42150835667223,
+            "execution": 1.0,
+            "demand": 610.9565516640098
+          }
+        }
+      },
+      "coverage_delta_pp": -5.079904424247239,
+      "bread_delta_pct": -9.394070143107069,
+      "unpaired_delta_pct": -15.268378756846612
+    },
+    {
+      "label": "2026",
+      "control": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-2026/engine-180.pickle",
+          "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612",
+          "seed": 2026,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "f170ccb4e056ef4d921f77687f62efe26c10a573eab6a93b1aaf81859d3a8fc7",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.5572316571865181,
+        "household_bread": 1036.3496591260123,
+        "unpaired_value": 2188.421055886917,
+        "input_value": 2188.421055886917,
+        "unpaired_share": 1.0,
+        "open_firms_end": 284,
+        "limited_orders": 0,
+        "intentional_missed": 0,
+        "strict_missed": 0,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 1538.277155990819,
+            "execution": 1.0,
+            "demand": 2153.9571614545453
+          },
+          "flour": {
+            "output": 1272.7627882748404,
+            "execution": 0.7090741511769102,
+            "demand": 4400.823585943113
+          },
+          "bread": {
+            "output": 1608.4457350122095,
+            "execution": 0.28620375972392015,
+            "demand": 4131.840989930849
+          },
+          "wood": {
+            "output": 400.1434046764755,
+            "execution": 1.0,
+            "demand": 560.5356989675892
+          },
+          "planks": {
+            "output": 126.87728535962503,
+            "execution": 0.7780850832440186,
+            "demand": 340.86131102748686
+          },
+          "ore": {
+            "output": 43.183627913676204,
+            "execution": 0.9999999999999998,
+            "demand": 130.4041193101092
+          },
+          "iron": {
+            "output": 57.11018477836012,
+            "execution": 0.5770919113232816,
+            "demand": 62.21596988747408
+          },
+          "tools": {
+            "output": 72.46098874827547,
+            "execution": 0.7126055577587626,
+            "demand": 179.81033736618437
+          },
+          "flax": {
+            "output": 430.2901918403967,
+            "execution": 1.0,
+            "demand": 1081.5690719327033
+          },
+          "cloth": {
+            "output": 300.3864066897215,
+            "execution": 0.3888248844007039,
+            "demand": 541.028413637158
+          },
+          "fish": {
+            "output": 180,
+            "execution": 1.0,
+            "demand": 746.598261968187
+          }
+        }
+      },
+      "balanced": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/audit-noveria/allocation-final/seed-2026/engine-180.pickle",
+          "checkpoint_sha256": "f560b8ceffedffd112164ab452076d206ec8db7ed1bf098cae8d6901494ec612",
+          "seed": 2026,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "balanced",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "b0961f98abe7cfd4d33e04a89a97358f9f13e006fc6e21c83b06090597e87d6d",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.520141538459369,
+        "household_bread": 959.6487927839734,
+        "unpaired_value": 1539.8050904232139,
+        "input_value": 1539.8050904232139,
+        "unpaired_share": 1.0,
+        "open_firms_end": 289,
+        "limited_orders": 446,
+        "intentional_missed": 446,
+        "strict_missed": 446,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 1459.1189477074088,
+            "execution": 1.0,
+            "demand": 2116.938968744277
+          },
+          "flour": {
+            "output": 1224.2052944362797,
+            "execution": 0.69394837310541,
+            "demand": 4208.682091744514
+          },
+          "bread": {
+            "output": 1541.2374823791151,
+            "execution": 0.2928286649205494,
+            "demand": 4336.3021921060235
+          },
+          "wood": {
+            "output": 296.2940940234851,
+            "execution": 1.0000000000000002,
+            "demand": 540.7847746372399
+          },
+          "planks": {
+            "output": 72.31447147328589,
+            "execution": 0.9999999999999998,
+            "demand": 78.8182199429292
+          },
+          "ore": {
+            "output": 14.569290262555471,
+            "execution": 1.0,
+            "demand": 51.98137907969331
+          },
+          "iron": {
+            "output": 30.290831212463544,
+            "execution": 0.9561912893480323,
+            "demand": 31.071904983462073
+          },
+          "tools": {
+            "output": 42.694697845746944,
+            "execution": 0.9618428129182858,
+            "demand": 47.85102996093785
+          },
+          "flax": {
+            "output": 434.39571004675474,
+            "execution": 0.9999999999999999,
+            "demand": 816.8083985358554
+          },
+          "cloth": {
+            "output": 310.6816706682708,
+            "execution": 0.53250473393178,
+            "demand": 549.4400595866107
+          },
+          "fish": {
+            "output": 172.33656664770038,
+            "execution": 1.0,
+            "demand": 729.3714951788132
+          }
+        }
+      },
+      "coverage_delta_pp": -3.709011872714918,
+      "bread_delta_pct": -7.401060604074816,
+      "unpaired_delta_pct": -29.638536136311945
+    },
+    {
+      "label": "fresh-73129",
+      "control": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "control",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "observer_state_parity": true,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "70eb05808a14b9f6edab0058e127b318f1eea1abc7e893bbafa328986b33d639",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.41757671457686607,
+        "household_bread": 727.5630837207295,
+        "unpaired_value": 2301.6018155744796,
+        "input_value": 2301.6018155744796,
+        "unpaired_share": 1.0,
+        "open_firms_end": 290,
+        "limited_orders": 0,
+        "intentional_missed": 0,
+        "strict_missed": 0,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 826.9128063887358,
+            "execution": 1.0,
+            "demand": 1300.2884885237324
+          },
+          "flour": {
+            "output": 702.7955430525493,
+            "execution": 0.6485904159780359,
+            "demand": 1590.9249720043592
+          },
+          "bread": {
+            "output": 881.6279650247803,
+            "execution": 0.40469303783281935,
+            "demand": 2913.8005397741967
+          },
+          "wood": {
+            "output": 242.90254129597204,
+            "execution": 1.0,
+            "demand": 371.7990134244068
+          },
+          "planks": {
+            "output": 89.89092704904786,
+            "execution": 0.7750357963989293,
+            "demand": 126.84744155760762
+          },
+          "ore": {
+            "output": 17.063435141708077,
+            "execution": 1.0,
+            "demand": 63.43638744346963
+          },
+          "iron": {
+            "output": 34.65918678632428,
+            "execution": 0.6761223815581431,
+            "demand": 40.37566106887762
+          },
+          "tools": {
+            "output": 52.72915084197327,
+            "execution": 0.7679001119996823,
+            "demand": 74.38210285273766
+          },
+          "flax": {
+            "output": 465.3,
+            "execution": 0.9999999999999999,
+            "demand": 1793.2043288536688
+          },
+          "cloth": {
+            "output": 332.3571428571429,
+            "execution": 0.25947963236149985,
+            "demand": 1154.9385542414254
+          },
+          "fish": {
+            "output": 179.63590541634932,
+            "execution": 1.0,
+            "demand": 779.8598476488294
+          }
+        }
+      },
+      "balanced": {
+        "metadata": {
+          "commit": "e00fa236b3797b047e37bb215bdc2c04091e05b3",
+          "observer_sha256": "33f202d3a571194b5bb4ca99906d8fd0219e7946572ae8429ab6ed42e8b230b1",
+          "engine": {
+            "version": 3,
+            "files": {
+              "modules/economy/v3.py": "ab07fe67894733ddd4e24f7d949f25c69be92bfb52bc3833abc306fb2cda5b66",
+              "modules/economy/support.py": "5508e2ae10e4d134f58a6b6c4e4cf6ac5a27aa10d496c9bc8ca4c16b72edadbc",
+              "modules/economy/simulation.py": "8c2417bb5c3e0eeecf2e5f9f1dcb686758df3e13c26c36d1a36bade348b13513",
+              "modules/geography/logic.py": "a046069a69bca4d96fbcbe28ab02724bf62e392240b0b56fd031329ea5e252df",
+              "modules/population/logic.py": "6866c1a22c44f2a54ecf32e7d3a9950dd2d44bfaeb5ba41bcfcc07efab1d942c",
+              "core/turn_service.py": "1511519225f9632ca6f7a4e0cce635db128fd85e536dda3ae5f3c5d7dbf86747",
+              "core/world_service.py": "fba749ffb62f776237cc776317001500810beb94324fd1168e5e8dbcd37b1443",
+              "core/db.py": "ec805b48eedf573755ea394a31134b43505b5e63e104bc543cb1f413bb38148e",
+              "loader.py": "848db9c1625165e42e84e6cf6b0230c8619bc0a83b0e8729abb04c5cba053364",
+              "content/economy.json": "7b718d9ea31ac473ccd8d011682d2344bbfaa1fff64e77b9f218ef025ac1b42e",
+              "content/initial_world.json": "37acae59aa105db995929ee65eaf2c63be9e203eacf9e84bd2eb2166e2d6c667"
+            },
+            "fingerprint": "fc9dc8431a2992bc75098520bc4ac2c8fb971980f9591bbc525eb2d0e557a88b"
+          },
+          "checkpoint": "/workspace/input-bid-promotion/fresh/seed-73129/engine-180.pickle",
+          "checkpoint_sha256": "5c5f8f7a0b8a9af6b7add9792dd371cd28eed655569c62d3d647d0569f1c2151",
+          "seed": 73129,
+          "initial_month": 180,
+          "input_bid_revision": 1,
+          "months": 60,
+          "variant": "balanced",
+          "status": "completed",
+          "completed": 60,
+          "shock": null,
+          "experiment_sha256": "52b0ed4b874cd35f2c3bfda880f850fef10bcf6f52d62649c53e09c6efb4d6f7"
+        },
+        "trace_sha256": "3c7fd3cc5a0b600ca4a9929aa79363140ee5705de9e863478077db2f9ab94d59",
+        "first_month": 211,
+        "last_month": 240,
+        "coverage": 0.47917949524654185,
+        "household_bread": 841.5579951911842,
+        "unpaired_value": 1643.5332985364464,
+        "input_value": 1643.5332985364464,
+        "unpaired_share": 1.0,
+        "open_firms_end": 289,
+        "limited_orders": 192,
+        "intentional_missed": 184,
+        "strict_missed": 184,
+        "invariant_violations": 0,
+        "goods": {
+          "grain": {
+            "output": 930.5944411144135,
+            "execution": 1.0,
+            "demand": 1253.1142005275642
+          },
+          "flour": {
+            "output": 771.451067034221,
+            "execution": 0.7387525255490088,
+            "demand": 1375.8971829927755
+          },
+          "bread": {
+            "output": 974.7161488932592,
+            "execution": 0.5612958497139205,
+            "demand": 2846.7504698987427
+          },
+          "wood": {
+            "output": 213.30611913030287,
+            "execution": 1.0,
+            "demand": 274.71360069987713
+          },
+          "planks": {
+            "output": 64.8148010489959,
+            "execution": 0.9771326402030268,
+            "demand": 70.70327252881623
+          },
+          "ore": {
+            "output": 20.623246750933813,
+            "execution": 1.0,
+            "demand": 65.05498939201622
+          },
+          "iron": {
+            "output": 29.80775576331594,
+            "execution": 0.7136304140774298,
+            "demand": 31.986696000862874
+          },
+          "tools": {
+            "output": 43.59848809054818,
+            "execution": 0.9213951610484942,
+            "demand": 50.49213341938777
+          },
+          "flax": {
+            "output": 465.30000000000007,
+            "execution": 1.0,
+            "demand": 1785.2657659718286
+          },
+          "cloth": {
+            "output": 332.3571428571429,
+            "execution": 0.26063346358221856,
+            "demand": 1165.2030162753078
+          },
+          "fish": {
+            "output": 180,
+            "execution": 1.0,
+            "demand": 795.4858224589268
+          }
+        }
+      },
+      "coverage_delta_pp": 6.160278066967578,
+      "bread_delta_pct": 15.668045015078146,
+      "unpaired_delta_pct": -28.59176216255197
+    }
+  ]
+}
