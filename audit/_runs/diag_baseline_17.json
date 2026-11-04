@@ -1,0 +1,8775 @@
+{
+ "6": {
+  "firms_by_good": {
+   "grain": {
+    "idle|Готовые запасы": 13,
+    "active|План": 3,
+    "idle|Нет обеспеченного спроса": 5
+   },
+   "wood": {
+    "idle|Нет обеспеченного спроса": 14,
+    "idle|Готовые запасы": 4
+   },
+   "ore": {
+    "idle|Нет обеспеченного спроса": 19
+   },
+   "fish": {
+    "active|План": 4
+   },
+   "flax": {
+    "active|План": 21
+   },
+   "flour": {
+    "active|План": 30
+   },
+   "bread": {
+    "active|Сырьё: flour": 7,
+    "active|План": 22,
+    "active|Сырьё: wood": 1,
+    "idle|Сырьё: flour": 1
+   },
+   "planks": {
+    "idle|Готовые запасы": 5,
+    "active|План": 16,
+    "active|Сырьё: wood": 1
+   },
+   "iron": {
+    "idle|Готовые запасы": 20,
+    "idle|Нет обеспеченного спроса": 3
+   },
+   "tools": {
+    "active|План": 4,
+    "active|Сырьё: wood": 1,
+    "idle|Готовые запасы": 18
+   },
+   "cloth": {
+    "active|План": 17,
+    "active|Сырьё: flax": 3,
+    "idle|Сырьё: flax": 7
+   }
+  },
+  "capacity_vs_output": {
+   "grain": {
+    "capacity": 2636.7,
+    "output": 66.2
+   },
+   "flour": {
+    "capacity": 2013.8,
+    "output": 1746.6
+   },
+   "bread": {
+    "capacity": 2297.9,
+    "output": 2239.3
+   },
+   "wood": {
+    "capacity": 1884,
+    "output": 0
+   },
+   "planks": {
+    "capacity": 116.2,
+    "output": 71.9
+   },
+   "ore": {
+    "capacity": 942,
+    "output": 0
+   },
+   "iron": {
+    "capacity": 1539.9,
+    "output": 0
+   },
+   "tools": {
+    "capacity": 115.1,
+    "output": 12.2
+   },
+   "flax": {
+    "capacity": 465.3,
+    "output": 465.3
+   },
+   "cloth": {
+    "capacity": 1868.4,
+    "output": 332.4
+   },
+   "fish": {
+    "capacity": 180,
+    "output": 180
+   }
+  },
+  "food_totals": {
+   "bread": {
+    "need": 1678.2,
+    "consumed": 781.6,
+    "deficit": 896.6,
+    "unfunded": 0.0,
+    "funded_unfilled": 896.6,
+    "accounting_unknown": 0.0,
+    "root_unknown": 896.6
+   },
+   "fish": {
+    "need": 335.6,
+    "consumed": 64.4,
+    "deficit": 271.3,
+    "unfunded": 0.0,
+    "funded_unfilled": 271.3,
+    "accounting_unknown": 0.0,
+    "root_unknown": 271.3
+   }
+  },
+  "household_gold_per_capita_quantiles": {
+   "10": 1.028,
+   "25": 1.033,
+   "50": 1.036,
+   "75": 1.04,
+   "90": 1.041
+  },
+  "household_min_max": [
+   1.022,
+   1.0503
+  ],
+  "basic_unfilled_reasons": {
+   "fish|offer_exhausted": 160,
+   "bread|offer_exhausted": 78
+  },
+  "basic_unfilled_quantity": {
+   "fish": 271.3,
+   "bread": 896.6
+  },
+  "input_unfilled_reasons": {
+   "flour|offer_exhausted": 2,
+   "flax|offer_exhausted": 8
+  },
+  "unsold_offers": {
+   "wood": 4620.3,
+   "iron": 2998.4,
+   "ore": 7427.8,
+   "grain": 5239.9,
+   "planks": 292.8,
+   "tools": 332.5
+  },
+  "stocks": {
+   "grain": 5692.6,
+   "flour": 1746.6,
+   "bread": 2239.3,
+   "wood": 4629.6,
+   "planks": 364.7,
+   "ore": 7427.8,
+   "iron": 3036.0,
+   "tools": 344.7,
+   "flax": 465.3,
+   "cloth": 332.4,
+   "fish": 180.0
+  },
+  "projects": [
+   {
+    "investor": "private:velaria",
+    "good": "tools",
+    "created": 6,
+    "last_progress": 6,
+    "capacity": 20.7,
+    "working_cash": 120
+   }
+  ],
+  "owner_cash": {
+   "merchant:arven": 78447.1,
+   "merchant:kasseria": 23444.2,
+   "merchant:noweria": 40834.2,
+   "merchant:septaria": 40552.1,
+   "merchant:valtoria": 41973.3,
+   "merchant:velaria": 47073.7,
+   "private:arven": 80219.2,
+   "private:kasseria": 25273.8,
+   "private:noweria": 41689.1,
+   "private:septaria": 39018.4,
+   "private:valtoria": 42688.2,
+   "private:velaria": 46980.4,
+   "treasury:arven": 83439.8,
+   "treasury:kasseria": 25977.9,
+   "treasury:noweria": 43777.7,
+   "treasury:septaria": 43460.0,
+   "treasury:valtoria": 43362.9,
+   "treasury:velaria": 44335.2
+  },
+  "closed_firms": 0,
+  "bought_by_buyer": {
+   "cloth": {
+    "merchant/Личное потребление собственника": 221.8,
+    "household": 54.2
+   },
+   "fish": {
+    "household": 64.4,
+    "merchant/Личное потребление собственника": 115.6
+   },
+   "bread": {
+    "household": 781.6,
+    "private/Личное потребление собственника": 620.4,
+    "merchant/Личное потребление собственника": 687.3
+   },
+   "flour": {
+    "enterprise/Сырьё": 1791.4
+   },
+   "grain": {
+    "enterprise/Сырьё": 328.2
+   }
+  },
+  "owner_consumed": {
+   "bread": 1307.8,
+   "cloth": 221.8,
+   "fish": 115.6
+  },
+  "owner_budget": 27603.6,
+  "owner_spent": 3896.6,
+  "household_consumed": {
+   "bread": 2089.4,
+   "cloth": 276.1,
+   "fish": 180.0,
+   "planks": 67.1,
+   "tools": 42.0
+  },
+  "firms": [
+   {
+    "id": "firm-00001",
+    "good": "grain",
+    "status": "idle",
+    "prov": "arven-p0",
+    "cap": 683.4,
+    "out": 0,
+    "stock": 1268.6,
+    "price": 1,
+    "forecast": 48.6,
+    "demand": 48.6,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 218.2,
+    "plan": 0,
+    "hist": [
+     33.0,
+     16.5,
+     48.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00004",
+    "good": "fish",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 108,
+    "out": 108,
+    "stock": 108,
+    "price": 1.914,
+    "forecast": 4569.2,
+    "demand": 4569.2,
+    "margin": 1.627,
+    "limit": "План",
+    "cash": 401.2,
+    "plan": 108,
+    "hist": [
+     108,
+     108,
+     108
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00006",
+    "good": "grain",
+    "status": "idle",
+    "prov": "arven-p1",
+    "cap": 224.4,
+    "out": 0,
+    "stock": 203.7,
+    "price": 1,
+    "forecast": 65.5,
+    "demand": 48.6,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 365.1,
+    "plan": 0,
+    "hist": [
+     98.2,
+     98.2,
+     48.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00010",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 25.5,
+    "out": 25.5,
+    "stock": 46.2,
+    "price": 1,
+    "forecast": 39.3,
+    "demand": 39.3,
+    "margin": 0.94,
+    "limit": "План",
+    "cash": 148.8,
+    "plan": 25.5,
+    "hist": [
+     0.0,
+     0.0,
+     30.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00016",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 40.8,
+    "out": 30.5,
+    "stock": 45.8,
+    "price": 1,
+    "forecast": 45.8,
+    "demand": 45.8,
+    "margin": 0.94,
+    "limit": "План",
+    "cash": 195.0,
+    "plan": 30.5,
+    "hist": [
+     22.9,
+     51.6,
+     45.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00022",
+    "good": "grain",
+    "status": "idle",
+    "prov": "province-2",
+    "cap": 137.7,
+    "out": 0,
+    "stock": 237.3,
+    "price": 1,
+    "forecast": 12.7,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 158.1,
+    "plan": 0,
+    "hist": [
+     38.1,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00027",
+    "good": "grain",
+    "status": "idle",
+    "prov": "province-4",
+    "cap": 10.2,
+    "out": 0,
+    "stock": 10.2,
+    "price": 1,
+    "forecast": 10.2,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 139.8,
+    "plan": 0,
+    "hist": [
+     20.4,
+     10.2,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00031",
+    "good": "grain",
+    "status": "idle",
+    "prov": "province-5",
+    "cap": 35.7,
+    "out": 0,
+    "stock": 71.4,
+    "price": 1,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 120.0,
+    "plan": 0,
+    "hist": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00034",
+    "good": "grain",
+    "status": "idle",
+    "prov": "province-6",
+    "cap": 35.7,
+    "out": 0,
+    "stock": 53.1,
+    "price": 1,
+    "forecast": 6.1,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 138.3,
+    "plan": 0,
+    "hist": [
+     18.3,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00038",
+    "good": "grain",
+    "status": "idle",
+    "prov": "province-7",
+    "cap": 71.4,
+    "out": 0,
+    "stock": 142.8,
+    "price": 1,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 120.0,
+    "plan": 0,
+    "hist": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00041",
+    "good": "grain",
+    "status": "idle",
+    "prov": "septaria-p0",
+    "cap": 214.2,
+    "out": 0,
+    "stock": 428.4,
+    "price": 1,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 120.0,
+    "plan": 0,
+    "hist": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00044",
+    "good": "grain",
+    "status": "idle",
+    "prov": "septaria-p1",
+    "cap": 15.3,
+    "out": 0,
+    "stock": 16.0,
+    "price": 1,
+    "forecast": 5.3,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 135.9,
+    "plan": 0,
+    "hist": [
+     0.0,
+     16.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00047",
+    "good": "grain",
+    "status": "idle",
+    "prov": "septaria-p2",
+    "cap": 61.2,
+    "out": 0,
+    "stock": 93.8,
+    "price": 1,
+    "forecast": 9.5,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 148.6,
+    "plan": 0,
+    "hist": [
+     28.6,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00050",
+    "good": "grain",
+    "status": "idle",
+    "prov": "septaria-p3",
+    "cap": 30.6,
+    "out": 0,
+    "stock": 36.0,
+    "price": 1,
+    "forecast": 8.4,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 145.2,
+    "plan": 0,
+    "hist": [
+     0.0,
+     25.2,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00053",
+    "good": "grain",
+    "status": "idle",
+    "prov": "septaria-p4",
+    "cap": 102.0,
+    "out": 0,
+    "stock": 182.3,
+    "price": 1,
+    "forecast": 7.2,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 141.7,
+    "plan": 0,
+    "hist": [
+     0.0,
+     21.7,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00055",
+    "good": "grain",
+    "status": "idle",
+    "prov": "valtoria-p0",
+    "cap": 51.0,
+    "out": 0,
+    "stock": 75.1,
+    "price": 1,
+    "forecast": 25.0,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 192.2,
+    "plan": 0,
+    "hist": [
+     75.1,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00058",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 36,
+    "out": 36,
+    "stock": 36,
+    "price": 1.893,
+    "forecast": 4522.9,
+    "demand": 4522.9,
+    "margin": 1.608,
+    "limit": "План",
+    "cash": 213.7,
+    "plan": 36,
+    "hist": [
+     36,
+     36,
+     36
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00060",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 10.2,
+    "out": 10.2,
+    "stock": 10.2,
+    "price": 1,
+    "forecast": 29.4,
+    "demand": 29.4,
+    "margin": 0.94,
+    "limit": "План",
+    "cash": 139.8,
+    "plan": 10.2,
+    "hist": [
+     0.0,
+     0.0,
+     20.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00063",
+    "good": "grain",
+    "status": "idle",
+    "prov": "valtoria-p2",
+    "cap": 25.5,
+    "out": 0,
+    "stock": 51.0,
+    "price": 1,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 120.0,
+    "plan": 0,
+    "hist": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00066",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 30,
+    "out": 30,
+    "stock": 30,
+    "price": 1.914,
+    "forecast": 4467.1,
+    "demand": 4467.1,
+    "margin": 1.627,
+    "limit": "План",
+    "cash": 198.1,
+    "plan": 30,
+    "hist": [
+     30,
+     30,
+     30
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00068",
+    "good": "grain",
+    "status": "idle",
+    "prov": "valtoria-p3",
+    "cap": 137.7,
+    "out": 0,
+    "stock": 266.4,
+    "price": 1,
+    "forecast": 9.0,
+    "demand": 9.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 129.0,
+    "plan": 0,
+    "hist": [
+     0.0,
+     0.0,
+     9.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00071",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 6,
+    "out": 6,
+    "stock": 6,
+    "price": 1.859,
+    "forecast": 4429.4,
+    "demand": 4429.4,
+    "margin": 1.578,
+    "limit": "План",
+    "cash": 135.6,
+    "plan": 6,
+    "hist": [
+     6,
+     6,
+     6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00073",
+    "good": "grain",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 137.7,
+    "out": 0,
+    "stock": 224.3,
+    "price": 1,
+    "forecast": 15.3,
+    "demand": 15.3,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 171.1,
+    "plan": 0,
+    "hist": [
+     0.0,
+     35.8,
+     15.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00076",
+    "good": "grain",
+    "status": "idle",
+    "prov": "velaria-p0",
+    "cap": 438.6,
+    "out": 0,
+    "stock": 877.2,
+    "price": 1,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 120.0,
+    "plan": 0,
+    "hist": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00080",
+    "good": "grain",
+    "status": "idle",
+    "prov": "velaria-p1",
+    "cap": 147.9,
+    "out": 0,
+    "stock": 246.2,
+    "price": 1,
+    "forecast": 16.5,
+    "demand": 0.0,
+    "margin": 0.94,
+    "limit": "Готовые запасы",
+    "cash": 169.6,
+    "plan": 0,
+    "hist": [
+     33.0,
+     16.5,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00084",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 202.6,
+    "stock": 202.6,
+    "price": 1.666,
+    "forecast": 456.4,
+    "demand": 456.4,
+    "margin": 0.385,
+    "limit": "План",
+    "cash": 1040.9,
+    "plan": 202.6,
+    "hist": [
+     162.1,
+     162.1,
+     202.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00085",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 199.6,
+    "stock": 199.6,
+    "price": 2.191,
+    "forecast": 1368.5,
+    "demand": 1368.5,
+    "margin": 0.469,
+    "limit": "Сырьё: flour",
+    "cash": 1176.6,
+    "plan": 202.6,
+    "hist": [
+     202.6,
+     202.6,
+     202.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00090",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 202.6,
+    "stock": 202.6,
+    "price": 1.652,
+    "forecast": 682.4,
+    "demand": 682.4,
+    "margin": 0.384,
+    "limit": "План",
+    "cash": 1041.0,
+    "plan": 202.6,
+    "hist": [
+     162.1,
+     162.1,
+     202.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00091",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 282.4,
+    "out": 282.4,
+    "stock": 282.4,
+    "price": 2.177,
+    "forecast": 1838.5,
+    "demand": 1838.5,
+    "margin": 0.467,
+    "limit": "План",
+    "cash": 894.9,
+    "plan": 282.4,
+    "hist": [
+     202.6,
+     202.6,
+     202.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00096",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 81.8,
+    "stock": 81.8,
+    "price": 1.7,
+    "forecast": 228.9,
+    "demand": 228.9,
+    "margin": 0.445,
+    "limit": "План",
+    "cash": 492.4,
+    "plan": 81.8,
+    "hist": [
+     127.6,
+     13.6,
+     150.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00097",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 204.0,
+    "out": 204.0,
+    "stock": 204.0,
+    "price": 2.185,
+    "forecast": 631.1,
+    "demand": 631.1,
+    "margin": 0.437,
+    "limit": "Сырьё: flour",
+    "cash": 175.8,
+    "plan": 204.0,
+    "hist": [
+     81.8,
+     81.8,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00102",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 81.8,
+    "stock": 81.8,
+    "price": 1.694,
+    "forecast": 294.4,
+    "demand": 294.4,
+    "margin": 0.446,
+    "limit": "План",
+    "cash": 486.2,
+    "plan": 81.8,
+    "hist": [
+     0.0,
+     98.2,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00103",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 81.8,
+    "stock": 81.8,
+    "price": 2.185,
+    "forecast": 712.9,
+    "demand": 712.9,
+    "margin": 0.441,
+    "limit": "План",
+    "cash": 543.9,
+    "plan": 81.8,
+    "hist": [
+     81.8,
+     81.8,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00108",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 20.3,
+    "stock": 20.3,
+    "price": 1.615,
+    "forecast": 20.3,
+    "demand": 20.3,
+    "margin": 0.33,
+    "limit": "План",
+    "cash": 229.3,
+    "plan": 20.3,
+    "hist": [
+     20.3,
+     20.3,
+     20.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00109",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 25.4,
+    "stock": 25.4,
+    "price": 2.238,
+    "forecast": 588.2,
+    "demand": 588.2,
+    "margin": 0.552,
+    "limit": "План",
+    "cash": 253.3,
+    "plan": 25.4,
+    "hist": [
+     25.4,
+     25.4,
+     25.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00112",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 6.5,
+    "stock": 6.5,
+    "price": 1.615,
+    "forecast": 13.0,
+    "demand": 13.0,
+    "margin": 0.377,
+    "limit": "План",
+    "cash": 165.6,
+    "plan": 6.5,
+    "hist": [
+     0.0,
+     0.0,
+     19.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00113",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 16.3,
+    "stock": 16.3,
+    "price": 2.148,
+    "forecast": 335.3,
+    "demand": 335.3,
+    "margin": 0.471,
+    "limit": "План",
+    "cash": 205.3,
+    "plan": 16.3,
+    "hist": [
+     0,
+     16.3,
+     16.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00116",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 63.5,
+    "stock": 63.5,
+    "price": 1.615,
+    "forecast": 63.5,
+    "demand": 63.5,
+    "margin": 0.38,
+    "limit": "План",
+    "cash": 463.0,
+    "plan": 63.5,
+    "hist": [
+     63.5,
+     63.5,
+     63.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00117",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 79.4,
+    "stock": 79.4,
+    "price": 2.163,
+    "forecast": 655.9,
+    "demand": 655.9,
+    "margin": 0.482,
+    "limit": "План",
+    "cash": 537.4,
+    "plan": 79.4,
+    "hist": [
+     79.4,
+     79.4,
+     79.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00120",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 35.7,
+    "stock": 35.7,
+    "price": 1.615,
+    "forecast": 35.7,
+    "demand": 35.7,
+    "margin": 0.348,
+    "limit": "План",
+    "cash": 324.3,
+    "plan": 35.7,
+    "hist": [
+     35.7,
+     35.7,
+     35.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00121",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 44.6,
+    "stock": 44.6,
+    "price": 2.199,
+    "forecast": 482.5,
+    "demand": 482.5,
+    "margin": 0.523,
+    "limit": "План",
+    "cash": 354.6,
+    "plan": 44.6,
+    "hist": [
+     44.6,
+     44.6,
+     44.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00125",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 18.9,
+    "stock": 18.9,
+    "price": 1.615,
+    "forecast": 18.9,
+    "demand": 18.9,
+    "margin": 0.367,
+    "limit": "План",
+    "cash": 229.0,
+    "plan": 18.9,
+    "hist": [
+     0.0,
+     18.9,
+     18.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00126",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 23.6,
+    "stock": 23.6,
+    "price": 2.173,
+    "forecast": 466.6,
+    "demand": 466.6,
+    "margin": 0.494,
+    "limit": "План",
+    "cash": 244.3,
+    "plan": 23.6,
+    "hist": [
+     23.6,
+     23.6,
+     23.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00131",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 11.7,
+    "stock": 11.7,
+    "price": 1.615,
+    "forecast": 23.5,
+    "demand": 23.5,
+    "margin": 0.373,
+    "limit": "План",
+    "cash": 202.2,
+    "plan": 11.7,
+    "hist": [
+     0.0,
+     0.0,
+     35.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00132",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 29.3,
+    "stock": 29.3,
+    "price": 2.151,
+    "forecast": 694.8,
+    "demand": 694.8,
+    "margin": 0.474,
+    "limit": "План",
+    "cash": 274.2,
+    "plan": 29.3,
+    "hist": [
+     29.3,
+     0,
+     29.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00136",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 30.5,
+    "stock": 30.5,
+    "price": 1.615,
+    "forecast": 30.5,
+    "demand": 30.5,
+    "margin": 0.4,
+    "limit": "План",
+    "cash": 302.9,
+    "plan": 30.5,
+    "hist": [
+     30.5,
+     30.5,
+     30.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00137",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 38.1,
+    "stock": 38.1,
+    "price": 2.179,
+    "forecast": 588.2,
+    "demand": 588.2,
+    "margin": 0.499,
+    "limit": "Сырьё: wood",
+    "cash": 320.2,
+    "plan": 38.1,
+    "hist": [
+     38.1,
+     38.1,
+     38.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00142",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 55.4,
+    "out": 44.3,
+    "stock": 44.3,
+    "price": 1.615,
+    "forecast": 44.3,
+    "demand": 44.3,
+    "margin": 0.42,
+    "limit": "План",
+    "cash": 360.4,
+    "plan": 44.3,
+    "hist": [
+     44.3,
+     44.3,
+     44.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00143",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 55.4,
+    "out": 55.4,
+    "stock": 55.4,
+    "price": 2.178,
+    "forecast": 446.9,
+    "demand": 446.9,
+    "margin": 0.499,
+    "limit": "План",
+    "cash": 411.1,
+    "plan": 55.4,
+    "hist": [
+     55.4,
+     55.4,
+     55.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00147",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 40.8,
+    "stock": 40.8,
+    "price": 1.615,
+    "forecast": 40.8,
+    "demand": 40.8,
+    "margin": 0.36,
+    "limit": "План",
+    "cash": 340.4,
+    "plan": 40.8,
+    "hist": [
+     40.8,
+     40.8,
+     40.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00148",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 51.0,
+    "stock": 51.0,
+    "price": 2.199,
+    "forecast": 414.8,
+    "demand": 414.8,
+    "margin": 0.518,
+    "limit": "План",
+    "cash": 388.2,
+    "plan": 51.0,
+    "hist": [
+     51.0,
+     51.0,
+     51.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00151",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 29.9,
+    "stock": 29.9,
+    "price": 1.615,
+    "forecast": 29.9,
+    "demand": 29.9,
+    "margin": 0.295,
+    "limit": "План",
+    "cash": 211.0,
+    "plan": 29.9,
+    "hist": [
+     0.0,
+     21.1,
+     26.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00152",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 37.4,
+    "stock": 37.4,
+    "price": 2.129,
+    "forecast": 37.4,
+    "demand": 33.0,
+    "margin": 0.454,
+    "limit": "Сырьё: flour",
+    "cash": 328.2,
+    "plan": 37.4,
+    "hist": [
+     33.0,
+     39.6,
+     33.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00155",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p2",
+    "cap": 45.5,
+    "out": 25.2,
+    "stock": 25.2,
+    "price": 1.615,
+    "forecast": 39.9,
+    "demand": 39.9,
+    "margin": 0.349,
+    "limit": "План",
+    "cash": 274.0,
+    "plan": 25.2,
+    "hist": [
+     0.0,
+     0.0,
+     54.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00156",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p2",
+    "cap": 45.5,
+    "out": 45.5,
+    "stock": 45.5,
+    "price": 2.167,
+    "forecast": 452.7,
+    "demand": 452.7,
+    "margin": 0.493,
+    "limit": "План",
+    "cash": 358.9,
+    "plan": 45.5,
+    "hist": [
+     0,
+     45.5,
+     45.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00160",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 38.1,
+    "stock": 38.1,
+    "price": 1.615,
+    "forecast": 38.1,
+    "demand": 38.1,
+    "margin": 0.367,
+    "limit": "План",
+    "cash": 348.9,
+    "plan": 38.1,
+    "hist": [
+     38.1,
+     38.1,
+     38.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00161",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 47.7,
+    "stock": 47.7,
+    "price": 2.193,
+    "forecast": 454.5,
+    "demand": 454.5,
+    "margin": 0.513,
+    "limit": "Сырьё: flour",
+    "cash": 370.6,
+    "plan": 47.7,
+    "hist": [
+     47.7,
+     47.7,
+     47.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00166",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 87.9,
+    "stock": 87.9,
+    "price": 1.615,
+    "forecast": 87.9,
+    "demand": 87.9,
+    "margin": 0.403,
+    "limit": "План",
+    "cash": 594.5,
+    "plan": 87.9,
+    "hist": [
+     87.9,
+     87.9,
+     87.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00167",
+    "good": "bread",
+    "status": "active",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 109.9,
+    "stock": 109.9,
+    "price": 2.221,
+    "forecast": 729.9,
+    "demand": 729.9,
+    "margin": 0.536,
+    "limit": "План",
+    "cash": 697.6,
+    "plan": 109.9,
+    "hist": [
+     109.9,
+     109.9,
+     109.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00170",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 26.7,
+    "stock": 26.7,
+    "price": 1.615,
+    "forecast": 26.7,
+    "demand": 26.7,
+    "margin": 0.377,
+    "limit": "План",
+    "cash": 267.3,
+    "plan": 26.7,
+    "hist": [
+     0.0,
+     40.1,
+     13.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00171",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 0,
+    "stock": 0,
+    "price": 2.202,
+    "forecast": 459.0,
+    "demand": 459.0,
+    "margin": 0.52,
+    "limit": "Сырьё: flour",
+    "cash": 340.8,
+    "plan": 33.4,
+    "hist": [
+     33.4,
+     33.4,
+     33.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00175",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 59.6,
+    "stock": 59.6,
+    "price": 1.615,
+    "forecast": 61.1,
+    "demand": 61.1,
+    "margin": 0.42,
+    "limit": "План",
+    "cash": 393.1,
+    "plan": 59.6,
+    "hist": [
+     47.7,
+     47.7,
+     47.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00176",
+    "good": "bread",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 59.6,
+    "stock": 59.6,
+    "price": 2.207,
+    "forecast": 779.6,
+    "demand": 779.6,
+    "margin": 0.524,
+    "limit": "План",
+    "cash": 433.5,
+    "plan": 59.6,
+    "hist": [
+     59.6,
+     59.6,
+     59.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00180",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 42.0,
+    "stock": 42.0,
+    "price": 1.615,
+    "forecast": 42.0,
+    "demand": 42.0,
+    "margin": 0.377,
+    "limit": "План",
+    "cash": 301.9,
+    "plan": 42.0,
+    "hist": [
+     0.0,
+     63.0,
+     21.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00181",
+    "good": "bread",
+    "status": "active",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 52.5,
+    "stock": 52.5,
+    "price": 2.238,
+    "forecast": 81.5,
+    "demand": 81.5,
+    "margin": 0.548,
+    "limit": "Сырьё: flour",
+    "cash": 394.6,
+    "plan": 52.5,
+    "hist": [
+     52.5,
+     52.5,
+     52.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00184",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 45.3,
+    "stock": 45.3,
+    "price": 1.615,
+    "forecast": 51.2,
+    "demand": 51.2,
+    "margin": 0.407,
+    "limit": "План",
+    "cash": 257.6,
+    "plan": 45.3,
+    "hist": [
+     0.0,
+     41.8,
+     30.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00185",
+    "good": "bread",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 37.7,
+    "stock": 37.7,
+    "price": 2.254,
+    "forecast": 45.3,
+    "demand": 37.7,
+    "margin": 0.561,
+    "limit": "План",
+    "cash": 368.1,
+    "plan": 37.7,
+    "hist": [
+     45.3,
+     45.3,
+     45.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00187",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 45.4,
+    "stock": 45.4,
+    "price": 1.615,
+    "forecast": 45.4,
+    "demand": 45.4,
+    "margin": 0.335,
+    "limit": "План",
+    "cash": 365.1,
+    "plan": 45.4,
+    "hist": [
+     45.4,
+     45.4,
+     45.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00188",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 56.8,
+    "stock": 56.8,
+    "price": 2.197,
+    "forecast": 682.9,
+    "demand": 682.9,
+    "margin": 0.515,
+    "limit": "План",
+    "cash": 418.6,
+    "plan": 56.8,
+    "hist": [
+     56.8,
+     56.8,
+     56.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00193",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 24.5,
+    "stock": 24.5,
+    "price": 1.615,
+    "forecast": 49.0,
+    "demand": 49.0,
+    "margin": 0.367,
+    "limit": "План",
+    "cash": 291.4,
+    "plan": 24.5,
+    "hist": [
+     0.0,
+     0.0,
+     73.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00194",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 61.3,
+    "stock": 61.3,
+    "price": 2.148,
+    "forecast": 963.9,
+    "demand": 963.9,
+    "margin": 0.474,
+    "limit": "План",
+    "cash": 440.6,
+    "plan": 61.3,
+    "hist": [
+     61.3,
+     0,
+     61.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00197",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 37.8,
+    "stock": 37.8,
+    "price": 1.615,
+    "forecast": 50.2,
+    "demand": 50.2,
+    "margin": 0.359,
+    "limit": "План",
+    "cash": 272.5,
+    "plan": 37.8,
+    "hist": [
+     0.0,
+     45.4,
+     15.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00198",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 37.8,
+    "stock": 37.8,
+    "price": 2.177,
+    "forecast": 591.7,
+    "demand": 591.7,
+    "margin": 0.498,
+    "limit": "План",
+    "cash": 314.5,
+    "plan": 37.8,
+    "hist": [
+     37.8,
+     37.8,
+     37.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00203",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 80.8,
+    "stock": 80.8,
+    "price": 1.615,
+    "forecast": 99.7,
+    "demand": 99.7,
+    "margin": 0.359,
+    "limit": "План",
+    "cash": 468.5,
+    "plan": 80.8,
+    "hist": [
+     64.7,
+     64.7,
+     64.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00204",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 80.8,
+    "stock": 80.8,
+    "price": 2.17,
+    "forecast": 739.9,
+    "demand": 739.9,
+    "margin": 0.491,
+    "limit": "План",
+    "cash": 542.8,
+    "plan": 80.8,
+    "hist": [
+     80.8,
+     80.8,
+     80.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00209",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 74.6,
+    "out": 64.9,
+    "stock": 64.9,
+    "price": 1.615,
+    "forecast": 64.9,
+    "demand": 64.9,
+    "margin": 0.367,
+    "limit": "План",
+    "cash": 374.8,
+    "plan": 64.9,
+    "hist": [
+     0.0,
+     89.5,
+     29.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00210",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 74.6,
+    "out": 62.1,
+    "stock": 62.1,
+    "price": 2.184,
+    "forecast": 74.6,
+    "demand": 62.1,
+    "margin": 0.503,
+    "limit": "Сырьё: flour",
+    "cash": 530.1,
+    "plan": 62.1,
+    "hist": [
+     74.6,
+     74.6,
+     74.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00213",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 79.8,
+    "stock": 79.8,
+    "price": 1.615,
+    "forecast": 79.8,
+    "demand": 79.8,
+    "margin": 0.364,
+    "limit": "План",
+    "cash": 550.9,
+    "plan": 79.8,
+    "hist": [
+     79.8,
+     79.8,
+     79.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00214",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 99.7,
+    "stock": 99.7,
+    "price": 2.212,
+    "forecast": 736.7,
+    "demand": 736.7,
+    "margin": 0.529,
+    "limit": "План",
+    "cash": 644.4,
+    "plan": 99.7,
+    "hist": [
+     99.7,
+     99.7,
+     99.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00219",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 79.8,
+    "stock": 79.8,
+    "price": 1.615,
+    "forecast": 79.8,
+    "demand": 79.8,
+    "margin": 0.34,
+    "limit": "План",
+    "cash": 446.9,
+    "plan": 79.8,
+    "hist": [
+     79.8,
+     79.8,
+     79.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00220",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 99.7,
+    "stock": 99.7,
+    "price": 2.176,
+    "forecast": 428.7,
+    "demand": 428.7,
+    "margin": 0.497,
+    "limit": "План",
+    "cash": 644.4,
+    "plan": 99.7,
+    "hist": [
+     49.9,
+     99.7,
+     99.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00225",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 1.63,
+    "forecast": 737.4,
+    "demand": 737.4,
+    "margin": 0.375,
+    "limit": "План",
+    "cash": 416.7,
+    "plan": 68.8,
+    "hist": [
+     55.1,
+     55.1,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00226",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.195,
+    "forecast": 736.7,
+    "demand": 736.7,
+    "margin": 0.502,
+    "limit": "Сырьё: flour",
+    "cash": 478.5,
+    "plan": 68.8,
+    "hist": [
+     68.8,
+     68.8,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00231",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 1.619,
+    "forecast": 792.5,
+    "demand": 792.5,
+    "margin": 0.364,
+    "limit": "План",
+    "cash": 416.7,
+    "plan": 68.8,
+    "hist": [
+     55.1,
+     55.1,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00232",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.19,
+    "forecast": 1134.5,
+    "demand": 1134.5,
+    "margin": 0.506,
+    "limit": "План",
+    "cash": 481.7,
+    "plan": 68.8,
+    "hist": [
+     68.8,
+     68.8,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00237",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 82.1,
+    "out": 82.1,
+    "stock": 82.1,
+    "price": 2.103,
+    "forecast": 3445.3,
+    "demand": 3445.3,
+    "margin": 0.363,
+    "limit": "План",
+    "cash": 125.7,
+    "plan": 82.1,
+    "hist": [
+     0,
+     77.6,
+     82.1
+    ],
+    "opened": 3
+   }
+  ]
+ },
+ "12": {
+  "firms_by_good": {
+   "grain": {
+    "active|План": 20,
+    "active|Природный ресурс": 1
+   },
+   "wood": {
+    "idle|Нет обеспеченного спроса": 6,
+    "idle|Готовые запасы": 6,
+    "active|План": 6
+   },
+   "ore": {
+    "idle|Нет обеспеченного спроса": 19
+   },
+   "fish": {
+    "active|План": 4
+   },
+   "flax": {
+    "active|План": 20,
+    "active|Природный ресурс": 1
+   },
+   "flour": {
+    "active|План": 19,
+    "active|Сырьё: grain": 5,
+    "idle|Готовые запасы": 6
+   },
+   "bread": {
+    "active|План": 20,
+    "active|Сырьё: flour": 3,
+    "idle|Сырьё: flour": 8,
+    "active|Сырьё: wood": 1
+   },
+   "planks": {
+    "active|Сырьё: wood": 1,
+    "active|План": 14,
+    "idle|Готовые запасы": 7
+   },
+   "iron": {
+    "idle|Готовые запасы": 17,
+    "idle|Нет обеспеченного спроса": 6
+   },
+   "tools": {
+    "active|Сырьё: wood": 1,
+    "idle|Готовые запасы": 17,
+    "active|План": 6
+   },
+   "cloth": {
+    "active|План": 10,
+    "idle|Сырьё: flax": 15,
+    "active|Сырьё: flax": 2
+   }
+  },
+  "capacity_vs_output": {
+   "grain": {
+    "capacity": 2636.7,
+    "output": 2066.0
+   },
+   "flour": {
+    "capacity": 2013.8,
+    "output": 1094.1
+   },
+   "bread": {
+    "capacity": 2460.9,
+    "output": 1717.6
+   },
+   "wood": {
+    "capacity": 1884,
+    "output": 69.3
+   },
+   "planks": {
+    "capacity": 116.2,
+    "output": 50.7
+   },
+   "ore": {
+    "capacity": 942,
+    "output": 0
+   },
+   "iron": {
+    "capacity": 1539.9,
+    "output": 0
+   },
+   "tools": {
+    "capacity": 135.8,
+    "output": 19.4
+   },
+   "flax": {
+    "capacity": 465.3,
+    "output": 465.3
+   },
+   "cloth": {
+    "capacity": 1868.4,
+    "output": 332.4
+   },
+   "fish": {
+    "capacity": 180,
+    "output": 180
+   }
+  },
+  "food_totals": {
+   "bread": {
+    "need": 1678.2,
+    "consumed": 680.1,
+    "deficit": 998.1,
+    "unfunded": 0.0,
+    "funded_unfilled": 998.1,
+    "accounting_unknown": 0.0,
+    "root_unknown": 998.1
+   },
+   "fish": {
+    "need": 335.6,
+    "consumed": 59.6,
+    "deficit": 276.0,
+    "unfunded": 0.0,
+    "funded_unfilled": 276.0,
+    "accounting_unknown": 0.0,
+    "root_unknown": 276.0
+   }
+  },
+  "household_gold_per_capita_quantiles": {
+   "10": 1.07,
+   "25": 1.079,
+   "50": 1.087,
+   "75": 1.102,
+   "90": 1.107
+  },
+  "household_min_max": [
+   1.0541,
+   1.1078
+  ],
+  "basic_unfilled_reasons": {
+   "fish|offer_exhausted": 160,
+   "bread|offer_exhausted": 80
+  },
+  "basic_unfilled_quantity": {
+   "fish": 276.0,
+   "bread": 998.1
+  },
+  "input_unfilled_reasons": {
+   "flour|offer_exhausted": 9,
+   "flax|offer_exhausted": 16
+  },
+  "unsold_offers": {
+   "planks": 198.7,
+   "wood": 3001.1,
+   "iron": 2887.9,
+   "ore": 7427.8,
+   "tools": 247.3,
+   "grain": 364.2
+  },
+  "stocks": {
+   "grain": 2430.2,
+   "flour": 1094.1,
+   "bread": 1717.6,
+   "wood": 3129.3,
+   "planks": 249.4,
+   "ore": 7427.8,
+   "iron": 2887.9,
+   "tools": 267.8,
+   "flax": 465.3,
+   "cloth": 332.4,
+   "fish": 180.0
+  },
+  "projects": [
+   {
+    "investor": "firm-00140",
+    "good": "tools",
+    "created": 12,
+    "last_progress": 12,
+    "capacity": 5.3,
+    "working_cash": 0
+   }
+  ],
+  "owner_cash": {
+   "merchant:arven": 74902.5,
+   "merchant:kasseria": 22464.6,
+   "merchant:noweria": 38009.7,
+   "merchant:septaria": 38448.6,
+   "merchant:valtoria": 40415.0,
+   "merchant:velaria": 43781.1,
+   "private:arven": 75216.5,
+   "private:kasseria": 23690.7,
+   "private:noweria": 40982.7,
+   "private:septaria": 37067.4,
+   "private:valtoria": 41684.5,
+   "private:velaria": 45768.3,
+   "treasury:arven": 75235.0,
+   "treasury:kasseria": 23280.9,
+   "treasury:noweria": 39221.6,
+   "treasury:septaria": 38955.9,
+   "treasury:valtoria": 38741.2,
+   "treasury:velaria": 39042.2
+  },
+  "closed_firms": 0,
+  "bought_by_buyer": {
+   "fish": {
+    "household": 59.6,
+    "private/Личное потребление собственника": 120.4
+   },
+   "cloth": {
+    "household": 15.8,
+    "private/Личное потребление собственника": 111.1,
+    "merchant/Личное потребление собственника": 205.4
+   },
+   "bread": {
+    "household": 680.1,
+    "private/Личное потребление собственника": 941.0,
+    "merchant/Личное потребление собственника": 402.4
+   },
+   "flour": {
+    "enterprise/Сырьё": 1374.1
+   },
+   "grain": {
+    "enterprise/Сырьё": 1312.9
+   }
+  },
+  "owner_consumed": {
+   "cloth": 316.6,
+   "bread": 1343.4,
+   "fish": 120.4
+  },
+  "owner_budget": 26349.6,
+  "owner_spent": 4562.7,
+  "household_consumed": {
+   "cloth": 332.4,
+   "bread": 2023.5,
+   "fish": 180.0,
+   "planks": 67.1,
+   "tools": 42.0
+  },
+  "firms": [
+   {
+    "id": "firm-00001",
+    "good": "grain",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 683.4,
+    "out": 231.0,
+    "stock": 514.6,
+    "price": 1.075,
+    "forecast": 351.4,
+    "demand": 184.5,
+    "margin": 1.015,
+    "limit": "План",
+    "cash": 1455.9,
+    "plan": 231.0,
+    "hist": [
+     344.5,
+     422.9,
+     21.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00004",
+    "good": "fish",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 108,
+    "out": 108,
+    "stock": 108,
+    "price": 2.5,
+    "forecast": 3388.6,
+    "demand": 3388.6,
+    "margin": 2.154,
+    "limit": "План",
+    "cash": 401.2,
+    "plan": 108,
+    "hist": [
+     108,
+     108,
+     108
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00006",
+    "good": "grain",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 224.4,
+    "out": 224.4,
+    "stock": 224.4,
+    "price": 1.053,
+    "forecast": 425.8,
+    "demand": 425.8,
+    "margin": 0.993,
+    "limit": "Природный ресурс",
+    "cash": 555.3,
+    "plan": 224.4,
+    "hist": [
+     224.4,
+     224.4,
+     224.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00010",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 25.5,
+    "out": 25.5,
+    "stock": 25.5,
+    "price": 0.966,
+    "forecast": 401.7,
+    "demand": 401.7,
+    "margin": 0.906,
+    "limit": "План",
+    "cash": 169.5,
+    "plan": 25.5,
+    "hist": [
+     25.5,
+     25.5,
+     25.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00016",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 40.8,
+    "out": 40.8,
+    "stock": 40.8,
+    "price": 0.951,
+    "forecast": 427.7,
+    "demand": 427.7,
+    "margin": 0.891,
+    "limit": "План",
+    "cash": 199.2,
+    "plan": 40.8,
+    "hist": [
+     40.8,
+     40.8,
+     40.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00022",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 137.7,
+    "out": 137.7,
+    "stock": 137.7,
+    "price": 1.022,
+    "forecast": 165.5,
+    "demand": 165.5,
+    "margin": 0.962,
+    "limit": "План",
+    "cash": 387.1,
+    "plan": 137.7,
+    "hist": [
+     67.2,
+     95.3,
+     15.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00027",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 10.2,
+    "out": 10.2,
+    "stock": 10.2,
+    "price": 1.02,
+    "forecast": 97.5,
+    "demand": 97.5,
+    "margin": 0.96,
+    "limit": "План",
+    "cash": 139.8,
+    "plan": 10.2,
+    "hist": [
+     10.2,
+     10.2,
+     10.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00031",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 35.7,
+    "out": 34.7,
+    "stock": 34.7,
+    "price": 1.044,
+    "forecast": 35.2,
+    "demand": 35.2,
+    "margin": 0.984,
+    "limit": "План",
+    "cash": 189.3,
+    "plan": 34.7,
+    "hist": [
+     28.2,
+     35.2,
+     35.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00034",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 35.7,
+    "out": 35.7,
+    "stock": 35.7,
+    "price": 1.036,
+    "forecast": 70.2,
+    "demand": 70.2,
+    "margin": 0.976,
+    "limit": "План",
+    "cash": 189.3,
+    "plan": 35.7,
+    "hist": [
+     35.7,
+     35.7,
+     35.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00038",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 71.4,
+    "out": 71.4,
+    "stock": 71.4,
+    "price": 1.034,
+    "forecast": 79.5,
+    "demand": 79.5,
+    "margin": 0.974,
+    "limit": "План",
+    "cash": 258.5,
+    "plan": 71.4,
+    "hist": [
+     71.4,
+     71.4,
+     71.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00041",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p0",
+    "cap": 214.2,
+    "out": 214.2,
+    "stock": 214.2,
+    "price": 0.988,
+    "forecast": 267.1,
+    "demand": 267.1,
+    "margin": 0.928,
+    "limit": "План",
+    "cash": 535.5,
+    "plan": 214.2,
+    "hist": [
+     217.6,
+     0,
+     181.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00044",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p1",
+    "cap": 15.3,
+    "out": 15.3,
+    "stock": 15.3,
+    "price": 1.011,
+    "forecast": 67.4,
+    "demand": 67.4,
+    "margin": 0.951,
+    "limit": "План",
+    "cash": 149.7,
+    "plan": 15.3,
+    "hist": [
+     15.3,
+     15.3,
+     15.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00047",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 61.2,
+    "out": 61.2,
+    "stock": 70.3,
+    "price": 1.014,
+    "forecast": 62.0,
+    "demand": 62.0,
+    "margin": 0.954,
+    "limit": "План",
+    "cash": 238.2,
+    "plan": 61.2,
+    "hist": [
+     61.2,
+     61.2,
+     52.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00050",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p3",
+    "cap": 30.6,
+    "out": 30.6,
+    "stock": 54.2,
+    "price": 0.991,
+    "forecast": 274.1,
+    "demand": 274.1,
+    "margin": 0.931,
+    "limit": "План",
+    "cash": 177.9,
+    "plan": 30.6,
+    "hist": [
+     30.6,
+     30.6,
+     7.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00053",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 102.0,
+    "out": 102.0,
+    "stock": 147.0,
+    "price": 0.983,
+    "forecast": 310.6,
+    "demand": 310.6,
+    "margin": 0.923,
+    "limit": "План",
+    "cash": 315.2,
+    "plan": 102.0,
+    "hist": [
+     84.5,
+     24.2,
+     57.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00055",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 51.0,
+    "out": 51.0,
+    "stock": 51.0,
+    "price": 1.05,
+    "forecast": 184.5,
+    "demand": 184.5,
+    "margin": 0.99,
+    "limit": "План",
+    "cash": 218.9,
+    "plan": 51.0,
+    "hist": [
+     51.0,
+     51.0,
+     51.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00058",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 36,
+    "out": 36,
+    "stock": 36,
+    "price": 2.472,
+    "forecast": 3443.1,
+    "demand": 3443.1,
+    "margin": 2.129,
+    "limit": "План",
+    "cash": 213.7,
+    "plan": 36,
+    "hist": [
+     36,
+     36,
+     36
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00060",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 10.2,
+    "out": 10.2,
+    "stock": 10.2,
+    "price": 0.969,
+    "forecast": 279.2,
+    "demand": 279.2,
+    "margin": 0.909,
+    "limit": "План",
+    "cash": 139.8,
+    "plan": 10.2,
+    "hist": [
+     10.2,
+     10.2,
+     10.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00063",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 25.5,
+    "out": 25.5,
+    "stock": 25.5,
+    "price": 0.998,
+    "forecast": 193.5,
+    "demand": 193.5,
+    "margin": 0.938,
+    "limit": "План",
+    "cash": 169.5,
+    "plan": 25.5,
+    "hist": [
+     0,
+     17.0,
+     25.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00066",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 30,
+    "out": 30,
+    "stock": 30,
+    "price": 2.5,
+    "forecast": 3286.5,
+    "demand": 3286.5,
+    "margin": 2.154,
+    "limit": "План",
+    "cash": 198.1,
+    "plan": 30,
+    "hist": [
+     30,
+     30,
+     30
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00068",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 137.7,
+    "out": 137.7,
+    "stock": 137.7,
+    "price": 0.972,
+    "forecast": 279.2,
+    "demand": 279.2,
+    "margin": 0.912,
+    "limit": "План",
+    "cash": 387.1,
+    "plan": 137.7,
+    "hist": [
+     137.7,
+     83.3,
+     137.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00071",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 6,
+    "out": 6,
+    "stock": 6,
+    "price": 2.438,
+    "forecast": 3349.6,
+    "demand": 3349.6,
+    "margin": 2.099,
+    "limit": "План",
+    "cash": 135.6,
+    "plan": 6,
+    "hist": [
+     6,
+     6,
+     6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00073",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 137.7,
+    "out": 137.7,
+    "stock": 137.7,
+    "price": 1.006,
+    "forecast": 193.5,
+    "demand": 193.5,
+    "margin": 0.946,
+    "limit": "План",
+    "cash": 387.1,
+    "plan": 137.7,
+    "hist": [
+     137.7,
+     137.7,
+     24.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00076",
+    "good": "grain",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 438.6,
+    "out": 321.3,
+    "stock": 321.3,
+    "price": 1.056,
+    "forecast": 326.6,
+    "demand": 184.5,
+    "margin": 0.996,
+    "limit": "План",
+    "cash": 977.9,
+    "plan": 321.3,
+    "hist": [
+     167.2,
+     174.4,
+     189.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00080",
+    "good": "grain",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 147.9,
+    "out": 147.9,
+    "stock": 150.7,
+    "price": 1.053,
+    "forecast": 267.1,
+    "demand": 267.1,
+    "margin": 0.993,
+    "limit": "План",
+    "cash": 406.8,
+    "plan": 147.9,
+    "hist": [
+     20.4,
+     82.6,
+     80.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00084",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 191.1,
+    "stock": 191.1,
+    "price": 1.718,
+    "forecast": 191.1,
+    "demand": 124.2,
+    "margin": 0.373,
+    "limit": "План",
+    "cash": 1033.0,
+    "plan": 191.1,
+    "hist": [
+     202.6,
+     168.2,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00085",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 202.6,
+    "stock": 202.6,
+    "price": 2.292,
+    "forecast": 1406.5,
+    "demand": 1406.5,
+    "margin": 0.522,
+    "limit": "План",
+    "cash": 1167.4,
+    "plan": 202.6,
+    "hist": [
+     202.6,
+     202.6,
+     202.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00090",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 149.6,
+    "stock": 149.6,
+    "price": 1.732,
+    "forecast": 202.6,
+    "demand": 119.3,
+    "margin": 0.374,
+    "limit": "План",
+    "cash": 1091.6,
+    "plan": 149.6,
+    "hist": [
+     202.6,
+     202.6,
+     172.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00091",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 282.4,
+    "out": 282.4,
+    "stock": 282.4,
+    "price": 2.278,
+    "forecast": 1783.5,
+    "demand": 1783.5,
+    "margin": 0.52,
+    "limit": "План",
+    "cash": 842.7,
+    "plan": 282.4,
+    "hist": [
+     282.4,
+     282.4,
+     282.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00096",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 81.8,
+    "stock": 81.8,
+    "price": 1.685,
+    "forecast": 165.1,
+    "demand": 165.1,
+    "margin": 0.366,
+    "limit": "План",
+    "cash": 486.8,
+    "plan": 81.8,
+    "hist": [
+     81.8,
+     9.0,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00097",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 204.0,
+    "out": 71.3,
+    "stock": 71.3,
+    "price": 2.283,
+    "forecast": 170.8,
+    "demand": 104.4,
+    "margin": 0.534,
+    "limit": "План",
+    "cash": 532.3,
+    "plan": 71.3,
+    "hist": [
+     204.0,
+     104.4,
+     204.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00102",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 81.8,
+    "stock": 81.8,
+    "price": 1.69,
+    "forecast": 189.7,
+    "demand": 189.7,
+    "margin": 0.379,
+    "limit": "План",
+    "cash": 482.0,
+    "plan": 81.8,
+    "hist": [
+     81.8,
+     27.3,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00103",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 81.8,
+    "stock": 81.8,
+    "price": 2.283,
+    "forecast": 638.9,
+    "demand": 638.9,
+    "margin": 0.531,
+    "limit": "План",
+    "cash": 538.7,
+    "plan": 81.8,
+    "hist": [
+     81.8,
+     32.0,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00108",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 25.4,
+    "stock": 25.4,
+    "price": 1.677,
+    "forecast": 46.0,
+    "demand": 46.0,
+    "margin": 0.308,
+    "limit": "План",
+    "cash": 232.4,
+    "plan": 25.4,
+    "hist": [
+     20.3,
+     25.4,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00109",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 25.4,
+    "stock": 25.4,
+    "price": 2.349,
+    "forecast": 467.6,
+    "demand": 467.6,
+    "margin": 0.585,
+    "limit": "Сырьё: flour",
+    "cash": 247.8,
+    "plan": 25.4,
+    "hist": [
+     25.4,
+     25.4,
+     25.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00112",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 16.3,
+    "stock": 16.3,
+    "price": 1.689,
+    "forecast": 25.7,
+    "demand": 25.7,
+    "margin": 0.367,
+    "limit": "План",
+    "cash": 191.0,
+    "plan": 16.3,
+    "hist": [
+     13.0,
+     16.3,
+     16.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00113",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.316,
+    "forecast": 16.3,
+    "demand": 0.0,
+    "margin": 0.565,
+    "limit": "Сырьё: flour",
+    "cash": 227.3,
+    "plan": 16.3,
+    "hist": [
+     16.3,
+     16.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00116",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 79.4,
+    "stock": 79.4,
+    "price": 1.668,
+    "forecast": 370.2,
+    "demand": 370.2,
+    "margin": 0.383,
+    "limit": "План",
+    "cash": 478.3,
+    "plan": 79.4,
+    "hist": [
+     68.8,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00117",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 79.4,
+    "stock": 79.4,
+    "price": 2.292,
+    "forecast": 288.6,
+    "demand": 288.6,
+    "margin": 0.586,
+    "limit": "План",
+    "cash": 528.4,
+    "plan": 79.4,
+    "hist": [
+     79.4,
+     79.4,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00120",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 9.4,
+    "stock": 9.4,
+    "price": 1.694,
+    "forecast": 44.6,
+    "demand": 9.4,
+    "margin": 0.343,
+    "limit": "План",
+    "cash": 364.6,
+    "plan": 9.4,
+    "hist": [
+     44.6,
+     44.6,
+     44.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00121",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 44.6,
+    "stock": 44.6,
+    "price": 2.313,
+    "forecast": 363.2,
+    "demand": 363.2,
+    "margin": 0.566,
+    "limit": "План",
+    "cash": 345.0,
+    "plan": 44.6,
+    "hist": [
+     44.6,
+     44.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00125",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 6.5,
+    "stock": 6.5,
+    "price": 1.716,
+    "forecast": 23.6,
+    "demand": 6.5,
+    "margin": 0.444,
+    "limit": "Сырьё: grain",
+    "cash": 246.6,
+    "plan": 6.5,
+    "hist": [
+     23.6,
+     23.6,
+     23.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00126",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 23.6,
+    "stock": 23.6,
+    "price": 2.274,
+    "forecast": 442.2,
+    "demand": 442.2,
+    "margin": 0.545,
+    "limit": "План",
+    "cash": 243.3,
+    "plan": 23.6,
+    "hist": [
+     23.6,
+     23.6,
+     23.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00131",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 29.3,
+    "stock": 29.3,
+    "price": 1.733,
+    "forecast": 29.3,
+    "demand": 25.7,
+    "margin": 0.429,
+    "limit": "План",
+    "cash": 248.9,
+    "plan": 29.3,
+    "hist": [
+     29.3,
+     29.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00132",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 29.3,
+    "stock": 29.3,
+    "price": 2.309,
+    "forecast": 288.6,
+    "demand": 288.6,
+    "margin": 0.587,
+    "limit": "План",
+    "cash": 270.7,
+    "plan": 29.3,
+    "hist": [
+     29.3,
+     29.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00136",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 23.7,
+    "stock": 23.7,
+    "price": 1.739,
+    "forecast": 23.7,
+    "demand": 0.0,
+    "margin": 0.441,
+    "limit": "План",
+    "cash": 310.1,
+    "plan": 23.7,
+    "hist": [
+     33.0,
+     38.1,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00137",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 0,
+    "stock": 0,
+    "price": 2.25,
+    "forecast": 1044.1,
+    "demand": 1044.1,
+    "margin": 0.541,
+    "limit": "Сырьё: flour",
+    "cash": 371.6,
+    "plan": 38.1,
+    "hist": [
+     0,
+     38.1,
+     24.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00142",
+    "good": "flour",
+    "status": "idle",
+    "prov": "province-7",
+    "cap": 55.4,
+    "out": 0,
+    "stock": 0,
+    "price": 1.722,
+    "forecast": 55.4,
+    "demand": 0.0,
+    "margin": 0.443,
+    "limit": "Готовые запасы",
+    "cash": 441.2,
+    "plan": 0,
+    "hist": [
+     55.4,
+     55.4,
+     55.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00143",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 55.4,
+    "out": 55.4,
+    "stock": 55.4,
+    "price": 2.28,
+    "forecast": 442.2,
+    "demand": 442.2,
+    "margin": 0.555,
+    "limit": "Сырьё: flour",
+    "cash": 406.3,
+    "plan": 55.4,
+    "hist": [
+     55.4,
+     55.4,
+     55.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00147",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 51.0,
+    "stock": 51.0,
+    "price": 1.734,
+    "forecast": 120.9,
+    "demand": 120.9,
+    "margin": 0.538,
+    "limit": "Сырьё: grain",
+    "cash": 351.4,
+    "plan": 51.0,
+    "hist": [
+     44.2,
+     51.0,
+     51.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00148",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 51.0,
+    "stock": 51.0,
+    "price": 2.251,
+    "forecast": 282.5,
+    "demand": 282.5,
+    "margin": 0.499,
+    "limit": "План",
+    "cash": 383.2,
+    "plan": 51.0,
+    "hist": [
+     0,
+     51.0,
+     51.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00151",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 39.6,
+    "stock": 39.6,
+    "price": 1.696,
+    "forecast": 161.1,
+    "demand": 161.1,
+    "margin": 0.398,
+    "limit": "План",
+    "cash": 294.1,
+    "plan": 39.6,
+    "hist": [
+     23.5,
+     47.8,
+     39.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00152",
+    "good": "bread",
+    "status": "idle",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.332,
+    "forecast": 36.2,
+    "demand": 0.0,
+    "margin": 0.572,
+    "limit": "Сырьё: flour",
+    "cash": 379.9,
+    "plan": 28.8,
+    "hist": [
+     39.6,
+     29.3,
+     7.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00155",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p2",
+    "cap": 45.5,
+    "out": 45.5,
+    "stock": 45.5,
+    "price": 1.76,
+    "forecast": 49.4,
+    "demand": 49.4,
+    "margin": 0.534,
+    "limit": "Сырьё: grain",
+    "cash": 318.2,
+    "plan": 45.5,
+    "hist": [
+     36.4,
+     54.6,
+     45.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00156",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p2",
+    "cap": 45.5,
+    "out": 45.5,
+    "stock": 45.5,
+    "price": 2.28,
+    "forecast": 45.5,
+    "demand": 0.0,
+    "margin": 0.553,
+    "limit": "План",
+    "cash": 353.7,
+    "plan": 45.5,
+    "hist": [
+     45.5,
+     45.5,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00160",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 7.7,
+    "stock": 7.7,
+    "price": 1.748,
+    "forecast": 42.6,
+    "demand": 0.0,
+    "margin": 0.559,
+    "limit": "Сырьё: grain",
+    "cash": 387.3,
+    "plan": 7.7,
+    "hist": [
+     40.8,
+     39.2,
+     34.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00161",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 47.7,
+    "stock": 47.7,
+    "price": 2.259,
+    "forecast": 231.5,
+    "demand": 231.5,
+    "margin": 0.506,
+    "limit": "План",
+    "cash": 365.5,
+    "plan": 47.7,
+    "hist": [
+     47.7,
+     47.7,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00166",
+    "good": "flour",
+    "status": "idle",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 0,
+    "stock": 0,
+    "price": 1.766,
+    "forecast": 64.3,
+    "demand": 0.0,
+    "margin": 0.502,
+    "limit": "Готовые запасы",
+    "cash": 757.3,
+    "plan": 0,
+    "hist": [
+     46.9,
+     109.9,
+     109.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00167",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 0,
+    "stock": 0,
+    "price": 2.337,
+    "forecast": 710.7,
+    "demand": 710.7,
+    "margin": 0.556,
+    "limit": "Сырьё: flour",
+    "cash": 846.2,
+    "plan": 109.9,
+    "hist": [
+     109.9,
+     109.9,
+     109.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00170",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 4.5,
+    "stock": 4.5,
+    "price": 1.746,
+    "forecast": 25.2,
+    "demand": 0.0,
+    "margin": 0.485,
+    "limit": "План",
+    "cash": 304.7,
+    "plan": 4.5,
+    "hist": [
+     22.3,
+     26.7,
+     20.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00171",
+    "good": "bread",
+    "status": "active",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 27.8,
+    "stock": 27.8,
+    "price": 2.357,
+    "forecast": 27.8,
+    "demand": 27.8,
+    "margin": 0.559,
+    "limit": "План",
+    "cash": 301.0,
+    "plan": 27.8,
+    "hist": [
+     0,
+     27.8,
+     27.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00175",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 51.7,
+    "stock": 51.7,
+    "price": 1.752,
+    "forecast": 51.7,
+    "demand": 0.0,
+    "margin": 0.484,
+    "limit": "План",
+    "cash": 400.3,
+    "plan": 51.7,
+    "hist": [
+     47.7,
+     67.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00176",
+    "good": "bread",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 59.6,
+    "stock": 59.6,
+    "price": 2.351,
+    "forecast": 77.5,
+    "demand": 77.5,
+    "margin": 0.558,
+    "limit": "План",
+    "cash": 426.2,
+    "plan": 59.6,
+    "hist": [
+     0,
+     59.6,
+     59.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00180",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 5.8,
+    "stock": 5.8,
+    "price": 1.744,
+    "forecast": 47.8,
+    "demand": 0.0,
+    "margin": 0.506,
+    "limit": "План",
+    "cash": 411.8,
+    "plan": 5.8,
+    "hist": [
+     42.0,
+     49.0,
+     42.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00181",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 0,
+    "stock": 0,
+    "price": 2.315,
+    "forecast": 754.4,
+    "demand": 754.4,
+    "margin": 0.515,
+    "limit": "Сырьё: flour",
+    "cash": 466.6,
+    "plan": 52.5,
+    "hist": [
+     41.3,
+     52.5,
+     52.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00184",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 36.2,
+    "stock": 36.2,
+    "price": 1.732,
+    "forecast": 45.3,
+    "demand": 36.2,
+    "margin": 0.502,
+    "limit": "План",
+    "cash": 334.4,
+    "plan": 36.2,
+    "hist": [
+     27.5,
+     63.0,
+     45.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00185",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.303,
+    "forecast": 748.4,
+    "demand": 748.4,
+    "margin": 0.512,
+    "limit": "Сырьё: flour",
+    "cash": 418.2,
+    "plan": 45.3,
+    "hist": [
+     42.8,
+     34.4,
+     41.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00187",
+    "good": "flour",
+    "status": "idle",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 0,
+    "stock": 0,
+    "price": 1.735,
+    "forecast": 46.7,
+    "demand": 0.0,
+    "margin": 0.445,
+    "limit": "Готовые запасы",
+    "cash": 449.4,
+    "plan": 0,
+    "hist": [
+     49.2,
+     56.8,
+     56.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00188",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 56.8,
+    "stock": 56.8,
+    "price": 2.304,
+    "forecast": 528.4,
+    "demand": 528.4,
+    "margin": 0.592,
+    "limit": "План",
+    "cash": 413.0,
+    "plan": 56.8,
+    "hist": [
+     56.8,
+     56.8,
+     56.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00193",
+    "good": "flour",
+    "status": "idle",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 0,
+    "stock": 0,
+    "price": 1.779,
+    "forecast": 53.1,
+    "demand": 3.9,
+    "margin": 0.568,
+    "limit": "Готовые запасы",
+    "cash": 469.1,
+    "plan": 0,
+    "hist": [
+     49.0,
+     49.0,
+     61.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00194",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p1",
+    "cap": 163.0,
+    "out": 0,
+    "stock": 0,
+    "price": 2.261,
+    "forecast": 288.6,
+    "demand": 288.6,
+    "margin": 0.551,
+    "limit": "Сырьё: flour",
+    "cash": 484.6,
+    "plan": 158.6,
+    "hist": [
+     0,
+     61.3,
+     163.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00197",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 37.8,
+    "stock": 37.8,
+    "price": 1.602,
+    "forecast": 1598.5,
+    "demand": 1598.5,
+    "margin": 0.342,
+    "limit": "Сырьё: grain",
+    "cash": 283.9,
+    "plan": 37.8,
+    "hist": [
+     30.3,
+     0,
+     37.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00198",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 37.8,
+    "stock": 37.8,
+    "price": 2.28,
+    "forecast": 721.8,
+    "demand": 721.8,
+    "margin": 0.594,
+    "limit": "План",
+    "cash": 317.5,
+    "plan": 37.8,
+    "hist": [
+     37.8,
+     37.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00203",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 16.4,
+    "stock": 16.4,
+    "price": 1.763,
+    "forecast": 54.9,
+    "demand": 0.0,
+    "margin": 0.512,
+    "limit": "План",
+    "cash": 568.4,
+    "plan": 16.4,
+    "hist": [
+     75.5,
+     80.8,
+     38.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00204",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 80.8,
+    "stock": 80.8,
+    "price": 2.287,
+    "forecast": 721.8,
+    "demand": 721.8,
+    "margin": 0.596,
+    "limit": "План",
+    "cash": 535.6,
+    "plan": 80.8,
+    "hist": [
+     80.8,
+     80.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00209",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 74.6,
+    "out": 23.4,
+    "stock": 23.4,
+    "price": 1.777,
+    "forecast": 56.0,
+    "demand": 0.0,
+    "margin": 0.523,
+    "limit": "План",
+    "cash": 513.6,
+    "plan": 23.4,
+    "hist": [
+     35.0,
+     86.7,
+     32.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00210",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 74.6,
+    "out": 74.6,
+    "stock": 74.6,
+    "price": 2.273,
+    "forecast": 796.3,
+    "demand": 796.3,
+    "margin": 0.582,
+    "limit": "План",
+    "cash": 502.0,
+    "plan": 74.6,
+    "hist": [
+     0,
+     74.6,
+     74.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00213",
+    "good": "flour",
+    "status": "idle",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 0,
+    "stock": 0,
+    "price": 1.743,
+    "forecast": 53.2,
+    "demand": 0.0,
+    "margin": 0.432,
+    "limit": "Готовые запасы",
+    "cash": 698.5,
+    "plan": 0,
+    "hist": [
+     86.4,
+     73.1,
+     79.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00214",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 99.7,
+    "stock": 99.7,
+    "price": 2.278,
+    "forecast": 1235.7,
+    "demand": 1235.7,
+    "margin": 0.557,
+    "limit": "План",
+    "cash": 629.2,
+    "plan": 99.7,
+    "hist": [
+     99.7,
+     99.7,
+     99.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00219",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 11.3,
+    "stock": 11.3,
+    "price": 1.772,
+    "forecast": 76.1,
+    "demand": 0.0,
+    "margin": 0.555,
+    "limit": "План",
+    "cash": 675.5,
+    "plan": 11.3,
+    "hist": [
+     73.7,
+     55.0,
+     64.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00220",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 28.1,
+    "stock": 28.1,
+    "price": 2.266,
+    "forecast": 245.3,
+    "demand": 245.3,
+    "margin": 0.498,
+    "limit": "Сырьё: flour",
+    "cash": 737.7,
+    "plan": 99.7,
+    "hist": [
+     0,
+     99.7,
+     99.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00225",
+    "good": "flour",
+    "status": "idle",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 0,
+    "stock": 0,
+    "price": 1.754,
+    "forecast": 62.7,
+    "demand": 0.0,
+    "margin": 0.423,
+    "limit": "Готовые запасы",
+    "cash": 519.2,
+    "plan": 0,
+    "hist": [
+     68.8,
+     68.8,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00226",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.283,
+    "forecast": 593.0,
+    "demand": 593.0,
+    "margin": 0.546,
+    "limit": "План",
+    "cash": 474.0,
+    "plan": 68.8,
+    "hist": [
+     68.8,
+     68.8,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00231",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 1.676,
+    "forecast": 747.6,
+    "demand": 747.6,
+    "margin": 0.358,
+    "limit": "План",
+    "cash": 428.5,
+    "plan": 68.8,
+    "hist": [
+     41.3,
+     0,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00232",
+    "good": "bread",
+    "status": "idle",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.292,
+    "forecast": 1148.3,
+    "demand": 1148.3,
+    "margin": 0.551,
+    "limit": "Сырьё: flour",
+    "cash": 574.9,
+    "plan": 68.8,
+    "hist": [
+     68.8,
+     68.8,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00237",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 82.1,
+    "out": 82.1,
+    "stock": 82.1,
+    "price": 2.283,
+    "forecast": 104.4,
+    "demand": 104.4,
+    "margin": 0.534,
+    "limit": "План",
+    "cash": 135.2,
+    "plan": 82.1,
+    "hist": [
+     82.1,
+     82.1,
+     82.1
+    ],
+    "opened": 3
+   },
+   {
+    "id": "firm-00241",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 61.3,
+    "stock": 61.3,
+    "price": 2.194,
+    "forecast": 2745.9,
+    "demand": 2745.9,
+    "margin": 0.49,
+    "limit": "Сырьё: wood",
+    "cash": 94.3,
+    "plan": 61.3,
+    "hist": [
+     0,
+     0,
+     61.3
+    ],
+    "opened": 10
+   }
+  ]
+ },
+ "24": {
+  "firms_by_good": {
+   "grain": {
+    "active|План": 20,
+    "idle|Готовые запасы": 1
+   },
+   "wood": {
+    "idle|Готовые запасы": 3,
+    "active|План": 15
+   },
+   "ore": {
+    "idle|Нет обеспеченного спроса": 19
+   },
+   "fish": {
+    "active|План": 4
+   },
+   "flax": {
+    "active|План": 19,
+    "active|Природный ресурс": 2
+   },
+   "flour": {
+    "idle|Сырьё: grain": 10,
+    "active|План": 10,
+    "idle|Готовые запасы": 5,
+    "active|Сырьё: grain": 5
+   },
+   "bread": {
+    "active|План": 10,
+    "active|Сырьё: flour": 4,
+    "idle|Сырьё: flour": 13,
+    "active|Сырьё: wood": 4,
+    "idle|Готовые запасы": 2,
+    "idle|План": 2
+   },
+   "planks": {
+    "active|План": 19,
+    "active|Сырьё: wood": 3
+   },
+   "iron": {
+    "idle|Готовые запасы": 23
+   },
+   "tools": {
+    "idle|Готовые запасы": 12,
+    "active|План": 7,
+    "active|Сырьё: wood": 3,
+    "idle|Нет обеспеченного спроса": 1,
+    "active|Сырьё: iron": 1
+   },
+   "cloth": {
+    "active|План": 6,
+    "idle|Нет обеспеченного спроса": 6,
+    "idle|Сырьё: flax": 13,
+    "active|Сырьё: flax": 3
+   }
+  },
+  "capacity_vs_output": {
+   "grain": {
+    "capacity": 2636.7,
+    "output": 1856.3
+   },
+   "flour": {
+    "capacity": 2013.8,
+    "output": 727.1
+   },
+   "bread": {
+    "capacity": 3593.0,
+    "output": 1365.8
+   },
+   "wood": {
+    "capacity": 1884,
+    "output": 433.0
+   },
+   "planks": {
+    "capacity": 116.2,
+    "output": 111.7
+   },
+   "ore": {
+    "capacity": 942,
+    "output": 0
+   },
+   "iron": {
+    "capacity": 1539.9,
+    "output": 0
+   },
+   "tools": {
+    "capacity": 141.2,
+    "output": 46.1
+   },
+   "flax": {
+    "capacity": 465.3,
+    "output": 465.3
+   },
+   "cloth": {
+    "capacity": 2281.0,
+    "output": 332.4
+   },
+   "fish": {
+    "capacity": 180,
+    "output": 180
+   }
+  },
+  "food_totals": {
+   "bread": {
+    "need": 1678.2,
+    "consumed": 602.0,
+    "deficit": 1076.2,
+    "unfunded": 0.0,
+    "funded_unfilled": 1076.2,
+    "accounting_unknown": 0.0,
+    "root_unknown": 1076.2
+   },
+   "fish": {
+    "need": 335.6,
+    "consumed": 80.6,
+    "deficit": 255.0,
+    "unfunded": 0.0,
+    "funded_unfilled": 255.0,
+    "accounting_unknown": 0.0,
+    "root_unknown": 255.0
+   }
+  },
+  "household_gold_per_capita_quantiles": {
+   "10": 1.145,
+   "25": 1.159,
+   "50": 1.173,
+   "75": 1.218,
+   "90": 1.231
+  },
+  "household_min_max": [
+   1.1176,
+   1.2342
+  ],
+  "basic_unfilled_reasons": {
+   "fish|offer_exhausted": 128,
+   "bread|offer_exhausted": 91
+  },
+  "basic_unfilled_quantity": {
+   "fish": 255.0,
+   "bread": 1076.2
+  },
+  "input_unfilled_reasons": {
+   "flour|offer_exhausted": 14,
+   "flour|landed_price_above_limit": 1,
+   "flax|offer_exhausted": 14,
+   "grain|offer_exhausted": 11,
+   "flax|landed_price_above_limit": 1
+  },
+  "unsold_offers": {
+   "iron": 2300.1,
+   "ore": 7427.8,
+   "tools": 133.3,
+   "wood": 1592.0
+  },
+  "stocks": {
+   "grain": 1856.3,
+   "flour": 727.1,
+   "bread": 1365.8,
+   "wood": 2172.4,
+   "planks": 277.1,
+   "ore": 7427.8,
+   "iron": 2300.1,
+   "tools": 294.1,
+   "flax": 465.3,
+   "cloth": 332.4,
+   "fish": 180.0
+  },
+  "projects": [
+   {
+    "investor": "firm-00210",
+    "good": "bread",
+    "created": 21,
+    "last_progress": 24,
+    "capacity": 28.3,
+    "working_cash": 0
+   },
+   {
+    "investor": "firm-00244",
+    "good": "cloth",
+    "created": 21,
+    "last_progress": 24,
+    "capacity": 246.5,
+    "working_cash": 0
+   },
+   {
+    "investor": "treasury:septaria",
+    "good": "bread",
+    "created": 18,
+    "last_progress": 21,
+    "capacity": 73.7,
+    "working_cash": 127.6
+   },
+   {
+    "investor": "treasury:valtoria",
+    "good": "bread",
+    "created": 21,
+    "last_progress": 23,
+    "capacity": 224.6,
+    "working_cash": 371.1
+   }
+  ],
+  "owner_cash": {
+   "merchant:arven": 70253.5,
+   "merchant:kasseria": 21274.9,
+   "merchant:noweria": 36630.0,
+   "merchant:septaria": 35967.2,
+   "merchant:valtoria": 33911.2,
+   "merchant:velaria": 41590.9,
+   "private:arven": 69351.3,
+   "private:kasseria": 22733.0,
+   "private:noweria": 36960.2,
+   "private:septaria": 33549.0,
+   "private:valtoria": 39788.6,
+   "private:velaria": 42117.4,
+   "treasury:arven": 60810.6,
+   "treasury:kasseria": 18617.1,
+   "treasury:noweria": 31381.3,
+   "treasury:septaria": 31017.3,
+   "treasury:valtoria": 30861.1,
+   "treasury:velaria": 29256.0
+  },
+  "closed_firms": 0,
+  "bought_by_buyer": {
+   "bread": {
+    "household": 602.0,
+    "private/Личное потребление собственника": 230.1,
+    "merchant/Личное потребление собственника": 146.9
+   },
+   "cloth": {
+    "household": 117.5,
+    "private/Личное потребление собственника": 214.9
+   },
+   "fish": {
+    "household": 80.6,
+    "merchant/Личное потребление собственника": 99.4
+   },
+   "flour": {
+    "enterprise/Сырьё": 1092.6
+   },
+   "grain": {
+    "enterprise/Сырьё": 872.5
+   }
+  },
+  "owner_consumed": {
+   "fish": 99.4,
+   "cloth": 214.9,
+   "bread": 376.9
+  },
+  "owner_budget": 24315.7,
+  "owner_spent": 2135.6,
+  "household_consumed": {
+   "fish": 180.0,
+   "cloth": 332.4,
+   "bread": 978.9,
+   "planks": 47.5,
+   "tools": 42.0
+  },
+  "firms": [
+   {
+    "id": "firm-00001",
+    "good": "grain",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 683.4,
+    "out": 344.5,
+    "stock": 344.5,
+    "price": 1.042,
+    "forecast": 344.5,
+    "demand": 344.5,
+    "margin": 0.982,
+    "limit": "План",
+    "cash": 1466.1,
+    "plan": 344.5,
+    "hist": [
+     50.1,
+     285.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00004",
+    "good": "fish",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 108,
+    "out": 108,
+    "stock": 108,
+    "price": 3.676,
+    "forecast": 2163.6,
+    "demand": 2163.6,
+    "margin": 3.213,
+    "limit": "План",
+    "cash": 401.2,
+    "plan": 108,
+    "hist": [
+     108,
+     108,
+     108
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00006",
+    "good": "grain",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 224.4,
+    "out": 224.4,
+    "stock": 224.4,
+    "price": 0.984,
+    "forecast": 633.4,
+    "demand": 633.4,
+    "margin": 0.924,
+    "limit": "План",
+    "cash": 555.3,
+    "plan": 224.4,
+    "hist": [
+     224.4,
+     224.4,
+     224.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00010",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 25.5,
+    "out": 25.5,
+    "stock": 25.5,
+    "price": 1.016,
+    "forecast": 181.8,
+    "demand": 181.8,
+    "margin": 0.956,
+    "limit": "План",
+    "cash": 169.5,
+    "plan": 25.5,
+    "hist": [
+     25.5,
+     25.5,
+     25.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00016",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 40.8,
+    "out": 40.8,
+    "stock": 40.8,
+    "price": 1.049,
+    "forecast": 68.4,
+    "demand": 68.4,
+    "margin": 0.989,
+    "limit": "План",
+    "cash": 199.2,
+    "plan": 40.8,
+    "hist": [
+     40.8,
+     40.8,
+     40.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00022",
+    "good": "grain",
+    "status": "idle",
+    "prov": "province-2",
+    "cap": 137.7,
+    "out": 0,
+    "stock": 0,
+    "price": 1.046,
+    "forecast": 99.8,
+    "demand": 0.0,
+    "margin": 0.986,
+    "limit": "Готовые запасы",
+    "cash": 395.4,
+    "plan": 0,
+    "hist": [
+     137.7,
+     23.9,
+     113.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00027",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 10.2,
+    "out": 1.1,
+    "stock": 1.1,
+    "price": 1.049,
+    "forecast": 7.9,
+    "demand": 0.0,
+    "margin": 0.989,
+    "limit": "План",
+    "cash": 140.3,
+    "plan": 1.1,
+    "hist": [
+     10.2,
+     3.4,
+     6.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00031",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 35.7,
+    "out": 22.6,
+    "stock": 22.6,
+    "price": 1.04,
+    "forecast": 22.6,
+    "demand": 0.0,
+    "margin": 0.98,
+    "limit": "План",
+    "cash": 190.0,
+    "plan": 22.6,
+    "hist": [
+     0,
+     32.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00034",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 35.7,
+    "out": 15.9,
+    "stock": 15.9,
+    "price": 1.068,
+    "forecast": 15.9,
+    "demand": 0.0,
+    "margin": 1.008,
+    "limit": "План",
+    "cash": 190.4,
+    "plan": 15.9,
+    "hist": [
+     4.0,
+     19.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00038",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 71.4,
+    "out": 71.4,
+    "stock": 71.4,
+    "price": 1.011,
+    "forecast": 374.5,
+    "demand": 374.5,
+    "margin": 0.951,
+    "limit": "План",
+    "cash": 258.5,
+    "plan": 71.4,
+    "hist": [
+     71.4,
+     71.4,
+     71.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00041",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p0",
+    "cap": 214.2,
+    "out": 185.6,
+    "stock": 185.6,
+    "price": 0.988,
+    "forecast": 185.6,
+    "demand": 185.6,
+    "margin": 0.928,
+    "limit": "План",
+    "cash": 537.3,
+    "plan": 185.6,
+    "hist": [
+     28.5,
+     80.7,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00044",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p1",
+    "cap": 15.3,
+    "out": 15.3,
+    "stock": 15.3,
+    "price": 0.994,
+    "forecast": 246.8,
+    "demand": 246.8,
+    "margin": 0.934,
+    "limit": "План",
+    "cash": 149.7,
+    "plan": 15.3,
+    "hist": [
+     0.0,
+     15.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00047",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 61.2,
+    "out": 61.2,
+    "stock": 61.2,
+    "price": 0.997,
+    "forecast": 246.8,
+    "demand": 246.8,
+    "margin": 0.937,
+    "limit": "План",
+    "cash": 238.7,
+    "plan": 61.2,
+    "hist": [
+     0.0,
+     66.8,
+     61.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00050",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p3",
+    "cap": 30.6,
+    "out": 30.6,
+    "stock": 30.6,
+    "price": 0.991,
+    "forecast": 210.2,
+    "demand": 210.2,
+    "margin": 0.931,
+    "limit": "План",
+    "cash": 179.4,
+    "plan": 30.6,
+    "hist": [
+     0.0,
+     26.8,
+     24.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00053",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 102.0,
+    "out": 102.0,
+    "stock": 102.0,
+    "price": 0.983,
+    "forecast": 185.6,
+    "demand": 185.6,
+    "margin": 0.923,
+    "limit": "План",
+    "cash": 317.9,
+    "plan": 102.0,
+    "hist": [
+     0.0,
+     75.4,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00055",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 51.0,
+    "out": 51.0,
+    "stock": 51.0,
+    "price": 1.033,
+    "forecast": 382.3,
+    "demand": 382.3,
+    "margin": 0.973,
+    "limit": "План",
+    "cash": 218.9,
+    "plan": 51.0,
+    "hist": [
+     51.0,
+     51.0,
+     51.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00058",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 36,
+    "out": 36,
+    "stock": 36,
+    "price": 3.648,
+    "forecast": 2218.1,
+    "demand": 2218.1,
+    "margin": 3.187,
+    "limit": "План",
+    "cash": 213.7,
+    "plan": 36,
+    "hist": [
+     36,
+     36,
+     36
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00060",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 10.2,
+    "out": 10.2,
+    "stock": 10.2,
+    "price": 1.013,
+    "forecast": 267.0,
+    "demand": 267.0,
+    "margin": 0.953,
+    "limit": "План",
+    "cash": 139.8,
+    "plan": 10.2,
+    "hist": [
+     10.2,
+     10.2,
+     10.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00063",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 25.5,
+    "out": 25.5,
+    "stock": 25.5,
+    "price": 1.013,
+    "forecast": 255.8,
+    "demand": 255.8,
+    "margin": 0.953,
+    "limit": "План",
+    "cash": 169.5,
+    "plan": 25.5,
+    "hist": [
+     0,
+     25.5,
+     25.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00066",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 30,
+    "out": 30,
+    "stock": 30,
+    "price": 3.676,
+    "forecast": 2061.6,
+    "demand": 2061.6,
+    "margin": 3.213,
+    "limit": "План",
+    "cash": 198.1,
+    "plan": 30,
+    "hist": [
+     30,
+     30,
+     30
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00068",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 137.7,
+    "out": 137.7,
+    "stock": 137.7,
+    "price": 1.016,
+    "forecast": 256.8,
+    "demand": 256.8,
+    "margin": 0.956,
+    "limit": "План",
+    "cash": 387.1,
+    "plan": 137.7,
+    "hist": [
+     40.6,
+     76.3,
+     91.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00071",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 6,
+    "out": 6,
+    "stock": 6,
+    "price": 3.614,
+    "forecast": 2124.7,
+    "demand": 2124.7,
+    "margin": 3.157,
+    "limit": "План",
+    "cash": 135.6,
+    "plan": 6,
+    "hist": [
+     6,
+     6,
+     6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00073",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 137.7,
+    "out": 64.0,
+    "stock": 64.0,
+    "price": 1.055,
+    "forecast": 64.0,
+    "demand": 64.0,
+    "margin": 0.995,
+    "limit": "План",
+    "cash": 391.6,
+    "plan": 64.0,
+    "hist": [
+     69.7,
+     2.4,
+     64.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00076",
+    "good": "grain",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 438.6,
+    "out": 344.5,
+    "stock": 344.5,
+    "price": 1.039,
+    "forecast": 344.5,
+    "demand": 344.5,
+    "margin": 0.979,
+    "limit": "План",
+    "cash": 976.5,
+    "plan": 344.5,
+    "hist": [
+     120.8,
+     143.7,
+     35.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00080",
+    "good": "grain",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 147.9,
+    "out": 82.6,
+    "stock": 82.6,
+    "price": 1.053,
+    "forecast": 82.6,
+    "demand": 82.6,
+    "margin": 0.993,
+    "limit": "План",
+    "cash": 410.8,
+    "plan": 82.6,
+    "hist": [
+     54.8,
+     9.6,
+     26.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00084",
+    "good": "flour",
+    "status": "idle",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 0,
+    "stock": 0,
+    "price": 1.997,
+    "forecast": 479.8,
+    "demand": 479.8,
+    "margin": 0.735,
+    "limit": "Сырьё: grain",
+    "cash": 1295.1,
+    "plan": 202.6,
+    "hist": [
+     202.6,
+     0,
+     202.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00085",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 202.6,
+    "stock": 202.6,
+    "price": 2.421,
+    "forecast": 1073.9,
+    "demand": 1073.9,
+    "margin": 0.412,
+    "limit": "План",
+    "cash": 1123.4,
+    "plan": 202.6,
+    "hist": [
+     202.6,
+     202.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00090",
+    "good": "flour",
+    "status": "idle",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.011,
+    "forecast": 537.9,
+    "demand": 537.9,
+    "margin": 0.732,
+    "limit": "Сырьё: grain",
+    "cash": 1294.9,
+    "plan": 202.6,
+    "hist": [
+     0,
+     135.1,
+     202.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00091",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 282.4,
+    "out": 258.8,
+    "stock": 258.8,
+    "price": 2.421,
+    "forecast": 1073.9,
+    "demand": 1073.9,
+    "margin": 0.4,
+    "limit": "Сырьё: flour",
+    "cash": 819.4,
+    "plan": 282.4,
+    "hist": [
+     0,
+     282.4,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00096",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 53.8,
+    "stock": 53.8,
+    "price": 2.07,
+    "forecast": 54.6,
+    "demand": 0.0,
+    "margin": 0.835,
+    "limit": "План",
+    "cash": 528.3,
+    "plan": 53.8,
+    "hist": [
+     81.8,
+     81.8,
+     0.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00097",
+    "good": "bread",
+    "status": "idle",
+    "prov": "arven-p1",
+    "cap": 204.0,
+    "out": 0,
+    "stock": 0,
+    "price": 2.394,
+    "forecast": 1073.9,
+    "demand": 1073.9,
+    "margin": 0.364,
+    "limit": "Сырьё: flour",
+    "cash": 701.8,
+    "plan": 204.0,
+    "hist": [
+     0,
+     204.0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00102",
+    "good": "flour",
+    "status": "idle",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.086,
+    "forecast": 27.0,
+    "demand": 0.0,
+    "margin": 0.858,
+    "limit": "Готовые запасы",
+    "cash": 589.3,
+    "plan": 0,
+    "hist": [
+     81.0,
+     0,
+     54.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00103",
+    "good": "bread",
+    "status": "idle",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.394,
+    "forecast": 1073.9,
+    "demand": 1073.9,
+    "margin": 0.369,
+    "limit": "Сырьё: flour",
+    "cash": 659.6,
+    "plan": 81.8,
+    "hist": [
+     0,
+     72.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00108",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 25.4,
+    "stock": 25.4,
+    "price": 2.054,
+    "forecast": 26.9,
+    "demand": 26.9,
+    "margin": 0.712,
+    "limit": "План",
+    "cash": 231.1,
+    "plan": 25.4,
+    "hist": [
+     0,
+     16.9,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00109",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 25.4,
+    "stock": 25.4,
+    "price": 2.315,
+    "forecast": 565.1,
+    "demand": 565.1,
+    "margin": 0.201,
+    "limit": "План",
+    "cash": 242.6,
+    "plan": 25.4,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00112",
+    "good": "flour",
+    "status": "idle",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.046,
+    "forecast": 68.7,
+    "demand": 68.7,
+    "margin": 0.738,
+    "limit": "Сырьё: grain",
+    "cash": 212.7,
+    "plan": 16.3,
+    "hist": [
+     0,
+     10.8,
+     13.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00113",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 9.0,
+    "stock": 9.0,
+    "price": 2.411,
+    "forecast": 9.0,
+    "demand": 0.0,
+    "margin": 0.357,
+    "limit": "Сырьё: flour",
+    "cash": 212.3,
+    "plan": 9.0,
+    "hist": [
+     10.8,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00116",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 72.6,
+    "stock": 72.6,
+    "price": 2.061,
+    "forecast": 448.3,
+    "demand": 448.3,
+    "margin": 0.77,
+    "limit": "Сырьё: grain",
+    "cash": 476.4,
+    "plan": 79.4,
+    "hist": [
+     61.7,
+     79.4,
+     79.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00117",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 79.4,
+    "stock": 79.4,
+    "price": 2.319,
+    "forecast": 3583.6,
+    "demand": 3583.6,
+    "margin": 0.264,
+    "limit": "Сырьё: wood",
+    "cash": 502.9,
+    "plan": 79.4,
+    "hist": [
+     0,
+     0,
+     79.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00120",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 44.6,
+    "stock": 44.6,
+    "price": 1.953,
+    "forecast": 676.7,
+    "demand": 676.7,
+    "margin": 0.63,
+    "limit": "План",
+    "cash": 319.5,
+    "plan": 44.6,
+    "hist": [
+     44.6,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00121",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.408,
+    "forecast": 8.3,
+    "demand": 0.0,
+    "margin": 0.305,
+    "limit": "Сырьё: flour",
+    "cash": 414.6,
+    "plan": 8.3,
+    "hist": [
+     0,
+     24.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00125",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 23.6,
+    "stock": 23.6,
+    "price": 2.04,
+    "forecast": 291.9,
+    "demand": 291.9,
+    "margin": 0.762,
+    "limit": "План",
+    "cash": 221.0,
+    "plan": 23.6,
+    "hist": [
+     23.6,
+     14.2,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00126",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 14.4,
+    "stock": 14.4,
+    "price": 2.441,
+    "forecast": 14.4,
+    "demand": 0.0,
+    "margin": 0.356,
+    "limit": "План",
+    "cash": 251.0,
+    "plan": 14.4,
+    "hist": [
+     19.7,
+     23.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00131",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 29.3,
+    "stock": 29.3,
+    "price": 2.044,
+    "forecast": 448.3,
+    "demand": 448.3,
+    "margin": 0.746,
+    "limit": "Сырьё: grain",
+    "cash": 247.1,
+    "plan": 29.3,
+    "hist": [
+     0,
+     19.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00132",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 29.3,
+    "stock": 29.3,
+    "price": 2.314,
+    "forecast": 1085.1,
+    "demand": 1085.1,
+    "margin": 0.245,
+    "limit": "Сырьё: wood",
+    "cash": 263.2,
+    "plan": 29.3,
+    "hist": [
+     0,
+     0,
+     29.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00136",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 38.1,
+    "stock": 38.1,
+    "price": 1.996,
+    "forecast": 676.7,
+    "demand": 676.7,
+    "margin": 0.725,
+    "limit": "Сырьё: grain",
+    "cash": 290.4,
+    "plan": 38.1,
+    "hist": [
+     38.1,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00137",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 25.4,
+    "stock": 25.4,
+    "price": 2.439,
+    "forecast": 25.4,
+    "demand": 0.0,
+    "margin": 0.361,
+    "limit": "План",
+    "cash": 327.8,
+    "plan": 25.4,
+    "hist": [
+     38.1,
+     38.1,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00142",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 55.4,
+    "out": 55.4,
+    "stock": 55.4,
+    "price": 2.046,
+    "forecast": 291.9,
+    "demand": 291.9,
+    "margin": 0.775,
+    "limit": "Сырьё: grain",
+    "cash": 366.8,
+    "plan": 55.4,
+    "hist": [
+     36.9,
+     29.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00143",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 62.3,
+    "out": 62.3,
+    "stock": 62.3,
+    "price": 2.325,
+    "forecast": 1110.8,
+    "demand": 1110.8,
+    "margin": 0.256,
+    "limit": "Сырьё: wood",
+    "cash": 363.0,
+    "plan": 62.3,
+    "hist": [
+     0,
+     0,
+     62.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00147",
+    "good": "flour",
+    "status": "idle",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 0,
+    "stock": 0,
+    "price": 2.079,
+    "forecast": 9.4,
+    "demand": 0.0,
+    "margin": 0.766,
+    "limit": "Сырьё: grain",
+    "cash": 415.9,
+    "plan": 9.4,
+    "hist": [
+     11.8,
+     3.9,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00148",
+    "good": "bread",
+    "status": "idle",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 0,
+    "stock": 0,
+    "price": 2.367,
+    "forecast": 922.7,
+    "demand": 922.7,
+    "margin": 0.37,
+    "limit": "Сырьё: flour",
+    "cash": 457.3,
+    "plan": 51.0,
+    "hist": [
+     0,
+     34.0,
+     51.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00151",
+    "good": "flour",
+    "status": "idle",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 0,
+    "stock": 0,
+    "price": 1.987,
+    "forecast": 112.2,
+    "demand": 112.2,
+    "margin": 0.629,
+    "limit": "Сырьё: grain",
+    "cash": 345.5,
+    "plan": 39.6,
+    "hist": [
+     0,
+     23.7,
+     39.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00152",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 33.0,
+    "stock": 33.0,
+    "price": 2.406,
+    "forecast": 33.0,
+    "demand": 33.0,
+    "margin": 0.399,
+    "limit": "План",
+    "cash": 324.8,
+    "plan": 33.0,
+    "hist": [
+     0,
+     35.2,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00155",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p2",
+    "cap": 45.5,
+    "out": 45.5,
+    "stock": 45.5,
+    "price": 2.047,
+    "forecast": 85.8,
+    "demand": 85.8,
+    "margin": 0.761,
+    "limit": "Сырьё: grain",
+    "cash": 319.3,
+    "plan": 45.5,
+    "hist": [
+     45.5,
+     45.5,
+     45.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00156",
+    "good": "bread",
+    "status": "idle",
+    "prov": "kasseria-p2",
+    "cap": 120.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.446,
+    "forecast": 80.4,
+    "demand": 0.0,
+    "margin": 0.42,
+    "limit": "Сырьё: flour",
+    "cash": 411.3,
+    "plan": 80.4,
+    "hist": [
+     120.6,
+     120.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00160",
+    "good": "flour",
+    "status": "idle",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 0,
+    "stock": 0,
+    "price": 1.984,
+    "forecast": 706.7,
+    "demand": 706.7,
+    "margin": 0.678,
+    "limit": "Сырьё: grain",
+    "cash": 396.5,
+    "plan": 47.7,
+    "hist": [
+     47.7,
+     0,
+     47.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00161",
+    "good": "bread",
+    "status": "idle",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 0,
+    "stock": 0,
+    "price": 2.394,
+    "forecast": 31.8,
+    "demand": 5.6,
+    "margin": 0.4,
+    "limit": "Готовые запасы",
+    "cash": 440.3,
+    "plan": 0,
+    "hist": [
+     47.7,
+     47.7,
+     47.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00166",
+    "good": "flour",
+    "status": "idle",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 0,
+    "stock": 0,
+    "price": 2.036,
+    "forecast": 22.6,
+    "demand": 20.2,
+    "margin": 0.772,
+    "limit": "Готовые запасы",
+    "cash": 757.3,
+    "plan": 0,
+    "hist": [
+     67.9,
+     0,
+     53.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00167",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 0,
+    "stock": 0,
+    "price": 2.244,
+    "forecast": 3809.5,
+    "demand": 3809.5,
+    "margin": 0.298,
+    "limit": "Сырьё: flour",
+    "cash": 846.8,
+    "plan": 109.9,
+    "hist": [
+     0,
+     0,
+     101.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00170",
+    "good": "flour",
+    "status": "idle",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 0,
+    "stock": 0,
+    "price": 2.027,
+    "forecast": 3.7,
+    "demand": 0.0,
+    "margin": 0.78,
+    "limit": "Готовые запасы",
+    "cash": 310.3,
+    "plan": 0,
+    "hist": [
+     11.1,
+     0,
+     9.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00171",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 0,
+    "stock": 0,
+    "price": 2.491,
+    "forecast": 33.4,
+    "demand": 0.0,
+    "margin": 0.525,
+    "limit": "Сырьё: flour",
+    "cash": 340.8,
+    "plan": 33.4,
+    "hist": [
+     33.4,
+     33.4,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00175",
+    "good": "flour",
+    "status": "idle",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 0,
+    "stock": 0,
+    "price": 1.931,
+    "forecast": 949.7,
+    "demand": 949.7,
+    "margin": 0.683,
+    "limit": "Сырьё: grain",
+    "cash": 465.8,
+    "plan": 59.6,
+    "hist": [
+     59.6,
+     0,
+     30.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00176",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.382,
+    "forecast": 937.5,
+    "demand": 937.5,
+    "margin": 0.432,
+    "limit": "Сырьё: flour",
+    "cash": 513.6,
+    "plan": 59.6,
+    "hist": [
+     0,
+     59.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00180",
+    "good": "flour",
+    "status": "idle",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 0,
+    "stock": 0,
+    "price": 1.967,
+    "forecast": 184.0,
+    "demand": 184.0,
+    "margin": 0.73,
+    "limit": "Сырьё: grain",
+    "cash": 419.0,
+    "plan": 52.5,
+    "hist": [
+     22.4,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00181",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 0,
+    "stock": 0,
+    "price": 2.42,
+    "forecast": 374.1,
+    "demand": 374.1,
+    "margin": 0.436,
+    "limit": "Сырьё: flour",
+    "cash": 466.9,
+    "plan": 52.5,
+    "hist": [
+     0,
+     50.2,
+     52.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00184",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 45.3,
+    "stock": 45.3,
+    "price": 1.979,
+    "forecast": 183.7,
+    "demand": 183.7,
+    "margin": 0.721,
+    "limit": "План",
+    "cash": 320.9,
+    "plan": 45.3,
+    "hist": [
+     21.6,
+     0,
+     19.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00185",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.304,
+    "forecast": 1549.2,
+    "demand": 1549.2,
+    "margin": 0.32,
+    "limit": "Сырьё: flour",
+    "cash": 418.3,
+    "plan": 45.3,
+    "hist": [
+     21.2,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00187",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 31.6,
+    "stock": 31.6,
+    "price": 2.11,
+    "forecast": 31.6,
+    "demand": 0.0,
+    "margin": 0.79,
+    "limit": "План",
+    "cash": 407.8,
+    "plan": 31.6,
+    "hist": [
+     0,
+     37.9,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00188",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 56.8,
+    "stock": 56.8,
+    "price": 2.406,
+    "forecast": 462.2,
+    "demand": 462.2,
+    "margin": 0.359,
+    "limit": "План",
+    "cash": 396.6,
+    "plan": 56.8,
+    "hist": [
+     0,
+     31.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00193",
+    "good": "flour",
+    "status": "idle",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.055,
+    "forecast": 313.7,
+    "demand": 313.7,
+    "margin": 0.791,
+    "limit": "Сырьё: grain",
+    "cash": 469.1,
+    "plan": 61.3,
+    "hist": [
+     40.8,
+     61.3,
+     61.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00194",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p1",
+    "cap": 163.0,
+    "out": 0,
+    "stock": 0,
+    "price": 2.305,
+    "forecast": 3332.9,
+    "demand": 3332.9,
+    "margin": 0.276,
+    "limit": "Сырьё: flour",
+    "cash": 518.0,
+    "plan": 163.0,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00197",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 37.8,
+    "stock": 37.8,
+    "price": 2.087,
+    "forecast": 198.2,
+    "demand": 198.2,
+    "margin": 0.806,
+    "limit": "План",
+    "cash": 285.9,
+    "plan": 37.8,
+    "hist": [
+     11.2,
+     14.1,
+     14.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00198",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.439,
+    "forecast": 25.2,
+    "demand": 0.0,
+    "margin": 0.368,
+    "limit": "Сырьё: flour",
+    "cash": 371.3,
+    "plan": 25.2,
+    "hist": [
+     37.8,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00203",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 80.8,
+    "stock": 80.8,
+    "price": 2.089,
+    "forecast": 183.3,
+    "demand": 183.3,
+    "margin": 0.799,
+    "limit": "План",
+    "cash": 483.8,
+    "plan": 80.8,
+    "hist": [
+     0,
+     53.9,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00204",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.432,
+    "forecast": 53.9,
+    "demand": 0.0,
+    "margin": 0.364,
+    "limit": "Готовые запасы",
+    "cash": 663.3,
+    "plan": 0,
+    "hist": [
+     80.8,
+     0,
+     53.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00209",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 74.6,
+    "out": 74.6,
+    "stock": 74.6,
+    "price": 2.027,
+    "forecast": 669.5,
+    "demand": 669.5,
+    "margin": 0.754,
+    "limit": "План",
+    "cash": 442.7,
+    "plan": 74.6,
+    "hist": [
+     74.6,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00210",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 190.2,
+    "out": 99.8,
+    "stock": 99.8,
+    "price": 2.344,
+    "forecast": 2994.9,
+    "demand": 2994.9,
+    "margin": 0.276,
+    "limit": "План",
+    "cash": 372.4,
+    "plan": 99.8,
+    "hist": [
+     107.8,
+     0,
+     190.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00213",
+    "good": "flour",
+    "status": "idle",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 0,
+    "stock": 0,
+    "price": 2.067,
+    "forecast": 99.7,
+    "demand": 0.0,
+    "margin": 0.776,
+    "limit": "Готовые запасы",
+    "cash": 698.5,
+    "plan": 0,
+    "hist": [
+     99.7,
+     99.7,
+     99.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00214",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 99.7,
+    "stock": 99.7,
+    "price": 2.312,
+    "forecast": 2849.2,
+    "demand": 2849.2,
+    "margin": 0.302,
+    "limit": "План",
+    "cash": 609.5,
+    "plan": 99.7,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00219",
+    "good": "flour",
+    "status": "idle",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 0,
+    "stock": 0,
+    "price": 2.063,
+    "forecast": 51.8,
+    "demand": 0.0,
+    "margin": 0.73,
+    "limit": "Готовые запасы",
+    "cash": 691.7,
+    "plan": 0,
+    "hist": [
+     0,
+     55.8,
+     99.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00220",
+    "good": "bread",
+    "status": "idle",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 0,
+    "stock": 0,
+    "price": 2.391,
+    "forecast": 55.4,
+    "demand": 0.0,
+    "margin": 0.376,
+    "limit": "Сырьё: flour",
+    "cash": 778.5,
+    "plan": 55.4,
+    "hist": [
+     0,
+     66.5,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00225",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.001,
+    "forecast": 595.0,
+    "demand": 595.0,
+    "margin": 0.695,
+    "limit": "План",
+    "cash": 429.3,
+    "plan": 68.8,
+    "hist": [
+     68.8,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00226",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.429,
+    "forecast": 524.5,
+    "demand": 524.5,
+    "margin": 0.418,
+    "limit": "Сырьё: wood",
+    "cash": 458.6,
+    "plan": 68.8,
+    "hist": [
+     0,
+     68.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00231",
+    "good": "flour",
+    "status": "idle",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 0,
+    "stock": 0,
+    "price": 1.99,
+    "forecast": 748.0,
+    "demand": 748.0,
+    "margin": 0.672,
+    "limit": "Сырьё: grain",
+    "cash": 519.2,
+    "plan": 68.8,
+    "hist": [
+     45.6,
+     0,
+     18.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00232",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.293,
+    "forecast": 2867.9,
+    "demand": 2867.9,
+    "margin": 0.306,
+    "limit": "План",
+    "cash": 461.0,
+    "plan": 68.8,
+    "hist": [
+     38.2,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00237",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 82.1,
+    "out": 82.1,
+    "stock": 82.1,
+    "price": 2.394,
+    "forecast": 1073.9,
+    "demand": 1073.9,
+    "margin": 0.364,
+    "limit": "Сырьё: flour",
+    "cash": 155.3,
+    "plan": 82.1,
+    "hist": [
+     82.1,
+     82.1,
+     0
+    ],
+    "opened": 3
+   },
+   {
+    "id": "firm-00241",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 27.2,
+    "stock": 27.2,
+    "price": 2.42,
+    "forecast": 27.2,
+    "demand": 0.0,
+    "margin": 0.38,
+    "limit": "План",
+    "cash": 154.5,
+    "plan": 27.2,
+    "hist": [
+     0,
+     20.4,
+     0
+    ],
+    "opened": 10
+   },
+   {
+    "id": "firm-00242",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 305.1,
+    "out": 0,
+    "stock": 0,
+    "price": 2.432,
+    "forecast": 203.4,
+    "demand": 0.0,
+    "margin": 0.355,
+    "limit": "План",
+    "cash": 1072.8,
+    "plan": 0.0,
+    "hist": [
+     305.1,
+     0,
+     203.4
+    ],
+    "opened": 16
+   },
+   {
+    "id": "firm-00243",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 161.9,
+    "out": 0,
+    "stock": 0,
+    "price": 2.432,
+    "forecast": 108.0,
+    "demand": 0.0,
+    "margin": 0.355,
+    "limit": "План",
+    "cash": 575.8,
+    "plan": 0.0,
+    "hist": [
+     161.9,
+     0,
+     108.0
+    ],
+    "opened": 17
+   },
+   {
+    "id": "firm-00245",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 467.4,
+    "out": 122.7,
+    "stock": 122.7,
+    "price": 2.283,
+    "forecast": 3861.2,
+    "demand": 3861.2,
+    "margin": 0.221,
+    "limit": "Сырьё: flour",
+    "cash": 602.4,
+    "plan": 467.4,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 22
+   }
+  ]
+ },
+ "36": {
+  "firms_by_good": {
+   "grain": {
+    "active|План": 20,
+    "idle|Готовые запасы": 1
+   },
+   "wood": {
+    "idle|Готовые запасы": 7,
+    "active|План": 11
+   },
+   "ore": {
+    "idle|Нет обеспеченного спроса": 19
+   },
+   "fish": {
+    "active|План": 4
+   },
+   "flax": {
+    "active|План": 20,
+    "active|Природный ресурс": 1
+   },
+   "flour": {
+    "idle|Готовые запасы": 15,
+    "active|План": 13,
+    "active|Сырьё: grain": 2
+   },
+   "bread": {
+    "active|Сырьё: flour": 4,
+    "idle|Готовые запасы": 19,
+    "active|План": 10,
+    "idle|Нет обеспеченного спроса": 4,
+    "idle|Сырьё: flour": 1
+   },
+   "planks": {
+    "active|План": 22
+   },
+   "iron": {
+    "idle|Готовые запасы": 15,
+    "idle|Нет обеспеченного спроса": 8
+   },
+   "tools": {
+    "active|План": 10,
+    "idle|Готовые запасы": 13,
+    "active|Сырьё: wood": 1
+   },
+   "cloth": {
+    "idle|Сырьё: flax": 17,
+    "idle|Нет обеспеченного спроса": 9,
+    "active|Сырьё: flax": 2
+   }
+  },
+  "capacity_vs_output": {
+   "grain": {
+    "capacity": 2636.7,
+    "output": 1127.4
+   },
+   "flour": {
+    "capacity": 2013.8,
+    "output": 668.5
+   },
+   "bread": {
+    "capacity": 5890.7,
+    "output": 787.9
+   },
+   "wood": {
+    "capacity": 1884,
+    "output": 254.9
+   },
+   "planks": {
+    "capacity": 116.2,
+    "output": 112.2
+   },
+   "ore": {
+    "capacity": 942,
+    "output": 0
+   },
+   "iron": {
+    "capacity": 1539.9,
+    "output": 0
+   },
+   "tools": {
+    "capacity": 141.2,
+    "output": 31.9
+   },
+   "flax": {
+    "capacity": 465.3,
+    "output": 465.3
+   },
+   "cloth": {
+    "capacity": 2281.0,
+    "output": 332.4
+   },
+   "fish": {
+    "capacity": 180,
+    "output": 180
+   }
+  },
+  "food_totals": {
+   "bread": {
+    "need": 1678.2,
+    "consumed": 1403.2,
+    "deficit": 275.0,
+    "unfunded": 0.0,
+    "funded_unfilled": 275.0,
+    "accounting_unknown": 0.0,
+    "root_unknown": 275.0
+   },
+   "fish": {
+    "need": 335.6,
+    "consumed": 28.0,
+    "deficit": 307.6,
+    "unfunded": 0.0,
+    "funded_unfilled": 307.6,
+    "accounting_unknown": 0.0,
+    "root_unknown": 307.6
+   }
+  },
+  "household_gold_per_capita_quantiles": {
+   "10": 1.205,
+   "25": 1.229,
+   "50": 1.264,
+   "75": 1.328,
+   "90": 1.33
+  },
+  "household_min_max": [
+   1.1704,
+   1.3467
+  ],
+  "basic_unfilled_reasons": {
+   "bread|offer_exhausted": 25,
+   "fish|offer_exhausted": 152
+  },
+  "basic_unfilled_quantity": {
+   "bread": 275.0,
+   "fish": 307.6
+  },
+  "input_unfilled_reasons": {
+   "flour|landed_price_above_limit": 3,
+   "wood|landed_price_above_limit": 1,
+   "flax|offer_exhausted": 18
+  },
+  "unsold_offers": {
+   "planks": 43.5,
+   "iron": 1918.9,
+   "ore": 7287.1,
+   "wood": 2143.6,
+   "flour": 670.4,
+   "grain": 696.7,
+   "tools": 17.3
+  },
+  "stocks": {
+   "grain": 1824.1,
+   "flour": 1425.3,
+   "bread": 787.9,
+   "wood": 2511.3,
+   "planks": 155.7,
+   "ore": 7287.1,
+   "iron": 1918.9,
+   "tools": 49.2,
+   "flax": 465.3,
+   "cloth": 332.4,
+   "fish": 180.0
+  },
+  "projects": [],
+  "owner_cash": {
+   "merchant:arven": 63580.8,
+   "merchant:kasseria": 19324.5,
+   "merchant:noweria": 35857.0,
+   "merchant:septaria": 33988.2,
+   "merchant:valtoria": 30886.0,
+   "merchant:velaria": 40155.0,
+   "private:arven": 63521.0,
+   "private:kasseria": 20847.4,
+   "private:noweria": 34440.0,
+   "private:septaria": 31210.0,
+   "private:valtoria": 35742.5,
+   "private:velaria": 38954.8,
+   "treasury:arven": 49447.6,
+   "treasury:kasseria": 14818.8,
+   "treasury:noweria": 24991.1,
+   "treasury:septaria": 24773.5,
+   "treasury:valtoria": 18567.3,
+   "treasury:velaria": 23757.7
+  },
+  "closed_firms": 0,
+  "bought_by_buyer": {
+   "cloth": {
+    "household": 35.2,
+    "private/Личное потребление собственника": 226.5,
+    "merchant/Личное потребление собственника": 36.0
+   },
+   "fish": {
+    "household": 28.0,
+    "private/Личное потребление собственника": 152.0
+   },
+   "flour": {
+    "enterprise/Сырьё": 594.6
+   },
+   "bread": {
+    "household": 1403.2,
+    "merchant/Личное потребление собственника": 250.6,
+    "private/Личное потребление собственника": 144.3
+   },
+   "grain": {
+    "enterprise/Сырьё": 802.2
+   }
+  },
+  "owner_consumed": {
+   "cloth": 262.5,
+   "fish": 152.0,
+   "bread": 394.9
+  },
+  "owner_budget": 22573.4,
+  "owner_spent": 2829.2,
+  "household_consumed": {
+   "cloth": 297.7,
+   "fish": 180.0,
+   "bread": 1798.1,
+   "planks": 67.1,
+   "tools": 42.0
+  },
+  "firms": [
+   {
+    "id": "firm-00001",
+    "good": "grain",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 683.4,
+    "out": 17.6,
+    "stock": 469.5,
+    "price": 1.035,
+    "forecast": 505.8,
+    "demand": 195.2,
+    "margin": 0.975,
+    "limit": "План",
+    "cash": 1458.6,
+    "plan": 17.6,
+    "hist": [
+     650.6,
+     315.5,
+     231.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00004",
+    "good": "fish",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 108,
+    "out": 108,
+    "stock": 108,
+    "price": 4.852,
+    "forecast": 1406.0,
+    "demand": 1406.0,
+    "margin": 4.271,
+    "limit": "План",
+    "cash": 401.2,
+    "plan": 108,
+    "hist": [
+     108,
+     108,
+     108
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00006",
+    "good": "grain",
+    "status": "idle",
+    "prov": "arven-p1",
+    "cap": 224.4,
+    "out": 0,
+    "stock": 98.2,
+    "price": 1.007,
+    "forecast": 98.2,
+    "demand": 98.2,
+    "margin": 0.947,
+    "limit": "Готовые запасы",
+    "cash": 562.9,
+    "plan": 0,
+    "hist": [
+     98.2,
+     98.2,
+     98.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00010",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 25.5,
+    "out": 25.5,
+    "stock": 51.0,
+    "price": 1.106,
+    "forecast": 54.6,
+    "demand": 54.6,
+    "margin": 1.046,
+    "limit": "План",
+    "cash": 167.9,
+    "plan": 25.5,
+    "hist": [
+     25.5,
+     25.5,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00016",
+    "good": "grain",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 40.8,
+    "out": 40.8,
+    "stock": 40.8,
+    "price": 1.126,
+    "forecast": 99.5,
+    "demand": 99.5,
+    "margin": 1.066,
+    "limit": "План",
+    "cash": 199.2,
+    "plan": 40.8,
+    "hist": [
+     40.8,
+     40.8,
+     40.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00022",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 137.7,
+    "out": 129.2,
+    "stock": 167.8,
+    "price": 1.044,
+    "forecast": 133.4,
+    "demand": 133.4,
+    "margin": 0.984,
+    "limit": "План",
+    "cash": 385.3,
+    "plan": 129.2,
+    "hist": [
+     72.3,
+     137.7,
+     99.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00027",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 10.2,
+    "out": 10.2,
+    "stock": 10.2,
+    "price": 1.002,
+    "forecast": 274.3,
+    "demand": 274.3,
+    "margin": 0.942,
+    "limit": "План",
+    "cash": 139.8,
+    "plan": 10.2,
+    "hist": [
+     0.9,
+     10.2,
+     10.2
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00031",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 35.7,
+    "out": 35.7,
+    "stock": 35.7,
+    "price": 1.022,
+    "forecast": 260.0,
+    "demand": 260.0,
+    "margin": 0.962,
+    "limit": "План",
+    "cash": 189.3,
+    "plan": 35.7,
+    "hist": [
+     34.7,
+     35.2,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00034",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-6",
+    "cap": 35.7,
+    "out": 35.7,
+    "stock": 35.7,
+    "price": 1.03,
+    "forecast": 260.0,
+    "demand": 260.0,
+    "margin": 0.97,
+    "limit": "План",
+    "cash": 189.3,
+    "plan": 35.7,
+    "hist": [
+     35.7,
+     35.7,
+     35.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00038",
+    "good": "grain",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 71.4,
+    "out": 71.4,
+    "stock": 71.4,
+    "price": 1.016,
+    "forecast": 263.6,
+    "demand": 263.6,
+    "margin": 0.956,
+    "limit": "План",
+    "cash": 258.5,
+    "plan": 71.4,
+    "hist": [
+     66.4,
+     71.4,
+     71.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00041",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p0",
+    "cap": 214.2,
+    "out": 159.4,
+    "stock": 159.4,
+    "price": 1.001,
+    "forecast": 159.4,
+    "demand": 159.4,
+    "margin": 0.941,
+    "limit": "План",
+    "cash": 538.8,
+    "plan": 159.4,
+    "hist": [
+     88.5,
+     214.2,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00044",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p1",
+    "cap": 15.3,
+    "out": 15.3,
+    "stock": 15.3,
+    "price": 1.007,
+    "forecast": 163.0,
+    "demand": 163.0,
+    "margin": 0.947,
+    "limit": "План",
+    "cash": 149.7,
+    "plan": 15.3,
+    "hist": [
+     0,
+     11.4,
+     15.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00047",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 61.2,
+    "out": 61.2,
+    "stock": 61.2,
+    "price": 1.01,
+    "forecast": 163.0,
+    "demand": 163.0,
+    "margin": 0.95,
+    "limit": "План",
+    "cash": 238.7,
+    "plan": 61.2,
+    "hist": [
+     61.2,
+     61.2,
+     19.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00050",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p3",
+    "cap": 30.6,
+    "out": 30.6,
+    "stock": 30.6,
+    "price": 1.004,
+    "forecast": 159.4,
+    "demand": 159.4,
+    "margin": 0.944,
+    "limit": "План",
+    "cash": 179.4,
+    "plan": 30.6,
+    "hist": [
+     30.6,
+     30.6,
+     30.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00053",
+    "good": "grain",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 102.0,
+    "out": 102.0,
+    "stock": 102.0,
+    "price": 0.996,
+    "forecast": 159.4,
+    "demand": 159.4,
+    "margin": 0.936,
+    "limit": "План",
+    "cash": 317.9,
+    "plan": 102.0,
+    "hist": [
+     18.7,
+     77.1,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00055",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 51.0,
+    "out": 6.2,
+    "stock": 27.1,
+    "price": 1.049,
+    "forecast": 28.6,
+    "demand": 28.6,
+    "margin": 0.989,
+    "limit": "План",
+    "cash": 220.4,
+    "plan": 6.2,
+    "hist": [
+     34.0,
+     51.0,
+     30.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00058",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p0",
+    "cap": 36,
+    "out": 36,
+    "stock": 36,
+    "price": 4.824,
+    "forecast": 1596.8,
+    "demand": 1596.8,
+    "margin": 4.246,
+    "limit": "План",
+    "cash": 213.7,
+    "plan": 36,
+    "hist": [
+     36,
+     36,
+     36
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00060",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 10.2,
+    "out": 10.2,
+    "stock": 20.4,
+    "price": 1.103,
+    "forecast": 95.5,
+    "demand": 95.5,
+    "margin": 1.043,
+    "limit": "План",
+    "cash": 139.2,
+    "plan": 10.2,
+    "hist": [
+     10.2,
+     10.2,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00063",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 25.5,
+    "out": 25.5,
+    "stock": 25.5,
+    "price": 1.048,
+    "forecast": 95.5,
+    "demand": 95.5,
+    "margin": 0.988,
+    "limit": "План",
+    "cash": 169.5,
+    "plan": 25.5,
+    "hist": [
+     25.5,
+     0,
+     17.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00066",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 30,
+    "out": 30,
+    "stock": 30,
+    "price": 4.852,
+    "forecast": 948.7,
+    "demand": 948.7,
+    "margin": 4.271,
+    "limit": "План",
+    "cash": 198.1,
+    "plan": 30,
+    "hist": [
+     30,
+     30,
+     30
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00068",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 137.7,
+    "out": 95.5,
+    "stock": 95.5,
+    "price": 1.1,
+    "forecast": 95.5,
+    "demand": 95.5,
+    "margin": 1.04,
+    "limit": "План",
+    "cash": 389.7,
+    "plan": 95.5,
+    "hist": [
+     37.3,
+     37.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00071",
+    "good": "fish",
+    "status": "active",
+    "prov": "valtoria-p3",
+    "cap": 6,
+    "out": 6,
+    "stock": 6,
+    "price": 4.79,
+    "forecast": 1283.2,
+    "demand": 1283.2,
+    "margin": 4.215,
+    "limit": "План",
+    "cash": 135.6,
+    "plan": 6,
+    "hist": [
+     6,
+     6,
+     6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00073",
+    "good": "grain",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 137.7,
+    "out": 133.4,
+    "stock": 184.4,
+    "price": 1.055,
+    "forecast": 133.4,
+    "demand": 133.4,
+    "margin": 0.995,
+    "limit": "План",
+    "cash": 384.3,
+    "plan": 133.4,
+    "hist": [
+     137.7,
+     43.6,
+     40.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00076",
+    "good": "grain",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 438.6,
+    "out": 115.7,
+    "stock": 115.7,
+    "price": 1.049,
+    "forecast": 115.7,
+    "demand": 28.6,
+    "margin": 0.989,
+    "limit": "План",
+    "cash": 990.3,
+    "plan": 115.7,
+    "hist": [
+     50.5,
+     191.5,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00080",
+    "good": "grain",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 147.9,
+    "out": 6.4,
+    "stock": 6.8,
+    "price": 1.057,
+    "forecast": 39.3,
+    "demand": 30.0,
+    "margin": 0.997,
+    "limit": "План",
+    "cash": 415.4,
+    "plan": 6.4,
+    "hist": [
+     98.6,
+     19.3,
+     62.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00084",
+    "good": "flour",
+    "status": "idle",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 0,
+    "stock": 189.6,
+    "price": 2.532,
+    "forecast": 189.0,
+    "demand": 0.0,
+    "margin": 1.243,
+    "limit": "Готовые запасы",
+    "cash": 1034.8,
+    "plan": 0,
+    "hist": [
+     202.6,
+     202.6,
+     13.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00085",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 44.6,
+    "stock": 44.6,
+    "price": 2.428,
+    "forecast": 1303.4,
+    "demand": 1303.4,
+    "margin": 0.133,
+    "limit": "Сырьё: flour",
+    "cash": 1369.6,
+    "plan": 202.6,
+    "hist": [
+     202.6,
+     0,
+     29.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00090",
+    "good": "flour",
+    "status": "idle",
+    "prov": "arven-p0",
+    "cap": 202.6,
+    "out": 0,
+    "stock": 192.0,
+    "price": 2.547,
+    "forecast": 45.0,
+    "demand": 0.0,
+    "margin": 1.241,
+    "limit": "Готовые запасы",
+    "cash": 1046.4,
+    "plan": 0,
+    "hist": [
+     72.7,
+     62.3,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00091",
+    "good": "bread",
+    "status": "idle",
+    "prov": "arven-p0",
+    "cap": 282.4,
+    "out": 0,
+    "stock": 0,
+    "price": 2.521,
+    "forecast": 188.3,
+    "demand": 0.0,
+    "margin": 0.23,
+    "limit": "Готовые запасы",
+    "cash": 1296.3,
+    "plan": 0,
+    "hist": [
+     282.4,
+     282.4,
+     282.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00096",
+    "good": "flour",
+    "status": "idle",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.553,
+    "forecast": 54.6,
+    "demand": 0.0,
+    "margin": 1.29,
+    "limit": "Готовые запасы",
+    "cash": 594.7,
+    "plan": 0,
+    "hist": [
+     0,
+     81.8,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00097",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 204.0,
+    "out": 123.1,
+    "stock": 123.1,
+    "price": 2.502,
+    "forecast": 123.1,
+    "demand": 0.0,
+    "margin": 0.182,
+    "limit": "План",
+    "cash": 527.7,
+    "plan": 123.1,
+    "hist": [
+     204.0,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00102",
+    "good": "flour",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 81.8,
+    "stock": 81.8,
+    "price": 2.382,
+    "forecast": 464.3,
+    "demand": 464.3,
+    "margin": 1.126,
+    "limit": "План",
+    "cash": 486.5,
+    "plan": 81.8,
+    "hist": [
+     81.8,
+     0,
+     81.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00103",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 81.8,
+    "out": 36.4,
+    "stock": 36.4,
+    "price": 2.507,
+    "forecast": 36.4,
+    "demand": 0.0,
+    "margin": 0.192,
+    "limit": "План",
+    "cash": 583.8,
+    "plan": 36.4,
+    "hist": [
+     0,
+     27.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00108",
+    "good": "flour",
+    "status": "idle",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 0,
+    "stock": 20.3,
+    "price": 2.531,
+    "forecast": 11.8,
+    "demand": 0.0,
+    "margin": 1.183,
+    "limit": "Готовые запасы",
+    "cash": 239.7,
+    "plan": 0,
+    "hist": [
+     0,
+     15.2,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00109",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-0",
+    "cap": 25.4,
+    "out": 13.9,
+    "stock": 13.9,
+    "price": 2.602,
+    "forecast": 13.9,
+    "demand": 0.0,
+    "margin": 0.187,
+    "limit": "План",
+    "cash": 259.2,
+    "plan": 13.9,
+    "hist": [
+     0,
+     16.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00112",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 11.5,
+    "stock": 11.5,
+    "price": 2.553,
+    "forecast": 11.5,
+    "demand": 0.0,
+    "margin": 1.252,
+    "limit": "План",
+    "cash": 197.8,
+    "plan": 11.5,
+    "hist": [
+     10.6,
+     13.0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00113",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-1",
+    "cap": 16.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.453,
+    "forecast": 4.4,
+    "demand": 0.0,
+    "margin": 0.059,
+    "limit": "Готовые запасы",
+    "cash": 229.1,
+    "plan": 0,
+    "hist": [
+     13.2,
+     0,
+     16.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00116",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 76.1,
+    "stock": 76.1,
+    "price": 2.556,
+    "forecast": 76.1,
+    "demand": 0.0,
+    "margin": 1.258,
+    "limit": "План",
+    "cash": 481.8,
+    "plan": 76.1,
+    "hist": [
+     79.4,
+     79.4,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00117",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-2",
+    "cap": 79.4,
+    "out": 6.2,
+    "stock": 6.2,
+    "price": 2.473,
+    "forecast": 6.2,
+    "demand": 0.0,
+    "margin": 0.126,
+    "limit": "План",
+    "cash": 631.8,
+    "plan": 6.2,
+    "hist": [
+     18.6,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00120",
+    "good": "flour",
+    "status": "idle",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 0,
+    "stock": 40.7,
+    "price": 2.517,
+    "forecast": 26.7,
+    "demand": 0.0,
+    "margin": 1.188,
+    "limit": "Готовые запасы",
+    "cash": 323.5,
+    "plan": 0,
+    "hist": [
+     0,
+     35.7,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00121",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-3",
+    "cap": 44.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.481,
+    "forecast": 5.0,
+    "demand": 0.0,
+    "margin": 0.097,
+    "limit": "Готовые запасы",
+    "cash": 417.7,
+    "plan": 0,
+    "hist": [
+     14.9,
+     0,
+     37.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00125",
+    "good": "flour",
+    "status": "idle",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 0,
+    "stock": 23.6,
+    "price": 2.531,
+    "forecast": 15.8,
+    "demand": 0.0,
+    "margin": 1.28,
+    "limit": "Готовые запасы",
+    "cash": 224.3,
+    "plan": 0,
+    "hist": [
+     0,
+     23.6,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00126",
+    "good": "bread",
+    "status": "active",
+    "prov": "province-4",
+    "cap": 23.6,
+    "out": 7.9,
+    "stock": 7.9,
+    "price": 2.452,
+    "forecast": 7.9,
+    "demand": 0.0,
+    "margin": 0.083,
+    "limit": "План",
+    "cash": 260.3,
+    "plan": 7.9,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00131",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 29.3,
+    "stock": 29.3,
+    "price": 2.55,
+    "forecast": 29.3,
+    "demand": 0.0,
+    "margin": 1.246,
+    "limit": "План",
+    "cash": 248.4,
+    "plan": 29.3,
+    "hist": [
+     29.3,
+     29.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00132",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-5",
+    "cap": 29.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.324,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.423,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 316.5,
+    "plan": 0,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00136",
+    "good": "flour",
+    "status": "idle",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 0,
+    "stock": 33.1,
+    "price": 2.522,
+    "forecast": 25.4,
+    "demand": 0.0,
+    "margin": 1.245,
+    "limit": "Готовые запасы",
+    "cash": 297.3,
+    "plan": 0,
+    "hist": [
+     0,
+     38.1,
+     5.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00137",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-6",
+    "cap": 38.1,
+    "out": 0,
+    "stock": 0,
+    "price": 2.543,
+    "forecast": 21.2,
+    "demand": 0.0,
+    "margin": 0.182,
+    "limit": "Готовые запасы",
+    "cash": 375.9,
+    "plan": 0,
+    "hist": [
+     0,
+     25.4,
+     38.1
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00142",
+    "good": "flour",
+    "status": "active",
+    "prov": "province-7",
+    "cap": 55.4,
+    "out": 0.4,
+    "stock": 22.6,
+    "price": 2.589,
+    "forecast": 22.6,
+    "demand": 0.0,
+    "margin": 1.332,
+    "limit": "План",
+    "cash": 411.9,
+    "plan": 0.4,
+    "hist": [
+     30.5,
+     0.3,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00143",
+    "good": "bread",
+    "status": "idle",
+    "prov": "province-7",
+    "cap": 62.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.485,
+    "forecast": 8.5,
+    "demand": 0.0,
+    "margin": 0.117,
+    "limit": "Готовые запасы",
+    "cash": 474.9,
+    "plan": 0,
+    "hist": [
+     25.4,
+     0,
+     16.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00147",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 25.1,
+    "stock": 25.7,
+    "price": 2.493,
+    "forecast": 25.7,
+    "demand": 0.0,
+    "margin": 1.088,
+    "limit": "План",
+    "cash": 379.1,
+    "plan": 25.1,
+    "hist": [
+     0,
+     26.1,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00148",
+    "good": "bread",
+    "status": "idle",
+    "prov": "kasseria-p0",
+    "cap": 51.0,
+    "out": 0,
+    "stock": 0,
+    "price": 2.549,
+    "forecast": 2.7,
+    "demand": 0.0,
+    "margin": 0.184,
+    "limit": "Готовые запасы",
+    "cash": 462.7,
+    "plan": 0,
+    "hist": [
+     0,
+     2.0,
+     51.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00151",
+    "good": "flour",
+    "status": "idle",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 0,
+    "stock": 26.4,
+    "price": 2.453,
+    "forecast": 16.9,
+    "demand": 0.0,
+    "margin": 0.987,
+    "limit": "Готовые запасы",
+    "cash": 307.5,
+    "plan": 0,
+    "hist": [
+     12.6,
+     19.8,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00152",
+    "good": "bread",
+    "status": "idle",
+    "prov": "kasseria-p1",
+    "cap": 39.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.566,
+    "forecast": 14.7,
+    "demand": 0.0,
+    "margin": 0.181,
+    "limit": "Готовые запасы",
+    "cash": 383.0,
+    "plan": 0,
+    "hist": [
+     0,
+     11.0,
+     33.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00155",
+    "good": "flour",
+    "status": "active",
+    "prov": "kasseria-p2",
+    "cap": 45.5,
+    "out": 45.5,
+    "stock": 45.5,
+    "price": 2.459,
+    "forecast": 62.8,
+    "demand": 62.8,
+    "margin": 1.066,
+    "limit": "План",
+    "cash": 315.8,
+    "plan": 45.5,
+    "hist": [
+     0,
+     26.3,
+     45.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00156",
+    "good": "bread",
+    "status": "idle",
+    "prov": "kasseria-p2",
+    "cap": 120.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.517,
+    "forecast": 1.0,
+    "demand": 0.0,
+    "margin": 0.152,
+    "limit": "Готовые запасы",
+    "cash": 419.9,
+    "plan": 0,
+    "hist": [
+     0,
+     3.0,
+     120.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00160",
+    "good": "flour",
+    "status": "idle",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 0,
+    "stock": 47.7,
+    "price": 2.493,
+    "forecast": 23.9,
+    "demand": 0.0,
+    "margin": 1.094,
+    "limit": "Готовые запасы",
+    "cash": 332.0,
+    "plan": 0,
+    "hist": [
+     0,
+     24.1,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00161",
+    "good": "bread",
+    "status": "active",
+    "prov": "kasseria-p3",
+    "cap": 47.7,
+    "out": 0.9,
+    "stock": 0.9,
+    "price": 2.544,
+    "forecast": 21.2,
+    "demand": 0.0,
+    "margin": 0.175,
+    "limit": "План",
+    "cash": 435.7,
+    "plan": 0.9,
+    "hist": [
+     0,
+     15.9,
+     20.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00166",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 55.2,
+    "stock": 55.2,
+    "price": 2.539,
+    "forecast": 55.2,
+    "demand": 0.0,
+    "margin": 1.26,
+    "limit": "Сырьё: grain",
+    "cash": 682.0,
+    "plan": 55.2,
+    "hist": [
+     55.8,
+     109.9,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00167",
+    "good": "bread",
+    "status": "active",
+    "prov": "septaria-p0",
+    "cap": 109.9,
+    "out": 67.7,
+    "stock": 67.7,
+    "price": 2.478,
+    "forecast": 67.7,
+    "demand": 0.0,
+    "margin": 0.173,
+    "limit": "План",
+    "cash": 708.3,
+    "plan": 67.7,
+    "hist": [
+     93.3,
+     109.9,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00170",
+    "good": "flour",
+    "status": "idle",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 0,
+    "stock": 30.1,
+    "price": 2.482,
+    "forecast": 22.3,
+    "demand": 0.0,
+    "margin": 1.226,
+    "limit": "Готовые запасы",
+    "cash": 272.6,
+    "plan": 0,
+    "hist": [
+     0,
+     33.4,
+     3.4
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00171",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p1",
+    "cap": 33.4,
+    "out": 0,
+    "stock": 0,
+    "price": 2.497,
+    "forecast": 14.2,
+    "demand": 0.0,
+    "margin": 0.172,
+    "limit": "Готовые запасы",
+    "cash": 344.5,
+    "plan": 0,
+    "hist": [
+     0,
+     14.6,
+     27.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00175",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 49.1,
+    "stock": 49.1,
+    "price": 2.525,
+    "forecast": 49.1,
+    "demand": 0.0,
+    "margin": 1.262,
+    "limit": "План",
+    "cash": 403.1,
+    "plan": 49.1,
+    "hist": [
+     59.6,
+     59.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00176",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p2",
+    "cap": 59.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.492,
+    "forecast": 29.3,
+    "demand": 0.0,
+    "margin": 0.173,
+    "limit": "Готовые запасы",
+    "cash": 519.9,
+    "plan": 0,
+    "hist": [
+     0,
+     28.3,
+     59.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00180",
+    "good": "flour",
+    "status": "idle",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 0,
+    "stock": 0,
+    "price": 2.479,
+    "forecast": 35.0,
+    "demand": 5.6,
+    "margin": 1.226,
+    "limit": "Готовые запасы",
+    "cash": 419.0,
+    "plan": 0,
+    "hist": [
+     0,
+     52.5,
+     52.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00181",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p3",
+    "cap": 52.5,
+    "out": 0,
+    "stock": 0,
+    "price": 2.479,
+    "forecast": 22.3,
+    "demand": 0.0,
+    "margin": 0.153,
+    "limit": "Готовые запасы",
+    "cash": 472.6,
+    "plan": 0,
+    "hist": [
+     17.5,
+     49.5,
+     52.5
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00184",
+    "good": "flour",
+    "status": "active",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 33.2,
+    "stock": 33.2,
+    "price": 2.523,
+    "forecast": 33.2,
+    "demand": 0.0,
+    "margin": 1.25,
+    "limit": "План",
+    "cash": 333.1,
+    "plan": 33.2,
+    "hist": [
+     12.1,
+     45.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00185",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p4",
+    "cap": 45.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.362,
+    "forecast": 1211.0,
+    "demand": 1211.0,
+    "margin": 0.038,
+    "limit": "Сырьё: flour",
+    "cash": 421.3,
+    "plan": 45.3,
+    "hist": [
+     0,
+     0,
+     45.3
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00187",
+    "good": "flour",
+    "status": "idle",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.509,
+    "forecast": 37.9,
+    "demand": 0.0,
+    "margin": 1.17,
+    "limit": "Готовые запасы",
+    "cash": 449.4,
+    "plan": 0,
+    "hist": [
+     0,
+     56.8,
+     56.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00188",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p0",
+    "cap": 56.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.483,
+    "forecast": 31.6,
+    "demand": 0.0,
+    "margin": 0.175,
+    "limit": "Готовые запасы",
+    "cash": 501.7,
+    "plan": 0,
+    "hist": [
+     0,
+     37.9,
+     56.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00193",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 34.0,
+    "stock": 34.0,
+    "price": 2.531,
+    "forecast": 34.0,
+    "demand": 0.0,
+    "margin": 1.16,
+    "limit": "План",
+    "cash": 422.4,
+    "plan": 34.0,
+    "hist": [
+     40.8,
+     61.3,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00194",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p1",
+    "cap": 163.0,
+    "out": 31.3,
+    "stock": 31.3,
+    "price": 2.428,
+    "forecast": 31.3,
+    "demand": 0.0,
+    "margin": 0.084,
+    "limit": "План",
+    "cash": 486.7,
+    "plan": 31.3,
+    "hist": [
+     94.0,
+     0,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00197",
+    "good": "flour",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 31.7,
+    "stock": 31.7,
+    "price": 2.545,
+    "forecast": 31.7,
+    "demand": 0.0,
+    "margin": 1.222,
+    "limit": "Сырьё: grain",
+    "cash": 293.7,
+    "plan": 31.7,
+    "hist": [
+     37.8,
+     37.8,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00198",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p2",
+    "cap": 37.8,
+    "out": 21.0,
+    "stock": 21.0,
+    "price": 2.505,
+    "forecast": 21.0,
+    "demand": 0.0,
+    "margin": 0.174,
+    "limit": "Сырьё: flour",
+    "cash": 326.3,
+    "plan": 21.0,
+    "hist": [
+     0,
+     25.2,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00203",
+    "good": "flour",
+    "status": "idle",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.514,
+    "forecast": 53.9,
+    "demand": 17.3,
+    "margin": 1.182,
+    "limit": "Готовые запасы",
+    "cash": 588.9,
+    "plan": 0,
+    "hist": [
+     0,
+     80.8,
+     80.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00204",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p3",
+    "cap": 80.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.498,
+    "forecast": 44.9,
+    "demand": 0.0,
+    "margin": 0.169,
+    "limit": "Готовые запасы",
+    "cash": 663.3,
+    "plan": 0,
+    "hist": [
+     0,
+     53.9,
+     80.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00209",
+    "good": "flour",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 74.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.528,
+    "forecast": 49.7,
+    "demand": 0.0,
+    "margin": 1.214,
+    "limit": "Готовые запасы",
+    "cash": 544.9,
+    "plan": 0,
+    "hist": [
+     0,
+     74.6,
+     74.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00210",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 218.4,
+    "out": 0,
+    "stock": 0,
+    "price": 2.631,
+    "forecast": 43.9,
+    "demand": 0.0,
+    "margin": 0.28,
+    "limit": "Готовые запасы",
+    "cash": 510.1,
+    "plan": 0,
+    "hist": [
+     0,
+     0,
+     43.9
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00213",
+    "good": "flour",
+    "status": "idle",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 0,
+    "stock": 44.1,
+    "price": 2.588,
+    "forecast": 25.9,
+    "demand": 0.0,
+    "margin": 1.278,
+    "limit": "Готовые запасы",
+    "cash": 641.3,
+    "plan": 0,
+    "hist": [
+     58.0,
+     11.3,
+     0.0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00214",
+    "good": "bread",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 55.4,
+    "stock": 55.4,
+    "price": 2.482,
+    "forecast": 55.4,
+    "demand": 0.0,
+    "margin": 0.201,
+    "limit": "Сырьё: flour",
+    "cash": 664.5,
+    "plan": 55.4,
+    "hist": [
+     0,
+     66.5,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00219",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 57.8,
+    "stock": 57.8,
+    "price": 2.492,
+    "forecast": 57.8,
+    "demand": 0.0,
+    "margin": 1.067,
+    "limit": "План",
+    "cash": 608.6,
+    "plan": 57.8,
+    "hist": [
+     84.0,
+     75.6,
+     0
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00220",
+    "good": "bread",
+    "status": "idle",
+    "prov": "velaria-p0",
+    "cap": 99.7,
+    "out": 0,
+    "stock": 0,
+    "price": 2.527,
+    "forecast": 13.2,
+    "demand": 0.0,
+    "margin": 0.148,
+    "limit": "Готовые запасы",
+    "cash": 789.9,
+    "plan": 0,
+    "hist": [
+     22.8,
+     16.7,
+     99.7
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00225",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.326,
+    "forecast": 658.7,
+    "demand": 658.7,
+    "margin": 1.029,
+    "limit": "План",
+    "cash": 430.0,
+    "plan": 68.8,
+    "hist": [
+     40.1,
+     0,
+     30.6
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00226",
+    "good": "bread",
+    "status": "idle",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.499,
+    "forecast": 68.8,
+    "demand": 0.0,
+    "margin": 0.231,
+    "limit": "Готовые запасы",
+    "cash": 582.5,
+    "plan": 0,
+    "hist": [
+     68.8,
+     68.8,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00231",
+    "good": "flour",
+    "status": "active",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 68.8,
+    "stock": 68.8,
+    "price": 2.422,
+    "forecast": 428.4,
+    "demand": 428.4,
+    "margin": 1.112,
+    "limit": "План",
+    "cash": 429.0,
+    "plan": 68.8,
+    "hist": [
+     0,
+     33.9,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00232",
+    "good": "bread",
+    "status": "idle",
+    "prov": "velaria-p1",
+    "cap": 68.8,
+    "out": 0,
+    "stock": 0,
+    "price": 2.488,
+    "forecast": 19.8,
+    "demand": 0.0,
+    "margin": 0.214,
+    "limit": "Готовые запасы",
+    "cash": 582.5,
+    "plan": 0,
+    "hist": [
+     0,
+     32.1,
+     68.8
+    ],
+    "opened": 0
+   },
+   {
+    "id": "firm-00237",
+    "good": "bread",
+    "status": "active",
+    "prov": "arven-p1",
+    "cap": 82.1,
+    "out": 82.1,
+    "stock": 82.1,
+    "price": 2.462,
+    "forecast": 577.1,
+    "demand": 577.1,
+    "margin": 0.146,
+    "limit": "План",
+    "cash": 171.2,
+    "plan": 82.1,
+    "hist": [
+     82.1,
+     0,
+     82.1
+    ],
+    "opened": 3
+   },
+   {
+    "id": "firm-00241",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p1",
+    "cap": 61.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.243,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.42,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 206.9,
+    "plan": 0,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 10
+   },
+   {
+    "id": "firm-00242",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 305.1,
+    "out": 207.5,
+    "stock": 207.5,
+    "price": 2.33,
+    "forecast": 4330.8,
+    "demand": 4330.8,
+    "margin": 0.012,
+    "limit": "Сырьё: flour",
+    "cash": 844.7,
+    "plan": 305.1,
+    "hist": [
+     32.6,
+     0,
+     305.1
+    ],
+    "opened": 16
+   },
+   {
+    "id": "firm-00243",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 161.9,
+    "out": 0,
+    "stock": 0,
+    "price": 2.631,
+    "forecast": 54.0,
+    "demand": 0.0,
+    "margin": 0.282,
+    "limit": "Готовые запасы",
+    "cash": 364.7,
+    "plan": 0,
+    "hist": [
+     0,
+     0,
+     54.0
+    ],
+    "opened": 17
+   },
+   {
+    "id": "firm-00245",
+    "good": "bread",
+    "status": "active",
+    "prov": "valtoria-p4",
+    "cap": 467.4,
+    "out": 89.8,
+    "stock": 89.8,
+    "price": 2.507,
+    "forecast": 124.6,
+    "demand": 0.0,
+    "margin": 0.17,
+    "limit": "План",
+    "cash": 1651.5,
+    "plan": 89.8,
+    "hist": [
+     362.6,
+     11.1,
+     34.7
+    ],
+    "opened": 22
+   },
+   {
+    "id": "firm-00246",
+    "good": "bread",
+    "status": "idle",
+    "prov": "septaria-p0",
+    "cap": 73.7,
+    "out": 0,
+    "stock": 0,
+    "price": 2.478,
+    "forecast": 40.9,
+    "demand": 0.0,
+    "margin": 0.173,
+    "limit": "Готовые запасы",
+    "cash": 307.4,
+    "plan": 0,
+    "hist": [
+     0,
+     49.1,
+     73.7
+    ],
+    "opened": 25
+   },
+   {
+    "id": "firm-00247",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 224.6,
+    "out": 0,
+    "stock": 0,
+    "price": 2.195,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.419,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 712.0,
+    "plan": 0,
+    "hist": [
+     0,
+     0,
+     0
+    ],
+    "opened": 26
+   },
+   {
+    "id": "firm-00248",
+    "good": "bread",
+    "status": "idle",
+    "prov": "valtoria-p4",
+    "cap": 1971.3,
+    "out": 0,
+    "stock": 0,
+    "price": 2.278,
+    "forecast": 0.0,
+    "demand": 0.0,
+    "margin": 0.419,
+    "limit": "Нет обеспеченного спроса",
+    "cash": 3617.7,
+    "plan": 0,
+    "hist": [
+     0,
+     0
+    ],
+    "opened": 35
+   }
+  ]
+ }
+}

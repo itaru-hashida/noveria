@@ -1,0 +1,162 @@
+{
+ "method": "36 месяцев, детерминированный RNG (seed карты = seed RNG), шок месяцы 7-12 в провинции с наибольшим числом предприятий пищевой цепочки",
+ "caveat": "Один прогон на сценарий и карту: это иллюстрация механизма, не статистическое доказательство. Шоковый и контрольный прогоны расходятся из-за разного потребления RNG.",
+ "runs": {
+  "baseline_17": {
+   "source": "audit/_runs/baseline_17.csv",
+   "shock_province": "",
+   "invariants_ok": true,
+   "suspended_max": 0
+  },
+  "route_cut_17": {
+   "source": "audit/_runs/route_cut_17.csv",
+   "shock_province": "arven-p0",
+   "invariants_ok": true,
+   "suspended_max": 0
+  },
+  "halt_17": {
+   "source": "audit/_runs/halt_17.csv",
+   "shock_province": "arven-p0",
+   "invariants_ok": true,
+   "suspended_max": 17
+  },
+  "baseline_2026": {
+   "source": "audit/_runs/baseline_2026.csv",
+   "shock_province": "",
+   "invariants_ok": true,
+   "suspended_max": 0
+  },
+  "route_cut_2026": {
+   "source": "audit/_runs/route_cut_2026.csv",
+   "shock_province": "arven-p0",
+   "invariants_ok": true,
+   "suspended_max": 0
+  },
+  "halt_2026": {
+   "source": "audit/_runs/halt_2026.csv",
+   "shock_province": "arven-p0",
+   "invariants_ok": true,
+   "suspended_max": 18
+  }
+ },
+ "shocks": {
+  "route_cut_17": {
+   "before_1_6": {
+    "ratio_to_baseline": 1.0
+   },
+   "shock_7_12": {
+    "ratio_to_baseline": 0.963
+   },
+   "after_13_18": {
+    "ratio_to_baseline": 1.062
+   },
+   "late_19_36": {
+    "ratio_to_baseline": 1.062
+   }
+  },
+  "halt_17": {
+   "before_1_6": {
+    "ratio_to_baseline": 1.0
+   },
+   "shock_7_12": {
+    "ratio_to_baseline": 0.769
+   },
+   "after_13_18": {
+    "ratio_to_baseline": 0.945
+   },
+   "late_19_36": {
+    "ratio_to_baseline": 0.998
+   }
+  },
+  "route_cut_2026": {
+   "before_1_6": {
+    "ratio_to_baseline": 1.0
+   },
+   "shock_7_12": {
+    "ratio_to_baseline": 1.061
+   },
+   "after_13_18": {
+    "ratio_to_baseline": 0.928
+   },
+   "late_19_36": {
+    "ratio_to_baseline": 0.919
+   }
+  },
+  "halt_2026": {
+   "before_1_6": {
+    "ratio_to_baseline": 1.0
+   },
+   "shock_7_12": {
+    "ratio_to_baseline": 0.989
+   },
+   "after_13_18": {
+    "ratio_to_baseline": 0.955
+   },
+   "late_19_36": {
+    "ratio_to_baseline": 0.928
+   }
+  }
+ },
+ "structure": {
+  "17": {
+   "bread_prod_cv_m6_36": 0.269,
+   "bread_prod_min": 787.86,
+   "bread_prod_max": 2278.04,
+   "bread_prod_autocorr_lag1": 0.09,
+   "bread_prod_autocorr_lag2": 0.46,
+   "corr_cons_m_vs_prod_m_minus_1": 1.0,
+   "mean_bread_deficit_m6_36": 744.4,
+   "money_household": [
+    841724,
+    1066056
+   ],
+   "money_treasury": [
+    318527,
+    156356
+   ],
+   "money_owners": [
+    561506,
+    448507
+   ],
+   "money_enterprise": [
+    36598,
+    87552
+   ],
+   "gold_total_constant": true,
+   "closed_events": 0,
+   "reopened_events": 0,
+   "invariants_ok": true,
+   "source": "audit/_runs/baseline_17.csv"
+  },
+  "2026": {
+   "bread_prod_cv_m6_36": 0.193,
+   "bread_prod_min": 567.63,
+   "bread_prod_max": 2066.9,
+   "bread_prod_autocorr_lag1": 0.02,
+   "bread_prod_autocorr_lag2": 0.26,
+   "corr_cons_m_vs_prod_m_minus_1": 1.0,
+   "mean_bread_deficit_m6_36": 721.6,
+   "money_household": [
+    870646,
+    1087889
+   ],
+   "money_treasury": [
+    329558,
+    167431
+   ],
+   "money_owners": [
+    581091,
+    478233
+   ],
+   "money_enterprise": [
+    37331,
+    85490
+   ],
+   "gold_total_constant": true,
+   "closed_events": 0,
+   "reopened_events": 0,
+   "invariants_ok": true,
+   "source": "audit/_runs/baseline_2026.csv"
+  }
+ }
+}
