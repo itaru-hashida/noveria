@@ -58,6 +58,55 @@ def snapshot(engine, report):
         if o['side'] == 'buy' and o['purpose'] == 'Сырьё' and o['remaining'] > 1e-7:
             ir[(o['good'], o.get('match_observation', {}).get('reason_code', '?'))] += 1
     out['input_unfilled_reasons'] = {f'{g}|{c}': n for (g, c), n in ir.items()}
+    input_gaps = defaultdict(lambda: dict(orders=0, quantity=0.0,
+                                          cheapest_landed=None, highest_limit=0.0))
+    for o in report['orders']:
+        if o['side'] != 'buy' or o['purpose'] != 'Сырьё' or o['good'] not in ('grain', 'flour') or o['remaining'] <= 1e-7:
+            continue
+        observation = o.get('match_observation', {})
+        key = f"{o['good']}|{observation.get('reason_code', '?')}"
+        row = input_gaps[key]
+        row['orders'] += 1
+        row['quantity'] += o['remaining']
+        row['highest_limit'] = max(row['highest_limit'], o['price'])
+        for candidate in observation.get('candidates', []):
+            if candidate.get('route_available') and candidate.get('remaining_after', 0) > 1e-7:
+                price = candidate['landed_price']
+                row['cheapest_landed'] = min(row['cheapest_landed'], price) if row['cheapest_landed'] is not None else price
+    out['input_gaps'] = {key: {name: round(value, 2) if isinstance(value, float) else value
+                               for name, value in row.items()} for key, row in input_gaps.items()}
+    flour_price_gaps = []
+    for o in report['orders']:
+        if (o['side'] != 'buy' or o['purpose'] != 'Сырьё' or o['good'] != 'flour'
+                or o['remaining'] <= 1e-7
+                or o.get('match_observation', {}).get('reason_code') != 'landed_price_above_limit'):
+            continue
+        offers = [c for c in o['match_observation']['candidates']
+                  if c['route_available'] and c.get('remaining_after', 0) > 1e-7]
+        if not offers:
+            continue
+        cheapest = min(offers, key=lambda c: c['landed_price'])
+        firm = engine.enterprises.get(o['participant'], {})
+        plan = firm.get('production_plan', {})
+        ratios = plan.get('input_ratios', {})
+        other_cost = plan.get('wage_unit', 0) + sum(
+            ratio*plan.get('input_prices', {}).get(good, 0)
+            for good, ratio in ratios.items() if good != 'flour')
+        profitable_ceiling = ((plan.get('expected_net_price', 0)-other_cost)/ratios['flour']
+                              if ratios.get('flour', 0) else None)
+        flour_price_gaps.append(dict(buyer=o['participant'], province=o['province_id'],
+            remaining=round(o['remaining'], 2), bid=round(o['price'], 4),
+            seller=cheapest['seller'], sell_order=cheapest['sell_order'],
+            seller_price=round(cheapest['price'], 4),
+            freight=round(cheapest['freight_per_unit'], 4),
+            landed=round(cheapest['landed_price'], 4),
+            gap=round(cheapest['landed_price']-o['price'], 4),
+            distance=round(cheapest['distance'], 2),
+            seller_remaining=round(cheapest['remaining_after'], 2),
+            expected_margin=round(firm.get('expected_margin', 0), 4),
+            profitable_ceiling=round(profitable_ceiling, 4) if profitable_ceiling is not None else None,
+            planned_output=round(firm.get('planned_output', 0), 2)))
+    out['flour_price_gaps'] = flour_price_gaps
     # нереализованные запасы у продавцов
     sells = [o for o in report['orders'] if o['side'] == 'sell' and o['remaining'] > 1e-7]
     sg = defaultdict(float)

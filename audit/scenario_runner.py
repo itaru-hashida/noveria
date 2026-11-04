@@ -39,7 +39,7 @@ def install_shock():
                 for e in self.enterprises.values():
                     if e['province_id'] == pid:
                         e['suspended'] = True
-            elif SHOCK['kind'] == 'route_cut':
+            elif SHOCK['kind'] == 'route_cut' and m == SHOCK['start']:
                 inside = {t['id'] for t in self.tiles.values() if t['province_id'] == pid}
                 cut = [(a, b) for a, b in list(self.graph.edges) if (a in inside) != (b in inside)]
                 self.graph.remove_edges_from(cut)

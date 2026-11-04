@@ -14,10 +14,12 @@ CONSUMPTION_PURPOSES = ('Базовые нужды', 'Дополнительны
 
 
 class Economy(EconomyServices):
+    OWNER_FAMILY_SIZE = 4
+    OWNER_FOOD_QUALITY = 4
     RULES_VERSION = 3
     FOOD_DIAGNOSTICS = True
     INPUT_BID_REVISION = 1
-    STOCK_PLANNING_REVISION = 1
+    STOCK_PLANNING_REVISION = 2
     PROFIT_DISTRIBUTION_REVISION = 1
     HOUSEHOLD_TOP_UP_REVISION = 1
     BASIC_BUDGET_REVISION = 1
@@ -165,6 +167,10 @@ class Economy(EconomyServices):
                 share = budget/len(OWNER_BASKET)
                 price = self.reference_price(a, good, sells)
                 quantity = share/price
+                if good in self.cfg['basic_needs']:
+                    food_cap = (self.OWNER_FAMILY_SIZE*self.OWNER_FOOD_QUALITY
+                                * self.cfg['basic_needs'][good])
+                    quantity = min(quantity, food_cap)
                 _, ceiling, _ = self.quoted_cost(a, good, quantity, sells)
                 order = self.order(a['id'], good, share/ceiling, 'buy', ceiling, OWNER_CONSUMPTION)
                 if order:
@@ -609,8 +615,19 @@ class Economy(EconomyServices):
             if o['participant'] == e['id'] and o['status'] not in ('cancelled', 'expired'))
         if offered <= EPS:
             return 0.0
-        return min(self.accounts[e['id']]['stock'].get(e['good'], 0), offered,
-            self.reachable_demand(e, sells))
+        cache = getattr(self, '_stock_sales_cache', {})
+        cached = cache.get(e['id'])
+        if cached is not None:
+            return cached
+        reachable = self.reachable_demand(e, sells)
+        history = e.get('sales_history', [])[-3:]
+        average_sold = (sum(h.get('sold', 0.0) for h in history) / len(history)
+                        if history else 0.0)
+        expected = max(reachable, average_sold)
+        result = min(self.accounts[e['id']]['stock'].get(e['good'], 0), offered, expected)
+        cache[e['id']] = result
+        self._stock_sales_cache = cache
+        return result
 
     def production_outlook(self, e, sells=None):
         e = dict(e)
@@ -1175,6 +1192,7 @@ class Economy(EconomyServices):
     def step(self):
         self.__dict__.pop('_planning_orders', None)
         self.__dict__.pop('_recovery_quotes', None)
+        self.__dict__.pop('_stock_sales_cache', None)
         self.activate_rules()
         self.accounts = dict(sorted(self.accounts.items()))
         self.enterprises = dict(sorted(self.enterprises.items()))
