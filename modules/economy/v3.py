@@ -547,6 +547,19 @@ class Economy(EconomyServices):
         recipe = self.goods[e['good']]
         return recipe['labor']*self.cfg['wage']+sum(ratio*self.reference_price(e, good, sells) for good, ratio in recipe['inputs'].items())
 
+    def volume_input_prices(self, e, quantity, sells):
+        """Средние доставленные цены входов для объёма производственного плана."""
+        prices = {}
+        account = self.accounts[e['id']]
+        for good, ratio in self.goods[e['good']]['inputs'].items():
+            missing = max(0, quantity*ratio-self.free_stock(e['id'], good))
+            if missing > EPS:
+                value, _, _ = self.quoted_cost(account, good, missing, sells)
+                prices[good] = value/missing
+            else:
+                prices[good] = self.reference_price(e, good, sells)
+        return prices
+
     def net_price(self, e):
         # Налог оценивается по доступным заявкам; при их отсутствии — осторожно.
         consumer = e['good'] in (self.cfg['basic_needs'] | self.cfg['extra_needs'])
@@ -821,6 +834,7 @@ class Economy(EconomyServices):
                 else:
                     high = middle
             target = low
+        input_prices = self.volume_input_prices(e, target, sells)
         # Единственный окончательный план: выпуск не сможет увеличить его после закупок.
         e['planned_output'] = e['input_target_output'] = target
         if target+EPS < requested:
