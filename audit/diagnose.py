@@ -75,6 +75,42 @@ def snapshot(engine, report):
                 row['cheapest_landed'] = min(row['cheapest_landed'], price) if row['cheapest_landed'] is not None else price
     out['input_gaps'] = {key: {name: round(value, 2) if isinstance(value, float) else value
                                for name, value in row.items()} for key, row in input_gaps.items()}
+    exhaustion = defaultdict(lambda: dict(orders=0, quantity=0.0, candidate_stock=0.0,
+                                          offered_before=0.0, reachable_after=0.0,
+                                          stock_holders=0.0))
+    for o in report['orders']:
+        if (o['side'] != 'buy' or o['purpose'] != 'Сырьё' or o['remaining'] <= 1e-7
+                or o.get('match_observation', {}).get('reason_code') != 'offer_exhausted'):
+            continue
+        row = exhaustion[o['good']]
+        row['orders'] += 1
+        row['quantity'] += o['remaining']
+        candidates = o.get('match_observation', {}).get('candidates', [])
+        row['candidate_stock'] += sum(c.get('physical_stock', 0) for c in candidates)
+        row['offered_before'] += sum(c.get('remaining_before', 0) for c in candidates)
+        row['reachable_after'] += sum(c.get('remaining_after', 0) for c in candidates
+                                      if c.get('route_available'))
+        row['stock_holders'] += sum(h.get('quantity', 0)
+                                    for h in o.get('match_observation', {}).get('stock_holders_after_match', []))
+    out['input_offer_exhaustion'] = {g: {k: round(v, 2) if isinstance(v, float) else v
+                                        for k, v in row.items()} for g, row in exhaustion.items()}
+    holder_rows = {}
+    for good in exhaustion:
+        total = free = enterprise = enterprise_free = 0.0
+        for a in engine.accounts.values():
+            stock = a.get('stock', {}).get(good, 0.0)
+            if stock <= 1e-7:
+                continue
+            available = engine.free_stock(a['id'], good)
+            total += stock
+            free += available
+            if a['kind'] == 'enterprise':
+                enterprise += stock
+                enterprise_free += available
+        holder_rows[good] = dict(stock=round(total, 2), free_stock=round(free, 2),
+                                 enterprise_stock=round(enterprise, 2),
+                                 enterprise_free_stock=round(enterprise_free, 2))
+    out['input_offer_holders'] = holder_rows
     flour_price_gaps = []
     for o in report['orders']:
         if (o['side'] != 'buy' or o['purpose'] != 'Сырьё' or o['good'] != 'flour'

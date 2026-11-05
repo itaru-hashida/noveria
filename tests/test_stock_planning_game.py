@@ -16,6 +16,35 @@ def test_game_replenishes_stock_sold_in_current_month(engine):
     assert engine.production_outlook(f,sells)['planned_output']==4
 
 
+def regulated_market(engine, stock=0):
+    f, sells, _ = market(engine, 'lead_time', stock=stock)
+    engine.__class__ = Economy
+    del engine.probe
+    return f, sells
+
+
+def test_itaru_codex_regulator_cuts_output_gradually(engine):
+    f, sells = regulated_market(engine)
+    for order in engine.report['orders']:
+        if order['side'] == 'buy':
+            engine.cancel_order(order)
+    f.update(planned_output=4, sales_forecast=0,
+             sales_history=[dict(sold=0, output=4)]*3)
+    assert engine.production_outlook(f, sells)['planned_output'] == pytest.approx(3)
+
+
+def test_itaru_codex_regulator_allows_immediate_growth(engine):
+    f, sells = regulated_market(engine, stock=0)
+    f['planned_output'] = 1
+    assert engine.production_outlook(f, sells)['planned_output'] == pytest.approx(4)
+
+
+def test_itaru_codex_regulator_cuts_immediately_when_stock_is_excessive(engine):
+    f, sells = regulated_market(engine, stock=12)
+    f['planned_output'] = 4
+    assert engine.production_outlook(f, sells)['planned_output'] == 0
+
+
 def test_game_matches_independent_previous_experiment(engine):
     expected=copy.deepcopy(engine)
     for month in range(1,13):

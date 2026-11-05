@@ -23,6 +23,7 @@ class Economy(EconomyServices):
     PROFIT_DISTRIBUTION_REVISION = 1
     HOUSEHOLD_TOP_UP_REVISION = 1
     BASIC_BUDGET_REVISION = 1
+    OUTPUT_SMOOTHING_REVISION = 1
 
     def reset_report(self):
         super().reset_report()
@@ -43,17 +44,22 @@ class Economy(EconomyServices):
             profit_distribution_revision=self.PROFIT_DISTRIBUTION_REVISION,
             household_top_up_revision=self.HOUSEHOLD_TOP_UP_REVISION,
             basic_budget_revision=self.BASIC_BUDGET_REVISION,
+            output_smoothing_revision=self.OUTPUT_SMOOTHING_REVISION,
             rule_changes=['Обеспеченные заявки и торговля существующими товарами',
                 'Налог с конечных продаж вместо налога на прибыль',
                 'Выпуск по доступному спросу и неотрицательной ожидаемой марже',
                 'Сохранённые стройки и оплаченное собственное расширение',
                 'Возврат капитала закрытых фирм и продажа их товарных остатков',
-                'Дивиденды после резервов и рыночное потребление собственников'])
+                'Дивиденды после резервов и рыночное потребление собственников',
+                'Схема Итару-Кодекса: быстрый рост и сглаженное снижение выпуска'])
         self.cfg.setdefault('consumption_tax', 0.10)
         self.cfg.setdefault('dividend_profit_share', 0.50)
         self.cfg.setdefault('business_income_share', 1.0)
         self.cfg.setdefault('working_reserve_months', 1)
         self.cfg.setdefault('owner_consumption_rate', 0.05)
+        # Асимметричный регулятор выпуска: спрос растёт быстро, спад сглаживается.
+        self.cfg.setdefault('output_decline_rate', 0.25)
+        self.cfg.setdefault('output_overstock_factor', 2.0)
         self.cfg.setdefault('project_stall_months', 12)
         if (not isinstance(self.cfg['project_stall_months'], int)
                 or isinstance(self.cfg['project_stall_months'], bool)
@@ -66,6 +72,8 @@ class Economy(EconomyServices):
                 raise ValueError('Некорректная доля: '+key)
         if not math.isfinite(self.cfg['working_reserve_months']) or self.cfg['working_reserve_months'] < 0:
             raise ValueError('Некорректный срок оборотного резерва')
+        if not 0 < self.cfg['output_decline_rate'] <= 1 or self.cfg['output_overstock_factor'] < 1:
+            raise ValueError('Некорректные параметры сглаживания выпуска')
         for a in self.accounts.values():
             a.setdefault('reserved', 0.0)
             a.setdefault('protected', 0.0)
@@ -675,6 +683,14 @@ class Economy(EconomyServices):
             expected_unit_cost=cost, expected_price=self.net_price(quote), planned_price=price)
         e['expected_margin'] = e['expected_price']-e['expected_unit_cost']
         target = max(0, min(e['capacity'], forecast-projected_stock))
+        previous = e.get('planned_output', 0)
+        # При обычном падении спроса мощность сокращается постепенно. Если склад
+        # переполнен, быстрый спад разрешён, чтобы не накапливать лишний товар.
+        # Исторические исследовательские варианты сохраняют прежнюю формулу.
+        if (self.STOCK_PLANNING_REVISION >= 2 and target < previous-EPS
+                and not (stock > forecast*self.cfg['output_overstock_factor'])):
+            target = previous - self.cfg['output_decline_rate']*(previous-target)
+            target = max(0, min(e['capacity'], target))
         e['production_limit'] = 'Готовые запасы' if projected_stock >= forecast and forecast > EPS else 'Нет обеспеченного спроса' if forecast <= EPS else 'План'
         if e['expected_margin'] < -EPS:
             target, e['production_limit'] = 0, 'Отрицательная ожидаемая маржа'
