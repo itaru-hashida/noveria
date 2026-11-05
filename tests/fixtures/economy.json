@@ -5,6 +5,7 @@
   "wage": 0.12,
   "transport_rate": 0.008,
   "profit_tax": 0.10,
+  "enterprise_overhead_rate": 0,
   "dividend_share": 0.25,
   "owner_distribution": 0.20,
   "carrier_distribution": 0.90,

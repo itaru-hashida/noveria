@@ -9,6 +9,7 @@
   "dividend_profit_share": 0.50,
   "working_reserve_months": 1,
   "owner_consumption_rate": 0.05,
+  "enterprise_overhead_rate": 0.02,
   "dividend_share": 0.25,
   "owner_distribution": 0.20,
   "carrier_distribution": 0.90,

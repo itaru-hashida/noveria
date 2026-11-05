@@ -24,6 +24,7 @@ class Economy(EconomyServices):
     HOUSEHOLD_TOP_UP_REVISION = 1
     BASIC_BUDGET_REVISION = 1
     OUTPUT_SMOOTHING_REVISION = 1
+    ENTERPRISE_OVERHEAD_REVISION = 1
 
     def reset_report(self):
         super().reset_report()
@@ -45,13 +46,15 @@ class Economy(EconomyServices):
             household_top_up_revision=self.HOUSEHOLD_TOP_UP_REVISION,
             basic_budget_revision=self.BASIC_BUDGET_REVISION,
             output_smoothing_revision=self.OUTPUT_SMOOTHING_REVISION,
+            enterprise_overhead_revision=self.ENTERPRISE_OVERHEAD_REVISION,
             rule_changes=['Обеспеченные заявки и торговля существующими товарами',
                 'Налог с конечных продаж вместо налога на прибыль',
                 'Выпуск по доступному спросу и неотрицательной ожидаемой марже',
                 'Сохранённые стройки и оплаченное собственное расширение',
                 'Возврат капитала закрытых фирм и продажа их товарных остатков',
                 'Дивиденды после резервов и рыночное потребление собственников',
-                'Схема Итару-Кодекса: быстрый рост и сглаженное снижение выпуска'])
+                'Схема Итару-Кодекса: быстрый рост и сглаженное снижение выпуска',
+                'Оброк за землю и мастерскую для открытых предприятий'])
         self.cfg.setdefault('consumption_tax', 0.10)
         self.cfg.setdefault('dividend_profit_share', 0.50)
         self.cfg.setdefault('business_income_share', 1.0)
@@ -60,6 +63,7 @@ class Economy(EconomyServices):
         # Асимметричный регулятор выпуска: спрос растёт быстро, спад сглаживается.
         self.cfg.setdefault('output_decline_rate', 0.25)
         self.cfg.setdefault('output_overstock_factor', 2.0)
+        self.cfg.setdefault('enterprise_overhead_rate', 0.02)
         self.cfg.setdefault('project_stall_months', 12)
         if (not isinstance(self.cfg['project_stall_months'], int)
                 or isinstance(self.cfg['project_stall_months'], bool)
@@ -74,6 +78,8 @@ class Economy(EconomyServices):
             raise ValueError('Некорректный срок оборотного резерва')
         if not 0 < self.cfg['output_decline_rate'] <= 1 or self.cfg['output_overstock_factor'] < 1:
             raise ValueError('Некорректные параметры сглаживания выпуска')
+        if not 0 <= self.cfg['enterprise_overhead_rate'] <= 1:
+            raise ValueError('Некорректная ставка оброка предприятия')
         for a in self.accounts.values():
             a.setdefault('reserved', 0.0)
             a.setdefault('protected', 0.0)
@@ -88,6 +94,11 @@ class Economy(EconomyServices):
     def free_cash(self, account):
         a = self.accounts[account]
         return max(0.0, a['balance']-a.get('reserved', 0)-a.get('protected', 0))
+
+    def enterprise_overhead(self, e):
+        """Ежемесячный оброк за площадку и мастерскую при открытом предприятии."""
+        return (e['capacity']*self.goods[e['good']]['labor']*self.cfg['wage']
+                *self.cfg.get('enterprise_overhead_rate', 0))
 
     def market_tile(self, account):
         return account.get('cell_id') or account['tile_id']
@@ -335,7 +346,7 @@ class Economy(EconomyServices):
                 or not inputs.keys() <= prices.keys()
                 or 'expected_net_price' not in plan or 'wage_unit' not in plan):
             return None
-        other_cost = plan['wage_unit']
+        other_cost = plan['wage_unit']+plan.get('fixed_unit', 0)
         for good, quantity in inputs.items():
             if good == buy['good']:
                 continue
@@ -681,7 +692,6 @@ class Economy(EconomyServices):
         projected_stock = max(0, stock-expected_sales)
         e.update(sales_forecast=forecast, reachable_demand=demand,
             expected_unit_cost=cost, expected_price=self.net_price(quote), planned_price=price)
-        e['expected_margin'] = e['expected_price']-e['expected_unit_cost']
         target = max(0, min(e['capacity'], forecast-projected_stock))
         previous = e.get('planned_output', 0)
         # При обычном падении спроса мощность сокращается постепенно. Если склад
@@ -691,6 +701,9 @@ class Economy(EconomyServices):
                 and not (stock > forecast*self.cfg['output_overstock_factor'])):
             target = previous - self.cfg['output_decline_rate']*(previous-target)
             target = max(0, min(e['capacity'], target))
+        fixed_unit = self.enterprise_overhead(e)/target if target > EPS else 0.0
+        e.update(expected_fixed_cost=self.enterprise_overhead(e), expected_fixed_unit=fixed_unit,
+                 expected_margin=e['expected_price']-e['expected_unit_cost']-fixed_unit)
         e['production_limit'] = 'Готовые запасы' if projected_stock >= forecast and forecast > EPS else 'Нет обеспеченного спроса' if forecast <= EPS else 'План'
         if e['expected_margin'] < -EPS:
             target, e['production_limit'] = 0, 'Отрицательная ожидаемая маржа'
@@ -698,7 +711,7 @@ class Economy(EconomyServices):
         e['input_target_output'] = target
         return {k: e[k] for k in ('sales_forecast', 'reachable_demand', 'expected_unit_cost',
             'expected_price', 'expected_margin', 'production_limit', 'planned_output', 'input_target_output',
-            'planned_price')}
+            'planned_price', 'expected_fixed_cost', 'expected_fixed_unit')}
 
     def plan(self, e, history=None, sells=None):
         e.update(self.production_outlook(e, sells))
@@ -836,7 +849,7 @@ class Economy(EconomyServices):
         first_order = len(self.report['orders'])
 
         def cash_needed(quantity):
-            needed = quantity*recipe['labor']*self.cfg['wage']
+            needed = self.enterprise_overhead(e)+quantity*recipe['labor']*self.cfg['wage']
             for good, ratio in recipe['inputs'].items():
                 missing = max(0, quantity*ratio-self.free_stock(e['id'], good))
                 needed += missing*self.quoted_cost(a, good, missing, sells)[1]
@@ -861,6 +874,7 @@ class Economy(EconomyServices):
             sale_price=e['planned_price'],
             expected_net_price=e['expected_price'], input_prices=input_prices,
             input_ratios=dict(recipe['inputs']), wage_unit=recipe['labor']*self.cfg['wage'],
+            fixed_unit=e.get('expected_fixed_unit', 0),
             requested_output=requested, free_cash=cash, known_order_count=first_order,
             reachable_demand=e['reachable_demand'], sales_forecast=e['sales_forecast'],
             expected_margin=e['expected_margin'], reason=e['production_limit'])
@@ -971,7 +985,8 @@ class Economy(EconomyServices):
             if capacity < self.cfg['minimum_capacity']:
                 continue
             unit = self.unit_cost(quote_firm, sells)
-            margin = self.net_price(quote_firm)-unit
+            fixed_unit = recipe['labor']*self.cfg['wage']*self.cfg.get('enterprise_overhead_rate', 0)
+            margin = self.net_price(quote_firm)-unit-fixed_unit
             if margin <= EPS:
                 continue
             distance, _ = self.path(self.market_tile(investor), loc['tile_id'])
@@ -985,7 +1000,7 @@ class Economy(EconomyServices):
             capacity = min(capacity, max(0, available-startup)/max(material+delivery+unit, EPS))
             if capacity < self.cfg['minimum_capacity']:
                 continue
-            working = 0 if expansion else max(startup, capacity*unit)
+            working = 0 if expansion else max(startup, capacity*(unit+fixed_unit))
             investment = capacity*(material+delivery)+working
             profit = capacity*margin
             self.profile(investor)
@@ -994,7 +1009,7 @@ class Economy(EconomyServices):
                 continue
             candidates.append(dict(good=good, capacity=capacity, location=loc, materials={},
                 working_cash=working, expected_price=price, expected_profit=profit,
-                expected_investment=investment, expected_unit_cost=unit, expansion=bool(expansion),
+                expected_investment=investment, expected_unit_cost=unit+fixed_unit, expansion=bool(expansion),
                 created=self.meta['month']))
         return max(candidates, key=lambda p: p['expected_profit']*self.cfg['investment_payback_months']-p['expected_investment']) if candidates else None
 
@@ -1028,7 +1043,8 @@ class Economy(EconomyServices):
             good = project['good']
             loc = project['location']
             e = dict(id=a['id'], good=good, price=project['expected_price'], **loc)
-            margin = self.net_price(e)-self.unit_cost(e, sells)
+            margin = (self.net_price(e)-self.unit_cost(e, sells)
+                -self.goods[good]['labor']*self.cfg['wage']*self.cfg.get('enterprise_overhead_rate', 0))
             # Отмена требует наблюдаемой отрицательной маржи, отсутствие одного материала не отменяет проект.
             signal = self.market_signal(self.meta.get('market_history', []), a['state_id'], loc['province_id'], good)
             absent = (len(self.meta.get('market_history', [])) >= 3 and self.meta['month']-project['created'] >= 3
@@ -1168,13 +1184,18 @@ class Economy(EconomyServices):
             if o['participant'] == e['id'] and o['side'] == 'buy':
                 self.cancel_order(o, 'Предприятие закрыто')
         self.accounts[e['id']].pop('project', None)
-        e.update(status='closed', closed=self.meta['month'], closure_reason='Устойчивая отрицательная маржа без продаж', reason='Прекращение нежизнеспособной деятельности')
+        e.update(status='closed', closed=self.meta['month'], closure_reason='Двенадцать месяцев подряд убыточной работы', reason='Прекращение нежизнеспособной деятельности')
         self.return_capital(e)
         self.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'], action='closed', reason=e['reason']))
 
     def settle(self, enterprises, households):
         for e in enterprises:
-            e['expenses'] = e['cost_of_sales']
+            due = self.enterprise_overhead(e) if e['status'] != 'closed' else 0.0
+            paid = min(due, self.free_cash(e['id']))
+            if paid > EPS:
+                self.transfer(e['id'], 'treasury:'+e['state_id'], paid, 'Оброк за землю и мастерскую')
+            e.update(fixed_cost_due=due, fixed_cost_paid=paid)
+            e['expenses'] = e['cost_of_sales']+due
             e['profit'] = e['revenue']-e['tax']-e['expenses']
             e['loss_months'] = e['loss_months']+1 if e['profit'] < -EPS else 0
             e['profitable_months'] = e['profitable_months']+1 if e['profit'] > EPS else 0
@@ -1182,7 +1203,7 @@ class Economy(EconomyServices):
             if e['status'] == 'closed':
                 self.return_capital(e)
                 continue
-            unviable = sold <= EPS and e.get('expected_margin', 0) < -EPS and e['available_from'] <= self.meta['month']
+            unviable = e['loss_months'] > 0 and e['available_from'] <= self.meta['month']
             e['unviable_months'] = e.get('unviable_months', 0)+1 if unviable else 0
             if e['unviable_months'] >= self.cfg['loss_months_to_close']:
                 self.close_enterprise(e)

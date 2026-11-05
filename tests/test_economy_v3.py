@@ -408,7 +408,8 @@ def test_zero_cash_and_profitable_idle_firm_do_not_force_closure(engine):
     for _ in range(15):
         engine.settle([e], [engine.accounts['h']])
     assert e['status'] != 'closed'
-    e['expected_margin'] = -1
+    engine.cfg['enterprise_overhead_rate'] = .1
+    engine.accounts[e['id']]['balance'] = 100
     for _ in range(engine.cfg['loss_months_to_close']):
         engine.settle([e], [engine.accounts['h']])
     assert e['status'] == 'closed'
