@@ -265,7 +265,9 @@ class Economy(EconomyServices):
 
     def offers(self, buyer, good, sells):
         cache = getattr(self, '_offer_index', {})
-        key = (self.market_tile(buyer), good)
+        signature = tuple((sell['id'], sell['price'], sell['tile_id'], sell['status'])
+                          for sell in sells.get(good, []))
+        key = (self.market_tile(buyer), good, signature)
         options = cache.get(key)
         if options is None:
             options = []
