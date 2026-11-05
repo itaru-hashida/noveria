@@ -1022,6 +1022,16 @@ class Economy(EconomyServices):
         for a in self.shuffled(investors):
             project = self.project_candidate(a, sells) if due and 'project' not in a else None
             if project:
+                evidence = {}
+                for input_good, ratio in self.goods[project['good']]['inputs'].items():
+                    required = project['capacity']*ratio
+                    available = sum(sell['remaining'] for _, sell, _ in self.offers(a, input_good, sells))
+                    signal = self.market_signal(self.meta.get('market_history', []), a['state_id'],
+                                                project['location']['province_id'], input_good)
+                    evidence[input_good] = dict(required=round(required, 6),
+                        available=round(available, 6), shortage=round(max(0, required-available), 6),
+                        historical_unmet=round(signal['unmet'], 6), historical_volume=round(signal['volume'], 6))
+                project['input_evidence'] = evidence
                 a['project'] = project
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
         self.__dict__.pop('_investment_supply_cache', None)
