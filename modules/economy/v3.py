@@ -673,6 +673,20 @@ class Economy(EconomyServices):
             expected_unit_cost=cost, expected_price=self.net_price(quote), planned_price=price)
         e['expected_margin'] = e['expected_price']-e['expected_unit_cost']
         target = max(0, min(e['capacity'], forecast-projected_stock))
+        if target > EPS and self.STOCK_PLANNING_REVISION:
+            prices = self.volume_input_prices(e, target, sells)
+            replacement_cost = self.goods[e['good']]['labor']*self.cfg['wage']
+            replacement_cost += sum(ratio*prices[good] for good, ratio in self.goods[e['good']]['inputs'].items())
+            e['expected_unit_cost'] = replacement_cost
+            consumer = e['good'] in (self.cfg['basic_needs'] | self.cfg['extra_needs'])
+            net_factor = 1-self.cfg['consumption_tax'] if consumer else 1
+            replacement_price = replacement_cost*(1+self.cfg['markup'])/net_factor
+            if replacement_price > price+EPS:
+                price = min(self.rules['maximum_price'], replacement_price)
+                quote = dict(e, price=price)
+                e['planned_price'] = price
+                e['expected_price'] = self.net_price(quote)
+            e['expected_margin'] = e['expected_price']-replacement_cost
         e['production_limit'] = 'Готовые запасы' if projected_stock >= forecast and forecast > EPS else 'Нет обеспеченного спроса' if forecast <= EPS else 'План'
         if e['expected_margin'] < -EPS:
             target, e['production_limit'] = 0, 'Отрицательная ожидаемая маржа'
