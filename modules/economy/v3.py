@@ -264,14 +264,22 @@ class Economy(EconomyServices):
         return price+freight, freight, distance, path
 
     def offers(self, buyer, good, sells):
-        options = []
-        for sell in sells.get(good, []):
-            if sell['participant'] == buyer['id'] or sell['remaining'] <= EPS or sell['status'] in ('cancelled', 'expired'):
-                continue
-            quote = self.landed(sell['tile_id'], self.market_tile(buyer), good, sell['price'])
-            if quote:
-                options.append((quote[0], sell, quote))
-        return sorted(options, key=lambda item: (item[0], item[1]['id']))
+        cache = getattr(self, '_offer_index', {})
+        key = (self.market_tile(buyer), good)
+        options = cache.get(key)
+        if options is None:
+            options = []
+            for sell in sells.get(good, []):
+                quote = self.landed(sell['tile_id'], self.market_tile(buyer), good, sell['price'])
+                if quote:
+                    options.append((quote[0], sell, quote))
+            options.sort(key=lambda item: (item[0], item[1]['id']))
+            cache[key] = options
+            self._offer_index = cache
+        return [(price, sell, quote) for price, sell, quote in options
+                if sell['participant'] != buyer['id']
+                and sell['remaining'] > EPS
+                and sell['status'] not in ('cancelled', 'expired')]
 
     def reference_price(self, buyer, good, sells):
         offers = self.offers(buyer, good, sells)
@@ -483,6 +491,8 @@ class Economy(EconomyServices):
             observation['stock_holders_after_match'] = holders
 
     def sell_orders(self):
+        # Новый набор предложений начинается с каждого торгового прохода.
+        self.__dict__.pop('_offer_index', None)
         result = defaultdict(list)
         for a in self.shuffled(self.accounts.values()):
             e = self.enterprises.get(a['id'])
@@ -1193,6 +1203,7 @@ class Economy(EconomyServices):
         self.__dict__.pop('_planning_orders', None)
         self.__dict__.pop('_recovery_quotes', None)
         self.__dict__.pop('_stock_sales_cache', None)
+        self.__dict__.pop('_offer_index', None)
         self.activate_rules()
         self.accounts = dict(sorted(self.accounts.items()))
         self.enterprises = dict(sorted(self.enterprises.items()))
