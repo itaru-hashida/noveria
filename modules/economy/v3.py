@@ -275,14 +275,16 @@ class Economy(EconomyServices):
 
         suppliers = []
         consumers = []
-        supply = operating_demand = 0.0
+        supply = capacity_supply = operating_demand = 0.0
         for firm in self.enterprises.values():
             if not active(firm):
                 continue
             output = confirmed_output(firm)
             if firm['good'] == good:
                 supply += output
-                suppliers.append(dict(enterprise_id=firm['id'], output=output))
+                capacity_supply += firm['capacity']
+                suppliers.append(dict(enterprise_id=firm['id'], output=output,
+                    capacity=firm['capacity']))
             ratio = self.goods[firm['good']]['inputs'].get(good, 0)
             if ratio:
                 demand = output*ratio
@@ -306,9 +308,11 @@ class Economy(EconomyServices):
 
         committed = operating_demand+construction_demand
         return dict(state_id=state_id, good=good, supply=supply,
+            capacity_supply=capacity_supply,
             operating_demand=operating_demand,
             construction_demand=construction_demand, committed=committed,
             free=max(0, supply-committed), shortage=max(0, committed-supply),
+            rampable_free=max(0, capacity_supply-committed),
             suppliers=suppliers, consumers=consumers, projects=projects)
 
     def investment_expansion_intents(self, demands, flow_balances=None):
@@ -329,7 +333,9 @@ class Economy(EconomyServices):
                 balance = (flow_balances or {}).get(key)
                 if balance is None:
                     balance = self.investment_flow_balance(state_id, good)
-                free_flow[key] = balance['free']
+                # Сначала используем резерв уже построенных поставщиков.
+                # Новый intent создаётся только когда и он исчерпан.
+                free_flow[key] = balance['rampable_free']
             return free_flow[key]
 
         def require(state_id, product, quantity, decision_id, parent_good, path):
@@ -404,7 +410,7 @@ class Economy(EconomyServices):
             input_shortages = []
             for input_good, ratio in sorted(recipe['inputs'].items()):
                 required = required_flow*ratio
-                free = self.investment_flow_balance(state_id, input_good)['free']
+                free = self.investment_flow_balance(state_id, input_good)['rampable_free']
                 shortage = max(0, required-free)
                 if shortage > EPS:
                     input_shortages.append(dict(good=input_good, required=required,

@@ -344,6 +344,7 @@ def test_flow_balance_counts_projects_and_works_for_other_recipe(engine):
     assert balance['operating_demand'] == pytest.approx(80)
     assert balance['construction_demand'] == pytest.approx(8)
     assert balance['free'] == pytest.approx(12)
+    assert balance['rampable_free'] == pytest.approx(12)
 
 
 def test_expansion_intents_aggregate_two_cloth_demands_into_one_flax_intent(engine):
@@ -383,6 +384,23 @@ def test_expansion_intents_recurse_through_bread_chain(engine):
     assert by_good['wood']['required_flow'] == pytest.approx(1)
     assert by_good['flour']['parents'][0]['decision_id'] == 'bread-growth'
     assert by_good['grain']['parents'][0]['parent_good'] == 'flour'
+
+
+def test_expansion_intents_use_existing_supplier_headroom_before_new_expansion(engine):
+    flour, bread = firm(engine, 'flour'), firm(engine, 'bread')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    flour.update(status='open', capacity=100, planned_output=0)
+    bread.update(status='open', capacity=100, planned_output=100)
+
+    balance = engine.investment_flow_balance('s', 'flour')
+    intents = engine.investment_expansion_intents([
+        dict(state_id='s', good='bread', quantity=10, decision_id='bread-growth'),
+    ])
+
+    assert balance['free'] == 0
+    assert balance['rampable_free'] == pytest.approx(20)
+    assert {intent['good'] for intent in intents} == {'wood'}
 
 
 def test_expansion_diagnostics_explain_shared_resource_block(engine):
