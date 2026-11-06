@@ -36,11 +36,27 @@ class Economy(EconomyServices):
         if good is None:
             dirty.update(self.goods)
         else:
-            dirty.add(good)
-            for product, recipe in self.goods.items():
-                if good in recipe.get('inputs', {}):
-                    dirty.add(product)
+            parents = self.recipe_graph().get('parents', {})
+            pending = [good]
+            while pending:
+                current = pending.pop()
+                if current in dirty:
+                    continue
+                dirty.add(current)
+                pending.extend(parents.get(current, ()))
         self.meta['investment_dirty'] = sorted(dirty)
+
+    def recipe_graph(self):
+        graph = getattr(self, '_recipe_graph_cache', None)
+        if graph is None:
+            parents = {good: set() for good in self.goods}
+            children = {good: set(recipe.get('inputs', {})) for good, recipe in self.goods.items()}
+            for product, inputs in children.items():
+                for input_good in inputs:
+                    parents.setdefault(input_good, set()).add(product)
+            graph = {'parents': parents, 'children': children}
+            self._recipe_graph_cache = graph
+        return graph
 
     def add_stock(self, account, good, quantity, value=0):
         result = super().add_stock(account, good, quantity, value)
