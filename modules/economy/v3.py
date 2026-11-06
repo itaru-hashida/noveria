@@ -31,7 +31,8 @@ class Economy(EconomyServices):
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
             investment_candidates=[], expansion_intents=[],
-            expansion_intent_diagnostics=[], investment_candidate_statuses=[])
+            expansion_intent_diagnostics=[], investment_candidate_statuses=[],
+            investment_shadow_gate=[])
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -99,6 +100,16 @@ class Economy(EconomyServices):
                 decision_id=candidate.get('project_id'), project_id=candidate.get('project_id'),
                 status=candidate['status'], blockers=candidate['blockers'],
                 intents=candidate['intents'])
+
+        for shadow in self.report.get('investment_shadow_gate', []):
+            if not shadow['actual_started']:
+                continue
+            self.log_event('investment.shadow_gate',
+                entity_id=shadow.get('investor'), region_id=shadow.get('province_id'),
+                good=shadow.get('good'), source='investment_shadow_gate',
+                decision_id=shadow.get('project_id'), project_id=shadow.get('project_id'),
+                status=shadow['status'], would_block=shadow['would_block'],
+                blockers=shadow['blockers'])
 
         trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
         for trade in self.report.get('trades', []):
@@ -452,6 +463,18 @@ class Economy(EconomyServices):
             status = 'blocked' if blockers else 'waiting_for_intent' if rows else 'ready'
             result.append(dict(**copy.deepcopy(candidate), status=status, blockers=blockers,
                 intents=sorted(f"{row['state_id']}:{row['good']}" for row in rows)))
+        return result
+
+    def investment_shadow_gate(self, statuses, decisions):
+        """Записать, что запретил бы будущий gate, не влияя на решения."""
+        started = {row.get('project_id') for row in decisions
+            if row.get('outcome') == 'started' and row.get('project_id')}
+        result = []
+        for status in statuses:
+            project_id = status.get('project_id')
+            result.append(dict(**copy.deepcopy(status),
+                actual_started=project_id in started,
+                would_block=status['status'] == 'blocked'))
         return result
 
     def add_stock(self, account, good, quantity, value=0):
@@ -1628,6 +1651,8 @@ class Economy(EconomyServices):
             self.report['investment_candidate_statuses'] = self.investment_candidate_statuses(
                 self.report['investment_candidates'], self.report['expansion_intents'],
                 self.report['expansion_intent_diagnostics'])
+            self.report['investment_shadow_gate'] = self.investment_shadow_gate(
+                self.report['investment_candidate_statuses'], self.report['investment_decisions'])
         self.__dict__.pop('_investment_supply_cache', None)
         self.__dict__.pop('_upstream_candidate_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)

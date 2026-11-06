@@ -516,6 +516,25 @@ def test_candidate_statuses_follow_aggregate_intent_diagnostics(engine):
     assert by_project['tools-project']['status'] == 'ready'
 
 
+def test_shadow_gate_marks_only_actual_blocked_starts(engine):
+    statuses = [
+        dict(project_id='blocked', investor='private:s', good='cloth', status='blocked', blockers=['resource_capacity']),
+        dict(project_id='ready', investor='merchant:s', good='bread', status='ready', blockers=[]),
+    ]
+    decisions = [
+        dict(outcome='started', project_id='blocked'),
+        dict(outcome='started', project_id='ready'),
+    ]
+
+    rows = engine.investment_shadow_gate(statuses, decisions)
+    by_project = {row['project_id']: row for row in rows}
+
+    assert by_project['blocked']['actual_started'] is True
+    assert by_project['blocked']['would_block'] is True
+    assert by_project['ready']['actual_started'] is True
+    assert by_project['ready']['would_block'] is False
+
+
 def test_partial_project_and_locked_materials_survive_reload(engine, tmp_path):
     clear(engine)
     a = engine.accounts['merchant:s']
