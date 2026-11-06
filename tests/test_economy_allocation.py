@@ -61,9 +61,13 @@ def test_investors_account_for_projects_announced_in_same_month(engine):
     for a in engine.accounts.values():
         a.update(stock={}, values={})
     firm(engine)['status'] = 'closed'
+    flour = engine.accounts[firm(engine, 'flour')['id']]
+    wood = engine.accounts[firm(engine, 'wood')['id']]
+    flour.update(stock={'flour': 40}, values={'flour': 40*1.7})
+    wood.update(stock={'wood': 5}, values={'wood': 5*1.1})
     engine.meta['month'] = engine.cfg['investment_interval']
     engine.order('h', 'bread', 50, 'buy', 3, 'Базовые нужды')
-    engine.project_requests({})
+    engine.project_requests(engine.sell_orders())
     projects = [a['project'] for a in engine.accounts.values() if a.get('project', {}).get('good') == 'bread']
     assert len(projects) == 1
     assert projects[0]['capacity'] == 50

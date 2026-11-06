@@ -303,6 +303,9 @@ def test_profitable_expansion_is_selected_from_funded_orders(engine):
     assert choice is not None and choice['expansion']
     assert choice['expected_profit'] > 0
     assert choice['expected_investment'] <= engine.free_cash(e['id'])
+    assert choice['chain_requirements'] == engine.recipe_requirements(
+        choice['good'], choice['capacity'])
+    assert choice['project_id'].startswith(f"{e['id']}:bread:p:")
     engine.accounts[e['id']]['stock']['bread'] = 1000
     assert engine.project_candidate(engine.accounts[e['id']], {}) is None
 

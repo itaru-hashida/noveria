@@ -1211,7 +1211,6 @@ class Economy(EconomyServices):
                         province_id=pid, stage='capacity', capacity=capacity,
                         minimum=self.cfg['minimum_capacity']))
                 continue
-            chain_requirements = self.recipe_requirements(good, capacity)
             unit = self.unit_cost(quote_firm, sells)
             fixed_unit = recipe['labor']*self.cfg['wage']*self.cfg.get('enterprise_overhead_rate', 0)
             margin = self.net_price(quote_firm)-unit-fixed_unit
@@ -1250,10 +1249,16 @@ class Economy(EconomyServices):
                         province_id=pid, stage='payback', investment=investment,
                         available=available, profit=profit, horizon=horizon))
                 continue
+            # Финансирование выше может уменьшить мощность. Требования цепочки
+            # должны соответствовать именно итоговому проекту, а не ранней
+            # оценке спроса.
+            chain_requirements = self.recipe_requirements(good, capacity)
+            project_id = f"{investor['id']}:{good}:{pid}:{self.meta['month']}"
             candidates.append(dict(good=good, capacity=capacity, location=loc, materials={},
                 working_cash=working, expected_price=price, expected_profit=profit,
                 expected_investment=investment, expected_unit_cost=unit+fixed_unit, expansion=bool(expansion),
                 created=self.meta['month'], chain_requirements=chain_requirements,
+                project_id=project_id,
                 parent_project_id=parent_project_id,
                 derived_demand=derived_demand.get(good) if derived_demand else None,
                 dependency_expires=self.meta['month']+self.cfg.get('project_stall_months', 12)
@@ -1339,8 +1344,7 @@ class Economy(EconomyServices):
                     shortage = max(0, required-free)
                     upstream = self.upstream_expansion_candidate(
                         input_good, a['state_id'], sells, shortage,
-                        project['location']['province_id'],
-                        f"{a['id']}:{project['good']}:{self.meta['month']}")
+                        project['location']['province_id'], project['project_id'])
                     if not upstream:
                         self.log_event('investment.upstream_unavailable',
                             entity_id=a['id'], region_id=project['location']['province_id'],
