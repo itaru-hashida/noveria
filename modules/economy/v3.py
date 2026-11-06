@@ -1157,7 +1157,7 @@ class Economy(EconomyServices):
         return residual
 
     def project_candidate(self, investor, sells, derived_demand=None, demand_region=None,
-                          parent_project_id=None):
+                          parent_project_id=None, diagnostics=None):
         candidates = []
         history = self.meta.get('market_history', [])
         markets = {(o['province_id'], o['good']) for o in self.report['orders'] if o['side'] == 'buy' and o['state_id'] == investor['state_id'] and o['province_id']}
@@ -1193,6 +1193,10 @@ class Economy(EconomyServices):
             if derived_demand and good in derived_demand:
                 demand = max(demand, derived_demand[good])
             if demand < self.cfg['minimum_capacity']:
+                if diagnostics is not None:
+                    diagnostics.append(dict(investor=investor['id'], good=good,
+                        province_id=pid, stage='demand', demand=demand,
+                        minimum=self.cfg['minimum_capacity']))
                 continue
             capacity = min(demand, derived_demand[good]) if derived_demand and good in derived_demand else demand
             labor = sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
@@ -1202,15 +1206,26 @@ class Economy(EconomyServices):
                 used = sum(e['capacity'] for e in self.enterprises.values() if e['status'] != 'closed' and e['province_id'] == pid and self.goods[e['good']]['resource'] == recipe['resource'])
                 capacity = min(capacity, max(0, len(tiles)*self.cfg['extraction_per_tile']-used))
             if capacity < self.cfg['minimum_capacity']:
+                if diagnostics is not None:
+                    diagnostics.append(dict(investor=investor['id'], good=good,
+                        province_id=pid, stage='capacity', capacity=capacity,
+                        minimum=self.cfg['minimum_capacity']))
                 continue
             chain_requirements = self.recipe_requirements(good, capacity)
             unit = self.unit_cost(quote_firm, sells)
             fixed_unit = recipe['labor']*self.cfg['wage']*self.cfg.get('enterprise_overhead_rate', 0)
             margin = self.net_price(quote_firm)-unit-fixed_unit
             if margin <= EPS:
+                if diagnostics is not None:
+                    diagnostics.append(dict(investor=investor['id'], good=good,
+                        province_id=pid, stage='margin', margin=margin,
+                        unit_cost=unit+fixed_unit, price=self.net_price(quote_firm)))
                 continue
             distance, _ = self.path(self.market_tile(investor), loc['tile_id'])
             if distance is None:
+                if diagnostics is not None:
+                    diagnostics.append(dict(investor=investor['id'], good=good,
+                        province_id=pid, stage='route'))
                 continue
             bill = self.construction_bill(1)
             material = sum(q*self.quoted_cost(investor, g, q, sells)[0]/max(q, EPS) for g, q in bill.items())
@@ -1219,6 +1234,10 @@ class Economy(EconomyServices):
             startup = 0 if expansion else self.cfg['startup_cash']
             capacity = min(capacity, max(0, available-startup)/max(material+delivery+unit, EPS))
             if capacity < self.cfg['minimum_capacity']:
+                if diagnostics is not None:
+                    diagnostics.append(dict(investor=investor['id'], good=good,
+                        province_id=pid, stage='funding_capacity', capacity=capacity,
+                        minimum=self.cfg['minimum_capacity']))
                 continue
             working = 0 if expansion else max(startup, capacity*(unit+fixed_unit))
             investment = capacity*(material+delivery)+working
@@ -1226,6 +1245,10 @@ class Economy(EconomyServices):
             self.profile(investor)
             horizon = self.cfg['investment_payback_months']*(0.5+investor['risk_tolerance'])
             if investment > available+EPS or profit*horizon < investment:
+                if diagnostics is not None:
+                    diagnostics.append(dict(investor=investor['id'], good=good,
+                        province_id=pid, stage='payback', investment=investment,
+                        available=available, profit=profit, horizon=horizon))
                 continue
             candidates.append(dict(good=good, capacity=capacity, location=loc, materials={},
                 working_cash=working, expected_price=price, expected_profit=profit,
@@ -1245,6 +1268,7 @@ class Economy(EconomyServices):
         if key in cache:
             return cache[key]
         candidates = []
+        diagnostics = []
         for firm in self.enterprises.values():
             if (firm['good'] != good or firm['status'] == 'closed'
                     or firm.get('suspended') or firm['state_id'] != state_id):
@@ -1256,11 +1280,13 @@ class Economy(EconomyServices):
                 # Расширение происходит в провинции самого поставщика;
                 # доставка до верхнего проекта проверяется его маржой.
                 derived_demand={good: shortage}, demand_region=firm['province_id'],
-                parent_project_id=parent_project_id)
+                parent_project_id=parent_project_id, diagnostics=diagnostics)
             if project and project['good'] == good and project['expansion']:
                 candidates.append((account, project))
         result = max(candidates, key=lambda row: row[1]['capacity'], default=None)
         cache[key] = result
+        self._upstream_candidate_diagnostics = getattr(self, '_upstream_candidate_diagnostics', {})
+        self._upstream_candidate_diagnostics[key] = diagnostics
         self._upstream_candidate_cache = cache
         return result
 
@@ -1323,7 +1349,9 @@ class Economy(EconomyServices):
                             parent_event_id=f"{a['id']}:{project['good']}:{self.meta['month']}",
                             required=required, available=available,
                             already_reserved=self._investment_input_reserved[input_good],
-                            bounded_shortage=shortage, parent_good=project['good'])
+                            bounded_shortage=shortage, parent_good=project['good'],
+                            candidate_diagnostics=getattr(self, '_upstream_candidate_diagnostics', {}).get(
+                                (input_good, a['state_id'], round(shortage, 8), project['location']['province_id']), []))
                     if upstream:
                         owner, upstream_project = upstream
                         if not owner.get('project'):
