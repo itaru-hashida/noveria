@@ -224,13 +224,15 @@ class Economy(EconomyServices):
     def recipe_requirements(self, good, quantity):
         """Полный производный спрос на входы для заданного выпуска."""
         requirements = defaultdict(float)
-        stack = [(good, quantity)]
+        stack = [(good, quantity, ())]
         while stack:
-            product, amount = stack.pop()
+            product, amount, path = stack.pop()
+            if product in path:
+                raise ValueError('Цикл рецептов: '+' -> '.join(path + (product,)))
             for input_good, ratio in self.recipe_graph()['children'].get(product, {}).items():
                 required = amount*ratio
                 requirements[input_good] += required
-                stack.append((input_good, required))
+                stack.append((input_good, required, path + (product,)))
         return dict(requirements)
 
     def add_stock(self, account, good, quantity, value=0):
@@ -1154,7 +1156,8 @@ class Economy(EconomyServices):
             residual += volume
         return residual
 
-    def project_candidate(self, investor, sells):
+    def project_candidate(self, investor, sells, derived_demand=None, demand_region=None,
+                          parent_project_id=None):
         candidates = []
         history = self.meta.get('market_history', [])
         markets = {(o['province_id'], o['good']) for o in self.report['orders'] if o['side'] == 'buy' and o['state_id'] == investor['state_id'] and o['province_id']}
@@ -1164,6 +1167,10 @@ class Economy(EconomyServices):
         markets |= {(t['province_id'], good) for t in self.tiles.values() for good in resource_goods
             if t['province_id'] and self.owners.get(t['province_id']) == investor['state_id']
             and self.goods[good]['resource'] in t['resources']}
+        if derived_demand:
+            for good, amount in derived_demand.items():
+                if amount > EPS and demand_region:
+                    markets.add((demand_region, good))
         expansion = self.enterprises.get(investor['id'])
         for pid, good in sorted(markets):
             if expansion and (good != expansion['good'] or pid != expansion['province_id']):
@@ -1183,9 +1190,11 @@ class Economy(EconomyServices):
             price = max(limits) if limits else signal['price'] or self.goods[good]['price']
             quote_firm['price'] = price
             demand = max(0, self.investment_demand(quote_firm, sells)-investor['stock'].get(good, 0))
+            if derived_demand and good in derived_demand:
+                demand = max(demand, derived_demand[good])
             if demand < self.cfg['minimum_capacity']:
                 continue
-            capacity = demand
+            capacity = min(demand, derived_demand[good]) if derived_demand and good in derived_demand else demand
             labor = sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
                 if a['kind'] == 'household' and a['state_id'] == loc['state_id'] and a['province_id'] == pid)
             capacity = min(capacity, labor/recipe['labor'])
@@ -1221,13 +1230,18 @@ class Economy(EconomyServices):
             candidates.append(dict(good=good, capacity=capacity, location=loc, materials={},
                 working_cash=working, expected_price=price, expected_profit=profit,
                 expected_investment=investment, expected_unit_cost=unit+fixed_unit, expansion=bool(expansion),
-                created=self.meta['month'], chain_requirements=chain_requirements))
+                created=self.meta['month'], chain_requirements=chain_requirements,
+                parent_project_id=parent_project_id,
+                derived_demand=derived_demand.get(good) if derived_demand else None,
+                dependency_expires=self.meta['month']+self.cfg.get('project_stall_months', 12)
+                    if parent_project_id else None))
         return max(candidates, key=lambda p: p['expected_profit']*self.cfg['investment_payback_months']-p['expected_investment']) if candidates else None
 
-    def upstream_expansion_candidate(self, good, state_id, sells):
+    def upstream_expansion_candidate(self, good, state_id, sells, shortage,
+                                     province_id, parent_project_id):
         """Найти расширяемую мощность для дефицитного звена цепочки."""
         cache = getattr(self, '_upstream_candidate_cache', {})
-        key = (good, state_id)
+        key = (good, state_id, round(shortage, 8), province_id)
         if key in cache:
             return cache[key]
         candidates = []
@@ -1238,7 +1252,11 @@ class Economy(EconomyServices):
             account = self.accounts[firm['id']]
             if account.get('project'):
                 continue
-            project = self.project_candidate(account, sells)
+            project = self.project_candidate(account, sells,
+                # Расширение происходит в провинции самого поставщика;
+                # доставка до верхнего проекта проверяется его маржой.
+                derived_demand={good: shortage}, demand_region=firm['province_id'],
+                parent_project_id=parent_project_id)
             if project and project['good'] == good and project['expansion']:
                 candidates.append((account, project))
         result = max(candidates, key=lambda row: row[1]['capacity'], default=None)
@@ -1292,16 +1310,37 @@ class Economy(EconomyServices):
                 if not feasible:
                     # Расширение upstream выполняется только при подтверждённом
                     # спросе на это звено; сам поиск кэширован на месяц.
-                    upstream = self.upstream_expansion_candidate(input_good, a['state_id'], sells)
+                    shortage = max(0, required-free)
+                    upstream = self.upstream_expansion_candidate(
+                        input_good, a['state_id'], sells, shortage,
+                        project['location']['province_id'],
+                        f"{a['id']}:{project['good']}:{self.meta['month']}")
+                    if not upstream:
+                        self.log_event('investment.upstream_unavailable',
+                            entity_id=a['id'], region_id=project['location']['province_id'],
+                            good=input_good, cause='no_profitable_or_sized_candidate',
+                            source='upstream_expansion_candidate',
+                            parent_event_id=f"{a['id']}:{project['good']}:{self.meta['month']}",
+                            required=required, available=available,
+                            already_reserved=self._investment_input_reserved[input_good],
+                            bounded_shortage=shortage, parent_good=project['good'])
                     if upstream:
                         owner, upstream_project = upstream
                         if not owner.get('project'):
                             owner['project'] = upstream_project
-                            self.report['investment_decisions'].append(dict(
-                                kind='investment_decision', investor=owner['id'], outcome='started',
-                                dependency_for=project['good'], **copy.deepcopy(upstream_project)))
-                    queue.append(dict(created=self.meta['month'], investor=a['id'],
-                                      project=copy.deepcopy(project)))
+                            upstream_decision = copy.deepcopy(upstream_project)
+                            upstream_decision.update(kind='investment_decision',
+                                investor=owner['id'], outcome='started',
+                                dependency_for=project['good'],
+                                parent_project_id=project.get('project_id'))
+                            self.report['investment_decisions'].append(upstream_decision)
+                    queue_key = (a['id'], project['good'], project['location']['province_id'])
+                    queued_keys = {(x.get('investor'), x.get('project', {}).get('good'),
+                                    x.get('project', {}).get('location', {}).get('province_id'))
+                                   for x in queue}
+                    if queue_key not in queued_keys:
+                        queue.append(dict(created=self.meta['month'], investor=a['id'],
+                                          project=copy.deepcopy(project)))
                     project = None
             if project:
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
