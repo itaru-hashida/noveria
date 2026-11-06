@@ -64,7 +64,12 @@ class Economy(EconomyServices):
                 expected_profit=decision.get('expected_profit'),
                 expected_investment=decision.get('expected_investment'),
                 input_evidence=decision.get('input_evidence'),
-                chain_requirements=decision.get('chain_requirements'))
+                chain_requirements=decision.get('chain_requirements'),
+                blocked_input=decision.get('input_good'),
+                required=decision.get('required'),
+                available=decision.get('available'),
+                already_reserved=decision.get('already_reserved'),
+                dependency_for=decision.get('dependency_for'))
 
         trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
         for trade in self.report.get('trades', []):
