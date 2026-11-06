@@ -50,13 +50,25 @@ class Economy(EconomyServices):
         graph = getattr(self, '_recipe_graph_cache', None)
         if graph is None:
             parents = {good: set() for good in self.goods}
-            children = {good: set(recipe.get('inputs', {})) for good, recipe in self.goods.items()}
+            children = {good: dict(recipe.get('inputs', {})) for good, recipe in self.goods.items()}
             for product, inputs in children.items():
                 for input_good in inputs:
                     parents.setdefault(input_good, set()).add(product)
             graph = {'parents': parents, 'children': children}
             self._recipe_graph_cache = graph
         return graph
+
+    def recipe_requirements(self, good, quantity):
+        """Полный производный спрос на входы для заданного выпуска."""
+        requirements = defaultdict(float)
+        stack = [(good, quantity)]
+        while stack:
+            product, amount = stack.pop()
+            for input_good, ratio in self.recipe_graph()['children'].get(product, {}).items():
+                required = amount*ratio
+                requirements[input_good] += required
+                stack.append((input_good, required))
+        return dict(requirements)
 
     def add_stock(self, account, good, quantity, value=0):
         result = super().add_stock(account, good, quantity, value)
@@ -1019,6 +1031,7 @@ class Economy(EconomyServices):
                 capacity = min(capacity, max(0, len(tiles)*self.cfg['extraction_per_tile']-used))
             if capacity < self.cfg['minimum_capacity']:
                 continue
+            chain_requirements = self.recipe_requirements(good, capacity)
             unit = self.unit_cost(quote_firm, sells)
             fixed_unit = recipe['labor']*self.cfg['wage']*self.cfg.get('enterprise_overhead_rate', 0)
             margin = self.net_price(quote_firm)-unit-fixed_unit
@@ -1045,7 +1058,7 @@ class Economy(EconomyServices):
             candidates.append(dict(good=good, capacity=capacity, location=loc, materials={},
                 working_cash=working, expected_price=price, expected_profit=profit,
                 expected_investment=investment, expected_unit_cost=unit+fixed_unit, expansion=bool(expansion),
-                created=self.meta['month']))
+                created=self.meta['month'], chain_requirements=chain_requirements))
         return max(candidates, key=lambda p: p['expected_profit']*self.cfg['investment_payback_months']-p['expected_investment']) if candidates else None
 
     def project_requests(self, sells):
