@@ -1019,9 +1019,28 @@ class Economy(EconomyServices):
             (a['kind'] == 'enterprise' and self.enterprises[a['id']]['status'] != 'closed' and self.enterprises[a['id']]['available_from'] <= self.meta['month'])]
         # Последующие инвесторы учитывают уже объявленные проекты; торгов ещё нет.
         self._investment_supply_cache = {}
+        self._investment_input_reserved = defaultdict(float)
         for a in self.shuffled(investors):
             project = self.project_candidate(a, sells) if due and 'project' not in a else None
             if project:
+                feasible = True
+                for input_good, ratio in self.goods[project['good']]['inputs'].items():
+                    required = project['capacity']*ratio
+                    available = sum(sell['remaining'] for _, sell, _ in self.offers(a, input_good, sells))
+                    free = available-self._investment_input_reserved[input_good]
+                    if required > free+EPS:
+                        feasible = False
+                        self.report['investment_decisions'].append(dict(
+                            kind='investment_decision', investor=a['id'], outcome='rejected',
+                            good=project['good'], reason='Недостаточный общий резерв входного сырья',
+                            input_good=input_good, required=required, available=available,
+                            already_reserved=self._investment_input_reserved[input_good]))
+                        break
+                if not feasible:
+                    project = None
+            if project:
+                for input_good, ratio in self.goods[project['good']]['inputs'].items():
+                    self._investment_input_reserved[input_good] += project['capacity']*ratio
                 evidence = {}
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
                     required = project['capacity']*ratio
@@ -1035,6 +1054,7 @@ class Economy(EconomyServices):
                 a['project'] = project
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
         self.__dict__.pop('_investment_supply_cache', None)
+        self.__dict__.pop('_investment_input_reserved', None)
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:
