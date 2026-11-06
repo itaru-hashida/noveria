@@ -31,6 +31,22 @@ class Economy(EconomyServices):
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={})
 
+    def mark_investment_dirty(self, good=None):
+        dirty = set(self.meta.get('investment_dirty', []))
+        if good is None:
+            dirty.update(self.goods)
+        else:
+            dirty.add(good)
+            for product, recipe in self.goods.items():
+                if good in recipe.get('inputs', {}):
+                    dirty.add(product)
+        self.meta['investment_dirty'] = sorted(dirty)
+
+    def add_stock(self, account, good, quantity, value=0):
+        result = super().add_stock(account, good, quantity, value)
+        self.mark_investment_dirty(good)
+        return result
+
     def open_enterprise(self, *args, **kwargs):
         e = super().open_enterprise(*args, **kwargs)
         e.update(cost_of_sales=0, tax=0, wages=0, unviable_months=0)
@@ -55,6 +71,7 @@ class Economy(EconomyServices):
                 'Дивиденды после резервов и рыночное потребление собственников',
                 'Схема Итару-Кодекса: быстрый рост и сглаженное снижение выпуска',
                 'Оброк за землю и мастерскую для открытых предприятий'])
+        self.meta.setdefault('investment_dirty', sorted(self.goods))
         self.cfg.setdefault('consumption_tax', 0.10)
         self.cfg.setdefault('dividend_profit_share', 0.50)
         self.cfg.setdefault('business_income_share', 1.0)
@@ -233,7 +250,9 @@ class Economy(EconomyServices):
     def use_stock(self, account, good, quantity):
         if quantity > self.free_stock(account, good)+EPS:
             raise ValueError('Товар уже закреплён за продажей или стройкой')
-        return super().use_stock(account, good, quantity)
+        result = super().use_stock(account, good, quantity)
+        self.mark_investment_dirty(good)
+        return result
 
     def order(self, participant, good, quantity, side, price, purpose):
         if not math.isfinite(quantity) or not math.isfinite(price) or price <= 0 or quantity < 0:
@@ -1015,13 +1034,14 @@ class Economy(EconomyServices):
 
     def project_requests(self, sells):
         due = self.meta['month'] % self.cfg['investment_interval'] == 0
+        evaluate = due or bool(self.meta.get('investment_dirty'))
         investors = [a for a in self.accounts.values() if a['kind'] in ('private', 'merchant', 'treasury', 'municipal') or
             (a['kind'] == 'enterprise' and self.enterprises[a['id']]['status'] != 'closed' and self.enterprises[a['id']]['available_from'] <= self.meta['month'])]
         # Последующие инвесторы учитывают уже объявленные проекты; торгов ещё нет.
         self._investment_supply_cache = {}
         self._investment_input_reserved = defaultdict(float)
         for a in self.shuffled(investors):
-            project = self.project_candidate(a, sells) if due and 'project' not in a else None
+            project = self.project_candidate(a, sells) if evaluate and 'project' not in a else None
             if project:
                 feasible = True
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
@@ -1055,6 +1075,7 @@ class Economy(EconomyServices):
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
         self.__dict__.pop('_investment_supply_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)
+        self.meta['investment_dirty'] = []
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:
