@@ -1061,6 +1061,28 @@ class Economy(EconomyServices):
                 created=self.meta['month'], chain_requirements=chain_requirements))
         return max(candidates, key=lambda p: p['expected_profit']*self.cfg['investment_payback_months']-p['expected_investment']) if candidates else None
 
+    def upstream_expansion_candidate(self, good, state_id, sells):
+        """Найти расширяемую мощность для дефицитного звена цепочки."""
+        cache = getattr(self, '_upstream_candidate_cache', {})
+        key = (good, state_id)
+        if key in cache:
+            return cache[key]
+        candidates = []
+        for firm in self.enterprises.values():
+            if (firm['good'] != good or firm['status'] == 'closed'
+                    or firm.get('suspended') or firm['state_id'] != state_id):
+                continue
+            account = self.accounts[firm['id']]
+            if account.get('project'):
+                continue
+            project = self.project_candidate(account, sells)
+            if project and project['good'] == good and project['expansion']:
+                candidates.append((account, project))
+        result = max(candidates, key=lambda row: row[1]['capacity'], default=None)
+        cache[key] = result
+        self._upstream_candidate_cache = cache
+        return result
+
     def project_requests(self, sells):
         due = self.meta['month'] % self.cfg['investment_interval'] == 0
         evaluate = due or bool(self.meta.get('investment_dirty'))
@@ -1069,6 +1091,25 @@ class Economy(EconomyServices):
         # Последующие инвесторы учитывают уже объявленные проекты; торгов ещё нет.
         self._investment_supply_cache = {}
         self._investment_input_reserved = defaultdict(float)
+        self._upstream_candidate_cache = {}
+        queue = self.meta.setdefault('investment_queue', [])
+        waiting = []
+        for item in queue:
+            investor = self.accounts.get(item.get('investor'))
+            project = item.get('project')
+            if not investor or investor.get('project') or not project:
+                continue
+            ready = all(project['capacity']*ratio <=
+                sum(sell['remaining'] for _, sell, _ in self.offers(investor, good, sells))+EPS
+                for good, ratio in self.goods[project['good']]['inputs'].items())
+            if ready:
+                investor['project'] = project
+                self.report['investment_decisions'].append(dict(
+                    kind='investment_decision', investor=investor['id'], outcome='resumed',
+                    **copy.deepcopy(project)))
+            else:
+                waiting.append(item)
+        queue[:] = waiting
         for a in self.shuffled(investors):
             project = self.project_candidate(a, sells) if evaluate and 'project' not in a else None
             if project:
@@ -1086,6 +1127,18 @@ class Economy(EconomyServices):
                             already_reserved=self._investment_input_reserved[input_good]))
                         break
                 if not feasible:
+                    # Расширение upstream выполняется только при подтверждённом
+                    # спросе на это звено; сам поиск кэширован на месяц.
+                    upstream = self.upstream_expansion_candidate(input_good, a['state_id'], sells)
+                    if upstream:
+                        owner, upstream_project = upstream
+                        if not owner.get('project'):
+                            owner['project'] = upstream_project
+                            self.report['investment_decisions'].append(dict(
+                                kind='investment_decision', investor=owner['id'], outcome='started',
+                                dependency_for=project['good'], **copy.deepcopy(upstream_project)))
+                    queue.append(dict(created=self.meta['month'], investor=a['id'],
+                                      project=copy.deepcopy(project)))
                     project = None
             if project:
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
@@ -1103,6 +1156,7 @@ class Economy(EconomyServices):
                 a['project'] = project
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
         self.__dict__.pop('_investment_supply_cache', None)
+        self.__dict__.pop('_upstream_candidate_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)
         self.meta['investment_dirty'] = []
         for a in self.shuffled(investors):
