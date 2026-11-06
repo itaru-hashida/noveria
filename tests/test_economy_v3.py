@@ -53,6 +53,19 @@ def test_match_diagnosis_rechecks_price_after_cheap_offer_exhausted(engine):
     assert all(f['trade_id'] == trade['trade_id'] for f in engine.report['flows'])
 
 
+def test_local_basic_match_filters_external_offer(engine):
+    clear(engine)
+    local = engine.order(firm(engine)['id'], 'bread', 1, 'sell', 5, 'Продажа')
+    engine.add_stock('merchant:s', 'bread', 1, 1)
+    external = engine.order('merchant:s', 'bread', 1, 'sell', 1, 'Продажа')
+    external['province_id'] = 'external'
+
+    offers = engine.offers(engine.accounts['h'], 'bread',
+        {'bread': [local, external]}, local_only=True)
+
+    assert [sell['id'] for _, sell, _ in offers] == [local['id']]
+
+
 def test_match_diagnosis_distinguishes_exhaustion_route_and_unoffered_stock(engine):
     clear(engine)
     seller = firm(engine)['id']

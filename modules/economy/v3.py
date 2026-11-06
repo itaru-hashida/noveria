@@ -860,7 +860,7 @@ class Economy(EconomyServices):
         freight = distance*self.goods[good]['weight']*self.cfg['transport_rate']
         return price+freight, freight, distance, path
 
-    def offers(self, buyer, good, sells):
+    def offers(self, buyer, good, sells, local_only=False):
         cache = getattr(self, '_offer_index', {})
         signature = tuple((sell['id'], sell['price'], sell['tile_id'], sell['status'])
                           for sell in sells.get(good, []))
@@ -878,7 +878,8 @@ class Economy(EconomyServices):
         return [(price, sell, quote) for price, sell, quote in options
                 if sell['participant'] != buyer['id']
                 and sell['remaining'] > EPS
-                and sell['status'] not in ('cancelled', 'expired')]
+                and sell['status'] not in ('cancelled', 'expired')
+                and (not local_only or sell['province_id'] == buyer['province_id'])]
 
     def reference_price(self, buyer, good, sells):
         offers = self.offers(buyer, good, sells)
@@ -952,7 +953,7 @@ class Economy(EconomyServices):
         """Обычный рынок не ограничивает количество сверх самой заявки."""
         return buy['remaining']
 
-    def match(self, buy, sells):
+    def match(self, buy, sells, local_only=False):
         if buy is None or buy['status'] in ('cancelled', 'expired', 'filled'):
             return
         self.reprice_input_order(buy, sells)
@@ -970,7 +971,8 @@ class Economy(EconomyServices):
                 buy['reserved'] += extra
                 buy.setdefault('initial_limit', buy['price'])
                 buy.update(price=price, backing=buy['reserved'])
-        options = self.offers(buyer, buy['good'], sells)
+        options = (self.offers(buyer, buy['good'], sells, local_only=True)
+            if local_only else self.offers(buyer, buy['good'], sells))
         observation = self.observe_match(buy, sells, options)
         # Равная полная цена не даёт постоянного преимущества одному ID.
         ordered, index = [], 0
@@ -2075,6 +2077,12 @@ class Economy(EconomyServices):
             if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
                 self.input_requests(e, sells)
         buys = [o for o in self.report['orders'] if o['side'] == 'buy']
+        # Местная базовая потребность получает первый доступ к местному офферу.
+        # Второй общий проход сохраняет импорт, экспорт и обычную конкуренцию
+        # за весь невыкупленный остаток. Это правило применимо к любому товару
+        # из ``basic_needs``, а не к отдельно названному хлебу.
+        for buy in self.shuffled([o for o in buys if o['purpose'] == 'Базовые нужды']):
+            self.match(buy, sells, local_only=True)
         for buy in self.shuffled(buys):
             self.match(buy, sells)
         if self.HOUSEHOLD_TOP_UP_REVISION:
