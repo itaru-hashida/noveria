@@ -1040,6 +1040,21 @@ class Economy(EconomyServices):
         # Последующие инвесторы учитывают уже объявленные проекты; торгов ещё нет.
         self._investment_supply_cache = {}
         self._investment_input_reserved = defaultdict(float)
+        queue = self.meta.setdefault('investment_queue', [])
+        waiting = []
+        for item in queue:
+            investor = self.accounts.get(item.get('investor'))
+            project = item.get('project')
+            if not investor or investor.get('project') or not project:
+                continue
+            ready = all(project['capacity']*ratio <= sum(sell['remaining'] for _, sell, _ in self.offers(investor, good, sells))+EPS
+                for good, ratio in self.goods[project['good']]['inputs'].items())
+            if ready:
+                investor['project'] = project
+                self.report['investment_decisions'].append(dict(kind='investment_decision', investor=investor['id'], outcome='resumed', **copy.deepcopy(project)))
+            else:
+                waiting.append(item)
+        queue[:] = waiting
         for a in self.shuffled(investors):
             project = self.project_candidate(a, sells) if evaluate and 'project' not in a else None
             if project:
@@ -1057,6 +1072,7 @@ class Economy(EconomyServices):
                             already_reserved=self._investment_input_reserved[input_good]))
                         break
                 if not feasible:
+                    queue.append(dict(created=self.meta['month'], investor=a['id'], project=copy.deepcopy(project)))
                     project = None
             if project:
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
