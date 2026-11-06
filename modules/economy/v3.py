@@ -235,6 +235,61 @@ class Economy(EconomyServices):
                 stack.append((input_good, required, path + (product,)))
         return dict(requirements)
 
+    def investment_flow_balance(self, state_id, good):
+        """Вернуть устойчивый месячный поток товара внутри государства.
+
+        Это диагностический расчёт для будущего планировщика: он не меняет
+        склад, проекты, отчёт или RNG. Запас товара намеренно не входит в
+        баланс — он не является постоянным выпуском для новой мощности.
+        """
+        def active(firm):
+            return (firm['state_id'] == state_id and firm['status'] != 'closed'
+                and not firm.get('suspended')
+                and firm['available_from'] <= self.meta['month'])
+
+        def confirmed_output(firm):
+            history = firm.get('sales_history', [])[-3:]
+            actual = max((row.get('output', 0) for row in history), default=0)
+            return min(firm['capacity'], max(0, firm.get('planned_output', 0), actual))
+
+        suppliers = []
+        consumers = []
+        supply = operating_demand = 0.0
+        for firm in self.enterprises.values():
+            if not active(firm):
+                continue
+            output = confirmed_output(firm)
+            if firm['good'] == good:
+                supply += output
+                suppliers.append(dict(enterprise_id=firm['id'], output=output))
+            ratio = self.goods[firm['good']]['inputs'].get(good, 0)
+            if ratio:
+                demand = output*ratio
+                operating_demand += demand
+                consumers.append(dict(enterprise_id=firm['id'], output=output,
+                    ratio=ratio, demand=demand))
+
+        construction_demand = 0.0
+        projects = []
+        for account in self.accounts.values():
+            project = account.get('project')
+            if not project or account['state_id'] != state_id:
+                continue
+            ratio = self.goods[project['good']]['inputs'].get(good, 0)
+            if ratio:
+                demand = project['capacity']*ratio
+                construction_demand += demand
+                projects.append(dict(project_id=project.get('project_id'),
+                    investor=account['id'], good=project['good'], ratio=ratio,
+                    demand=demand))
+
+        committed = operating_demand+construction_demand
+        return dict(state_id=state_id, good=good, supply=supply,
+            operating_demand=operating_demand,
+            construction_demand=construction_demand, committed=committed,
+            free=max(0, supply-committed), shortage=max(0, committed-supply),
+            suppliers=suppliers, consumers=consumers, projects=projects)
+
     def add_stock(self, account, good, quantity, value=0):
         result = super().add_stock(account, good, quantity, value)
         self.mark_investment_dirty(good)

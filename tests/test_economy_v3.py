@@ -310,6 +310,42 @@ def test_profitable_expansion_is_selected_from_funded_orders(engine):
     assert engine.project_candidate(engine.accounts[e['id']], {}) is None
 
 
+def test_flow_balance_ignores_stock_and_reserves_running_consumers(engine):
+    flax, cloth = firm(engine, 'flax'), firm(engine, 'cloth')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    flax.update(status='open', capacity=14, planned_output=14)
+    cloth.update(status='open', capacity=10, planned_output=10)
+    engine.accounts[flax['id']].update(stock={'flax': 100}, values={'flax': 100})
+
+    before = copy.deepcopy((engine.accounts, engine.enterprises, engine.meta, engine.report))
+    balance = engine.investment_flow_balance('s', 'flax')
+
+    assert balance['supply'] == pytest.approx(14)
+    assert balance['operating_demand'] == pytest.approx(14)
+    assert balance['construction_demand'] == 0
+    assert balance['free'] == 0
+    assert (engine.accounts, engine.enterprises, engine.meta, engine.report) == before
+
+
+def test_flow_balance_counts_projects_and_works_for_other_recipe(engine):
+    flour, bread = firm(engine, 'flour'), firm(engine, 'bread')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    flour.update(status='open', capacity=100, planned_output=100)
+    bread.update(status='open', capacity=100, planned_output=100)
+    expansion = project(engine)
+    expansion.update(good='bread', capacity=10)
+    engine.accounts['private:s']['project'] = expansion
+
+    balance = engine.investment_flow_balance('s', 'flour')
+
+    assert balance['supply'] == pytest.approx(100)
+    assert balance['operating_demand'] == pytest.approx(80)
+    assert balance['construction_demand'] == pytest.approx(8)
+    assert balance['free'] == pytest.approx(12)
+
+
 def test_closed_raw_material_uses_regular_price_adjustment(engine):
     e = firm(engine)
     engine.close_enterprise(e)
