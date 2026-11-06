@@ -385,6 +385,38 @@ def test_expansion_intents_recurse_through_bread_chain(engine):
     assert by_good['grain']['parents'][0]['parent_good'] == 'flour'
 
 
+def test_expansion_diagnostics_explain_shared_resource_block(engine):
+    flax, grain = firm(engine, 'flax'), firm(engine, 'grain')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    total = engine.cfg['extraction_per_tile']
+    flax.update(status='open', capacity=2, planned_output=2)
+    grain.update(status='open', capacity=total-2, planned_output=total-2)
+
+    row = engine.investment_expansion_diagnostics([
+        dict(state_id='s', good='flax', required_flow=1, parents=[]),
+    ])[0]
+
+    assert row['status'] == 'blocked'
+    assert row['resource']['free_capacity'] == 0
+    assert 'resource_capacity' in row['blockers']
+
+
+def test_expansion_diagnostics_explain_missing_input_flow(engine):
+    flour = firm(engine, 'flour')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    flour.update(status='open', capacity=10, planned_output=10)
+
+    row = engine.investment_expansion_diagnostics([
+        dict(state_id='s', good='flour', required_flow=5, parents=[]),
+    ])[0]
+
+    assert row['status'] == 'blocked'
+    assert row['input_shortages'] == [dict(good='grain', required=6, free=0, shortage=6)]
+    assert 'input_flow' in row['blockers']
+
+
 def test_closed_raw_material_uses_regular_price_adjustment(engine):
     e = firm(engine)
     engine.close_enterprise(e)

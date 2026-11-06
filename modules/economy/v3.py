@@ -30,7 +30,8 @@ class Economy(EconomyServices):
         super().reset_report()
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
-            investment_candidates=[], expansion_intents=[])
+            investment_candidates=[], expansion_intents=[],
+            expansion_intent_diagnostics=[])
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -80,6 +81,16 @@ class Economy(EconomyServices):
                 status='diagnostic_only', required_flow=intent['required_flow'],
                 covered_by_free_flow=intent['covered_by_free_flow'],
                 parents=intent['parents'])
+
+        for diagnostic in self.report.get('expansion_intent_diagnostics', []):
+            self.log_event('investment.expansion_precheck',
+                entity_id=f"{diagnostic['state_id']}:{diagnostic['good']}",
+                good=diagnostic['good'], source='investment_expansion_diagnostics',
+                decision_id=f"{diagnostic['state_id']}:{diagnostic['good']}",
+                status=diagnostic['status'], blockers=diagnostic['blockers'],
+                supplier_count=diagnostic['supplier_count'],
+                resource=diagnostic['resource'],
+                input_shortages=diagnostic['input_shortages'])
 
         trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
         for trade in self.report.get('trades', []):
@@ -355,6 +366,57 @@ class Economy(EconomyServices):
             if quantity > EPS:
                 require(state_id, good, quantity, demand.get('decision_id'), good, ())
         return [intents[key] for key in sorted(intents)]
+
+    def investment_expansion_diagnostics(self, intents):
+        """Проверить физические ограничения агрегированных intent'ов.
+
+        Это предварительный диагностический слой: он не принимает решение о
+        стройке и намеренно не подменяет будущие проверки денег, маржи или
+        конкретного маршрута. Он отвечает только на вопрос, есть ли открытый
+        поставщик, свободен ли общий природный ресурс и хватает ли потоков
+        прямых входов.
+        """
+        result = []
+        for intent in sorted(intents, key=lambda row: (row['state_id'], row['good'])):
+            state_id, good = intent['state_id'], intent['good']
+            required_flow = intent['required_flow']
+            recipe = self.goods[good]
+            suppliers = [firm for firm in self.enterprises.values()
+                if firm['good'] == good and firm['state_id'] == state_id
+                and firm['status'] != 'closed' and not firm.get('suspended')]
+            blockers = []
+            if not suppliers:
+                blockers.append('no_open_supplier')
+
+            resource = None
+            if recipe['resource']:
+                total = sum(self.cfg['extraction_per_tile'] for tile in self.tiles.values()
+                    if tile.get('province_id') and self.owners.get(tile['province_id']) == state_id
+                    and recipe['resource'] in tile['resources'])
+                used = sum(firm['capacity'] for firm in self.enterprises.values()
+                    if firm['state_id'] == state_id and firm['status'] != 'closed'
+                    and self.goods[firm['good']]['resource'] == recipe['resource'])
+                resource = dict(tag=recipe['resource'], total_capacity=total,
+                    allocated_capacity=used, free_capacity=max(0, total-used))
+                if resource['free_capacity']+EPS < required_flow:
+                    blockers.append('resource_capacity')
+
+            input_shortages = []
+            for input_good, ratio in sorted(recipe['inputs'].items()):
+                required = required_flow*ratio
+                free = self.investment_flow_balance(state_id, input_good)['free']
+                shortage = max(0, required-free)
+                if shortage > EPS:
+                    input_shortages.append(dict(good=input_good, required=required,
+                        free=free, shortage=shortage))
+            if input_shortages:
+                blockers.append('input_flow')
+
+            result.append(dict(**copy.deepcopy(intent), supplier_count=len(suppliers),
+                resource=resource, input_shortages=input_shortages,
+                blockers=blockers,
+                status='blocked' if blockers else 'potentially_expandable'))
+        return result
 
     def add_stock(self, account, good, quantity, value=0):
         result = super().add_stock(account, good, quantity, value)
@@ -1525,6 +1587,8 @@ class Economy(EconomyServices):
         if evaluate:
             self.report['expansion_intents'] = self.investment_expansion_intents(
                 diagnostic_demands, flow_balances)
+            self.report['expansion_intent_diagnostics'] = self.investment_expansion_diagnostics(
+                self.report['expansion_intents'])
         self.__dict__.pop('_investment_supply_cache', None)
         self.__dict__.pop('_upstream_candidate_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)
