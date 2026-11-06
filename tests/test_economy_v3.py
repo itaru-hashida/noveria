@@ -492,6 +492,30 @@ def test_project_requests_publish_candidate_expansion_intents(engine, monkeypatc
     assert engine.report['expansion_intents'] == [dict(state_id='s', good='flour', required_flow=4)]
 
 
+def test_candidate_statuses_follow_aggregate_intent_diagnostics(engine):
+    candidates = [
+        dict(project_id='cloth-project', investor='private:s', good='cloth', province_id='p'),
+        dict(project_id='bread-project', investor='merchant:s', good='bread', province_id='p'),
+        dict(project_id='tools-project', investor='treasury:s', good='tools', province_id='p'),
+    ]
+    intents = [
+        dict(state_id='s', good='flax', parents=[dict(decision_id='cloth-project')]),
+        dict(state_id='s', good='flour', parents=[dict(decision_id='bread-project')]),
+    ]
+    diagnostics = [
+        dict(state_id='s', good='flax', status='blocked', blockers=['resource_capacity']),
+        dict(state_id='s', good='flour', status='potentially_expandable', blockers=[]),
+    ]
+
+    statuses = engine.investment_candidate_statuses(candidates, intents, diagnostics)
+    by_project = {row['project_id']: row for row in statuses}
+
+    assert by_project['cloth-project']['status'] == 'blocked'
+    assert by_project['cloth-project']['blockers'] == ['resource_capacity']
+    assert by_project['bread-project']['status'] == 'waiting_for_intent'
+    assert by_project['tools-project']['status'] == 'ready'
+
+
 def test_partial_project_and_locked_materials_survive_reload(engine, tmp_path):
     clear(engine)
     a = engine.accounts['merchant:s']

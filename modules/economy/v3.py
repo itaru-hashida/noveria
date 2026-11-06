@@ -31,7 +31,7 @@ class Economy(EconomyServices):
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
             investment_candidates=[], expansion_intents=[],
-            expansion_intent_diagnostics=[])
+            expansion_intent_diagnostics=[], investment_candidate_statuses=[])
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -91,6 +91,14 @@ class Economy(EconomyServices):
                 supplier_count=diagnostic['supplier_count'],
                 resource=diagnostic['resource'],
                 input_shortages=diagnostic['input_shortages'])
+
+        for candidate in self.report.get('investment_candidate_statuses', []):
+            self.log_event('investment.candidate_status',
+                entity_id=candidate.get('investor'), region_id=candidate.get('province_id'),
+                good=candidate.get('good'), source='investment_candidate_statuses',
+                decision_id=candidate.get('project_id'), project_id=candidate.get('project_id'),
+                status=candidate['status'], blockers=candidate['blockers'],
+                intents=candidate['intents'])
 
         trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
         for trade in self.report.get('trades', []):
@@ -422,6 +430,28 @@ class Economy(EconomyServices):
                 resource=resource, input_shortages=input_shortages,
                 blockers=blockers,
                 status='blocked' if blockers else 'potentially_expandable'))
+        return result
+
+    def investment_candidate_statuses(self, candidates, intents, diagnostics):
+        """Связать верхнего кандидата с агрегированными intent'ами без решений."""
+        diagnostic_by_key = {(row['state_id'], row['good']): row for row in diagnostics}
+        linked = defaultdict(list)
+        for intent in intents:
+            diagnostic = diagnostic_by_key.get((intent['state_id'], intent['good']))
+            if diagnostic is None:
+                continue
+            for parent in intent.get('parents', []):
+                decision_id = parent.get('decision_id')
+                if decision_id is not None:
+                    linked[decision_id].append(diagnostic)
+
+        result = []
+        for candidate in candidates:
+            rows = linked.get(candidate.get('project_id'), [])
+            blockers = sorted({blocker for row in rows for blocker in row['blockers']})
+            status = 'blocked' if blockers else 'waiting_for_intent' if rows else 'ready'
+            result.append(dict(**copy.deepcopy(candidate), status=status, blockers=blockers,
+                intents=sorted(f"{row['state_id']}:{row['good']}" for row in rows)))
         return result
 
     def add_stock(self, account, good, quantity, value=0):
@@ -1595,6 +1625,9 @@ class Economy(EconomyServices):
                 diagnostic_demands, flow_balances)
             self.report['expansion_intent_diagnostics'] = self.investment_expansion_diagnostics(
                 self.report['expansion_intents'])
+            self.report['investment_candidate_statuses'] = self.investment_candidate_statuses(
+                self.report['investment_candidates'], self.report['expansion_intents'],
+                self.report['expansion_intent_diagnostics'])
         self.__dict__.pop('_investment_supply_cache', None)
         self.__dict__.pop('_upstream_candidate_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)
