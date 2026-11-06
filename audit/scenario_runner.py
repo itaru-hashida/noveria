@@ -101,10 +101,15 @@ def row_for(engine, report, scenario, seed):
     )
 
 
-def run(seed, months, scenario, shock, out):
+def run(seed, months, scenario, shock, out, events_path=None):
     SHOCK.update(kind=shock[0] if shock else None, province=None, start=shock[2] if shock else 0,
                  end=shock[3] if shock else 0)
     rows = []
+    events_file = None
+    if events_path:
+        events_path = Path(events_path)
+        events_path.parent.mkdir(parents=True, exist_ok=True)
+        events_file = events_path.open('w', encoding='utf-8')
     with tempfile.TemporaryDirectory() as tmp:
         db, service = build_world(seed, tmp)
         try:
@@ -115,6 +120,10 @@ def run(seed, months, scenario, shock, out):
                 service.advance_turn(command_id=f'audit-{scenario}-{seed}-{step}', source='audit')
                 engine = Economy.load(db)
                 report = db.economy_month(engine.meta['month'])
+                if events_file:
+                    for event in report.get('events', []):
+                        events_file.write(json.dumps(event, ensure_ascii=False, separators=(',', ':'))+'\n')
+                    events_file.flush()
                 r = row_for(engine, report, scenario, seed)
                 r['shock_province'] = SHOCK['province'] if SHOCK['kind'] and SHOCK['start'] <= r['month'] <= SHOCK['end'] else ''
                 rows.append(r)
@@ -122,6 +131,8 @@ def run(seed, months, scenario, shock, out):
                     print(scenario, seed, 'month', r['month'], 'gold', r['gold_total'], 'active', r['active'], flush=True)
         finally:
             db.close()
+            if events_file:
+                events_file.close()
     return rows
 
 
@@ -143,10 +154,11 @@ if __name__ == '__main__':
     p.add_argument('--shock-end', type=int, default=12)
     p.add_argument('--province', default='auto')
     p.add_argument('--out', type=Path, default=ROOT/'audit/_runs')
+    p.add_argument('--events', type=Path, help='JSONL-файл причинных событий экономики')
     a = p.parse_args()
     install_shock()
     shock = None if a.scenario == 'baseline' else (a.scenario, a.province, a.shock_start, a.shock_end)
-    rows = run(a.seed, a.months, a.scenario, shock, a.out)
+    rows = run(a.seed, a.months, a.scenario, shock, a.out, a.events)
     a.out.mkdir(parents=True, exist_ok=True)
     target = a.out/f'{a.scenario}_{a.seed}.csv'
     with target.open('w', newline='', encoding='utf-8') as f:

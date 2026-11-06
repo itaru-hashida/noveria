@@ -29,7 +29,165 @@ class Economy(EconomyServices):
     def reset_report(self):
         super().reset_report()
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
-            owner_consumption=[], owner_consumed={})
+            owner_consumption=[], owner_consumed={}, events=[])
+
+    def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
+                  cause=None, source=None, parent_event_id=None, decision_id=None,
+                  project_id=None, **values):
+        """Добавить компактное причинное событие текущего месяца.
+
+        События хранятся в отчёте и потому попадают в существующее хранилище
+        turn results. Идентификатор детерминирован и не влияет на RNG.
+        """
+        event_id = f"{self.meta['month']}:event:{len(self.report['events'])}"
+        row = dict(event_id=event_id, month=self.meta['month'], event_type=event_type)
+        row.update({k: v for k, v in dict(entity_id=entity_id, region_id=region_id,
+                   good=good, cause=cause, source=source, parent_event_id=parent_event_id,
+                   decision_id=decision_id, project_id=project_id).items() if v is not None})
+        row.update({k: v for k, v in values.items() if v is not None})
+        self.report['events'].append(row)
+        return event_id
+
+    def build_causal_events(self):
+        """Собрать JSONL-подобный слой из уже рассчитанного месячного отчёта."""
+        events = self.report['events']
+        decisions = self.report.get('investment_decisions', [])
+        gap_events = {}
+        for decision in decisions:
+            project_id = decision.get('project_id') or decision.get('investor')
+            self.log_event('investment.' + decision.get('outcome', 'decision'),
+                entity_id=decision.get('investor'), region_id=decision.get('province_id'),
+                good=decision.get('good'), project_id=project_id,
+                decision_id=project_id, cause=decision.get('reason'),
+                source=decision.get('dependency_for') or 'project_candidate',
+                status=decision.get('outcome'), capacity=decision.get('capacity'),
+                expected_profit=decision.get('expected_profit'),
+                expected_investment=decision.get('expected_investment'),
+                input_evidence=decision.get('input_evidence'),
+                chain_requirements=decision.get('chain_requirements'))
+
+        trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
+        for trade in self.report.get('trades', []):
+            key = (trade.get('buyer'), trade.get('seller'), trade.get('good'),
+                   trade.get('buyer_province'), trade.get('seller_province'), trade.get('purpose'))
+            group = trade_groups[key]
+            group['count'] += 1
+            group['quantity'] += trade.get('quantity', 0)
+            group['gold'] += trade.get('gold', 0)
+            group['freight'] += trade.get('freight', 0)
+        for (buyer, seller, good, buyer_region, seller_region, purpose), group in trade_groups.items():
+            self.log_event('trade.executed', entity_id=f'{buyer}:{seller}:{good}',
+                region_id=buyer_region, good=good, source='match',
+                quantity=group['quantity'], trades_count=group['count'], seller=seller,
+                buyer=buyer, seller_region=seller_region,
+                price=group['gold']/group['quantity'] if group['quantity'] else None,
+                freight=group['freight'],
+                landed_price=(group['gold']+group['freight'])/group['quantity']
+                    if group['quantity'] else None,
+                gold=group['gold'], purpose=purpose)
+
+        for order in self.report.get('orders', []):
+            if order.get('side') != 'buy' or order.get('remaining', 0) <= EPS:
+                continue
+            observation = order.get('match_observation', {})
+            cause = observation.get('reason_code') or order.get('reason') or 'unexplained_gap'
+            gap_event = self.log_event('demand.unfilled', entity_id=order.get('id'),
+                region_id=order.get('province_id'), good=order.get('good'),
+                cause=cause, source='order.match', quantity=order.get('remaining'),
+                requested=order.get('quantity'), price_limit=order.get('price'),
+                purpose=order.get('purpose'), candidates=len(observation.get('candidates', [])))
+            gap_events.setdefault((order.get('province_id'), order.get('good')), []).append(
+                (cause, gap_event))
+
+        for enterprise in self.enterprises.values():
+            observation = enterprise.get('production_observation')
+            if not observation:
+                continue
+            plan = observation.get('procurement_plan') or {}
+            planned = enterprise.get('planned_output', 0)
+            actual = enterprise.get('output', 0)
+            constraints = observation.get('constraints', {})
+            limiting = min(constraints, key=constraints.get) if constraints else None
+            if actual + EPS < planned or limiting not in (None, 'План'):
+                recipe = self.goods[enterprise['good']]
+                account = self.accounts[enterprise['id']]
+                input_details = {}
+                for input_good, ratio in recipe.get('inputs', {}).items():
+                    input_details[input_good] = dict(
+                        required=planned*ratio,
+                        available=account.get('stock', {}).get(input_good, 0),
+                        reserved=account.get('stock_reserved', {}).get(input_good, 0),
+                        consumed=actual*ratio)
+                self.log_event('production.limited', entity_id=enterprise['id'],
+                    region_id=enterprise.get('province_id'), good=enterprise.get('good'),
+                    cause=limiting or 'unexplained_gap', source='production.constraints',
+                    capacity=enterprise.get('capacity'), planned_output=planned,
+                    actual_output=actual, constraints=constraints,
+                    expected_margin=enterprise.get('expected_margin'),
+                    wages=enterprise.get('wages'), overhead=self.enterprise_overhead(enterprise),
+                    input_limited=enterprise.get('input_limited', False),
+                    input_orders=plan.get('input_orders', []), input_details=input_details)
+
+        for lifecycle in self.report.get('lifecycle', []):
+            action = lifecycle.get('action')
+            self.log_event('enterprise.' + str(action), entity_id=lifecycle.get('enterprise'),
+                region_id=lifecycle.get('province_id'), good=lifecycle.get('good'),
+                cause=lifecycle.get('reason'), source='lifecycle', **{
+                    k: v for k, v in lifecycle.items()
+                    if k not in ('enterprise', 'province_id', 'good', 'action', 'reason')})
+
+        for province in self.report.get('provinces', []):
+            pid = province.get('province_id')
+            province_orders = [o for o in self.report.get('orders', [])
+                               if o.get('province_id') == pid]
+            province_trades = [t for t in self.report.get('trades', [])
+                               if t.get('buyer_province') == pid or t.get('seller_province') == pid]
+            for market_good in self.goods:
+                buys = [o for o in province_orders if o.get('side') == 'buy' and o.get('good') == market_good]
+                sells = [o for o in province_orders if o.get('side') == 'sell' and o.get('good') == market_good]
+                trades = [t for t in province_trades if t.get('good') == market_good]
+                demand = sum(o.get('quantity', 0) for o in buys)
+                executed = sum(t.get('quantity', 0) for t in trades if t.get('buyer_province') == pid)
+                offered = sum(o.get('quantity', 0) for o in sells)
+                stock = sum(a.get('stock', {}).get(market_good, 0)
+                            for a in self.accounts.values() if a.get('province_id') == pid)
+                if not (demand or offered or trades or stock > EPS
+                        or province.get('deficits', {}).get(market_good, 0) > EPS):
+                    continue
+                self.log_event('market.snapshot', region_id=pid, good=market_good,
+                    source='market.clearance', demand=demand, executed=executed,
+                    unmet=max(0, demand-executed), offered=offered,
+                    sales=sum(t.get('quantity', 0) for t in trades), stock=stock,
+                    price=province.get('prices', {}).get(market_good),
+                    imports=sum(t.get('quantity', 0) for t in trades
+                                if t.get('buyer_province') == pid and t.get('seller_province') != pid),
+                    exports=sum(t.get('quantity', 0) for t in trades
+                                if t.get('seller_province') == pid and t.get('buyer_province') != pid),
+                    delivery=sum(t.get('freight', 0) for t in trades
+                                 if t.get('buyer_province') == pid))
+            for good, deficit in province.get('deficits', {}).items():
+                if deficit <= EPS:
+                    continue
+                production = province.get('production', {}).get(good, 0)
+                stock = self.report.get('stocks', {}).get(good, 0)
+                links = gap_events.get((province.get('province_id'), good), [])
+                cause, parent = (links[0] if links else ('unexplained_gap', None))
+                self.log_event('market.deficit', region_id=province.get('province_id'),
+                    good=good, cause=cause, source='market.clearance', parent_event_id=parent,
+                    deficit=deficit, production=production, stock=stock,
+                    demand=province.get('consumption', {}).get(good),
+                    imports=province.get('import_volume', 0),
+                    exports=province.get('export_volume', 0),
+                    delivery=province.get('transport', 0))
+
+        # Остаточные офферы дают объяснение «товар был, но не продался».
+        for offer in self.report.get('orders', []):
+            if offer.get('side') == 'sell' and offer.get('remaining', 0) > EPS:
+                self.log_event('trade.offer_remaining', entity_id=offer.get('id'),
+                    region_id=offer.get('province_id'), good=offer.get('good'),
+                    cause='no_matching_buyer', source='market.clearance',
+                    seller=offer.get('participant'), quantity=offer.get('remaining'),
+                    price=offer.get('price'))
 
     def mark_investment_dirty(self, good=None):
         dirty = set(self.meta.get('investment_dirty', []))
@@ -1509,6 +1667,7 @@ class Economy(EconomyServices):
         self.validate(before)
         if food_trace:
             self.report['food_diagnostics'] = food_trace.finish(self)
+        self.build_causal_events()
         return self.report
 
     def validate(self, before=None):
