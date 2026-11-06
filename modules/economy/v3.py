@@ -963,19 +963,6 @@ class Economy(EconomyServices):
             residual += volume
         return residual
 
-    def upstream_expansion_candidate(self, good, state_id, sells):
-        candidates = []
-        for firm in self.enterprises.values():
-            if firm['good'] != good or firm['status'] == 'closed' or firm.get('suspended') or firm['state_id'] != state_id:
-                continue
-            account = self.accounts[firm['id']]
-            if account.get('project'):
-                continue
-            project = self.project_candidate(account, sells)
-            if project and project['good'] == good and project['expansion']:
-                candidates.append((account, project))
-        return max(candidates, key=lambda row: row[1]['capacity'], default=None)
-
     def project_candidate(self, investor, sells):
         candidates = []
         history = self.meta.get('market_history', [])
@@ -1085,13 +1072,6 @@ class Economy(EconomyServices):
                             already_reserved=self._investment_input_reserved[input_good]))
                         break
                 if not feasible:
-                    upstream = self.upstream_expansion_candidate(input_good, a['state_id'], sells)
-                    if upstream:
-                        owner, upstream_project = upstream
-                        if not owner.get('project'):
-                            owner['project'] = upstream_project
-                            self.report['investment_decisions'].append(dict(kind='investment_decision',
-                                investor=owner['id'], outcome='started', dependency_for=project['good'], **copy.deepcopy(upstream_project)))
                     queue.append(dict(created=self.meta['month'], investor=a['id'], project=copy.deepcopy(project)))
                     project = None
             if project:
