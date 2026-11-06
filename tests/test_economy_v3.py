@@ -438,6 +438,22 @@ def test_candidate_capacity_limits_recurse_and_share_input_flow(engine):
     assert by_project['b']['reduction'] == pytest.approx(60)
 
 
+def test_limit_project_capacity_recalculates_chain_and_costs(engine):
+    project = dict(good='bread', capacity=80, expansion=False, materials={},
+        working_cash=100, expected_profit=160, expected_investment=500,
+        expected_unit_cost=1)
+
+    changed = engine.limit_project_capacity(project, 20)
+
+    assert changed
+    assert project['requested_capacity'] == 80
+    assert project['capacity'] == 20
+    assert project['expected_profit'] == pytest.approx(40)
+    assert project['chain_requirements'] == pytest.approx(
+        engine.recipe_requirements('bread', 20))
+    assert project['capacity_limit'] == 'Устойчивый поток входов'
+
+
 def test_expansion_diagnostics_explain_shared_resource_block(engine):
     flax, grain = firm(engine, 'flax'), firm(engine, 'grain')
     for enterprise in engine.enterprises.values():

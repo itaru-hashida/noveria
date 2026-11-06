@@ -64,6 +64,8 @@ class Economy(EconomyServices):
                 decision_id=project_id, cause=decision.get('reason'),
                 source=decision.get('dependency_for') or 'project_candidate',
                 status=decision.get('outcome'), capacity=decision.get('capacity'),
+                requested_capacity=decision.get('requested_capacity'),
+                capacity_limit=decision.get('capacity_limit'),
                 expected_profit=decision.get('expected_profit'),
                 expected_investment=decision.get('expected_investment'),
                 input_evidence=decision.get('input_evidence'),
@@ -375,18 +377,12 @@ class Economy(EconomyServices):
             capacity_headroom=capacity_headroom, headroom=max(0, headroom),
             inputs=inputs)
 
-    def investment_candidate_capacity_limits(self, candidates, flow_balances=None):
-        """Теневой общий лимит кандидатов по существующей цепочке выпуска.
+    def sustainable_candidate_capacity(self, candidate, reserved=None, flow_balances=None):
+        """Вернуть обеспеченную мощность кандидата и ledger после её резерва.
 
-        Это не gate и не резерв склада. Для каждого кандидата метод пытается
-        зарезервировать *устойчивый поток* его входов у уже открытых
-        поставщиков. Резерв мельницы рекурсивно резервирует зерно, резерв
-        ткацкой фабрики — лён и так далее. Поэтому два кандидата не могут
-        одновременно получить один и тот же свободный поток.
-
-        Порядок здесь намеренно стабилен и служит только для диагностики.
-        Выбор инвестиционного приоритета будет отдельным решением; этот метод
-        не меняет состояние экономики, отчёт и RNG.
+        В отличие от склада это резерв постоянной производственной цепочки.
+        Вызывающий применяет возвращённый ledger только для действительно
+        начатого проекта.
         """
         def reserve_flow(state_id, good, quantity, ledger, path=()):
             if good in path:
@@ -414,6 +410,39 @@ class Economy(EconomyServices):
                     return None
             return trial
 
+        ledger = dict(reserved or {})
+        desired = max(0, candidate.get('quantity', candidate.get('capacity', 0)))
+        best = 0.0
+        best_ledger = dict(ledger)
+        low, high = 0.0, desired
+        for _ in range(40):
+            middle = (low+high)/2
+            trial = reserve_candidate(candidate, middle, ledger)
+            if trial is None:
+                high = middle
+            else:
+                low, best, best_ledger = middle, middle, trial
+        return best, best_ledger
+
+    def limit_project_capacity(self, project, capacity):
+        """Уменьшить ещё не начатый проект без изменения его экономики на единицу."""
+        previous = project['capacity']
+        if capacity+EPS >= previous:
+            return False
+        previous_working = project['working_cash']
+        construction = max(0, project['expected_investment']-previous_working)
+        working = 0 if project['expansion'] else max(self.cfg['startup_cash'],
+            capacity*project['expected_unit_cost'])
+        project.update(requested_capacity=previous, capacity=capacity,
+            working_cash=working,
+            expected_profit=project['expected_profit']*capacity/previous,
+            expected_investment=construction*capacity/previous+working,
+            chain_requirements=self.recipe_requirements(project['good'], capacity),
+            capacity_limit='Устойчивый поток входов')
+        return True
+
+    def investment_candidate_capacity_limits(self, candidates, flow_balances=None):
+        """Теневой общий лимит кандидатов по существующей цепочке выпуска."""
         ledger = {}
         result = []
         ordered = sorted(candidates, key=lambda row: (
@@ -421,17 +450,8 @@ class Economy(EconomyServices):
             row.get('investor', '')))
         for order, candidate in enumerate(ordered):
             desired = max(0, candidate.get('quantity', candidate.get('capacity', 0)))
-            best = 0.0
-            best_ledger = dict(ledger)
-            low, high = 0.0, desired
-            for _ in range(40):
-                middle = (low+high)/2
-                trial = reserve_candidate(candidate, middle, ledger)
-                if trial is None:
-                    high = middle
-                else:
-                    low, best, best_ledger = middle, middle, trial
-            ledger = best_ledger
+            best, ledger = self.sustainable_candidate_capacity(candidate, ledger,
+                flow_balances)
             result.append(dict(**copy.deepcopy(candidate), allocation_order=order,
                 desired_capacity=desired, sustainable_capacity=best,
                 reduction=max(0, desired-best),
@@ -1651,6 +1671,7 @@ class Economy(EconomyServices):
         self._investment_input_reserved = defaultdict(float)
         self._upstream_candidate_cache = {}
         diagnostic_demands = []
+        flow_reserved = {}
         flow_balances = None
         if evaluate:
             state_ids = sorted({a['state_id'] for a in self.accounts.values() if a.get('state_id')})
@@ -1683,8 +1704,23 @@ class Economy(EconomyServices):
                     province_id=project['location']['province_id'])
                 diagnostic_demands.append(demand)
                 self.report['investment_candidates'].append(copy.deepcopy(demand))
+                flow_candidate = dict(state_id=a['state_id'], good=project['good'],
+                    quantity=project['capacity'], project_id=project['project_id'])
+                sustainable_capacity, flow_trial = self.sustainable_candidate_capacity(
+                    flow_candidate, flow_reserved, flow_balances)
+                if sustainable_capacity+EPS < project['capacity']:
+                    if sustainable_capacity < self.cfg['minimum_capacity']:
+                        self.report['investment_decisions'].append(dict(
+                            kind='investment_decision', investor=a['id'], outcome='rejected',
+                            good=project['good'], capacity=project['capacity'],
+                            reason='Недостаточный устойчивый поток входов',
+                            sustainable_capacity=sustainable_capacity,
+                            project_id=project['project_id']))
+                        project = None
+                    else:
+                        self.limit_project_capacity(project, sustainable_capacity)
                 feasible = True
-                for input_good, ratio in self.goods[project['good']]['inputs'].items():
+                for input_good, ratio in self.goods[project['good']]['inputs'].items() if project else ():
                     required = project['capacity']*ratio
                     available = sum(sell['remaining'] for _, sell, _ in self.offers(a, input_good, sells))
                     free = available-self._investment_input_reserved[input_good]
@@ -1733,6 +1769,7 @@ class Economy(EconomyServices):
                                           project=copy.deepcopy(project)))
                     project = None
             if project:
+                flow_reserved = flow_trial
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
                     self._investment_input_reserved[input_good] += project['capacity']*ratio
                 evidence = {}
