@@ -346,6 +346,45 @@ def test_flow_balance_counts_projects_and_works_for_other_recipe(engine):
     assert balance['free'] == pytest.approx(12)
 
 
+def test_expansion_intents_aggregate_two_cloth_demands_into_one_flax_intent(engine):
+    flax, cloth = firm(engine, 'flax'), firm(engine, 'cloth')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    flax.update(status='open', capacity=14, planned_output=14)
+    cloth.update(status='open', capacity=10, planned_output=10)
+
+    before = copy.deepcopy((engine.accounts, engine.enterprises, engine.meta, engine.report))
+    intents = engine.investment_expansion_intents([
+        dict(state_id='s', good='cloth', quantity=2, decision_id='cloth-a'),
+        dict(state_id='s', good='cloth', quantity=8, decision_id='cloth-b'),
+    ])
+
+    assert len(intents) == 1
+    assert intents[0]['good'] == 'flax'
+    assert intents[0]['required_flow'] == pytest.approx(14)
+    assert {parent['decision_id'] for parent in intents[0]['parents']} == {'cloth-a', 'cloth-b'}
+    assert (engine.accounts, engine.enterprises, engine.meta, engine.report) == before
+
+
+def test_expansion_intents_recurse_through_bread_chain(engine):
+    flour, bread = firm(engine, 'flour'), firm(engine, 'bread')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    flour.update(status='open', capacity=80, planned_output=80)
+    bread.update(status='open', capacity=100, planned_output=100)
+
+    intents = engine.investment_expansion_intents([
+        dict(state_id='s', good='bread', quantity=10, decision_id='bread-growth'),
+    ])
+    by_good = {intent['good']: intent for intent in intents}
+
+    assert by_good['flour']['required_flow'] == pytest.approx(8)
+    assert by_good['grain']['required_flow'] == pytest.approx(9.6)
+    assert by_good['wood']['required_flow'] == pytest.approx(1)
+    assert by_good['flour']['parents'][0]['decision_id'] == 'bread-growth'
+    assert by_good['grain']['parents'][0]['parent_good'] == 'flour'
+
+
 def test_closed_raw_material_uses_regular_price_adjustment(engine):
     e = firm(engine)
     engine.close_enterprise(e)

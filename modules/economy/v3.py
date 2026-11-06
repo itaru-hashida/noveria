@@ -290,6 +290,59 @@ class Economy(EconomyServices):
             free=max(0, supply-committed), shortage=max(0, committed-supply),
             suppliers=suppliers, consumers=consumers, projects=projects)
 
+    def investment_expansion_intents(self, demands):
+        """Собрать агрегированные дефициты потоков для подтверждённого спроса.
+
+        ``demands`` содержит словари ``state_id``, ``good``, ``quantity`` и
+        необязательный ``decision_id``. Метод только строит диагностику:
+        ничего не резервирует, не создаёт проект и не меняет экономику.
+        Один intent создаётся на пару ``(state_id, good)`` независимо от
+        количества верхних решений, которые к нему привели.
+        """
+        free_flow = {}
+        intents = {}
+
+        def available(state_id, good):
+            key = (state_id, good)
+            if key not in free_flow:
+                free_flow[key] = self.investment_flow_balance(state_id, good)['free']
+            return free_flow[key]
+
+        def require(state_id, product, quantity, decision_id, parent_good, path):
+            if product in path:
+                raise ValueError('Цикл рецептов: '+' -> '.join(path+(product,)))
+            for input_good, ratio in sorted(self.goods[product]['inputs'].items()):
+                required = quantity*ratio
+                key = (state_id, input_good)
+                covered = min(required, available(state_id, input_good))
+                free_flow[key] -= covered
+                missing = required-covered
+                if missing <= EPS:
+                    continue
+                intent = intents.setdefault(key, dict(
+                    state_id=state_id, good=input_good, required_flow=0.0,
+                    covered_by_free_flow=0.0, parents=[]))
+                intent['required_flow'] += missing
+                intent['covered_by_free_flow'] += covered
+                intent['parents'].append(dict(decision_id=decision_id,
+                    parent_good=parent_good, required=required,
+                    covered=covered, missing=missing))
+                require(state_id, input_good, missing, decision_id, input_good,
+                    path+(product,))
+
+        ordered = sorted(demands, key=lambda row: (
+            row['state_id'], row['good'], str(row.get('decision_id', ''))))
+        for demand in ordered:
+            state_id, good = demand['state_id'], demand['good']
+            quantity = demand['quantity']
+            if good not in self.goods:
+                raise KeyError('Неизвестный товар: '+str(good))
+            if quantity < -EPS:
+                raise ValueError('Потребность не может быть отрицательной')
+            if quantity > EPS:
+                require(state_id, good, quantity, demand.get('decision_id'), good, ())
+        return [intents[key] for key in sorted(intents)]
+
     def add_stock(self, account, good, quantity, value=0):
         result = super().add_stock(account, good, quantity, value)
         self.mark_investment_dirty(good)
