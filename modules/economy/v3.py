@@ -32,7 +32,7 @@ class Economy(EconomyServices):
             owner_consumption=[], owner_consumed={}, events=[],
             investment_candidates=[], expansion_intents=[],
             expansion_intent_diagnostics=[], investment_candidate_statuses=[],
-            investment_shadow_gate=[])
+            investment_shadow_gate=[], investment_candidate_capacity_limits=[])
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -110,6 +110,17 @@ class Economy(EconomyServices):
                 decision_id=shadow.get('project_id'), project_id=shadow.get('project_id'),
                 status=shadow['status'], would_block=shadow['would_block'],
                 blockers=shadow['blockers'])
+
+        for limit in self.report.get('investment_candidate_capacity_limits', []):
+            if limit.get('sustainable_capacity', 0)+EPS >= limit.get('desired_capacity', 0):
+                continue
+            self.log_event('investment.candidate_capacity_shadow',
+                entity_id=limit.get('investor'), region_id=limit.get('province_id'),
+                good=limit.get('good'), source='investment_candidate_capacity_limits',
+                decision_id=limit.get('project_id'), project_id=limit.get('project_id'),
+                status=limit['status'], desired_capacity=limit['desired_capacity'],
+                sustainable_capacity=limit['sustainable_capacity'],
+                reduction=limit['reduction'], allocation_order=limit['allocation_order'])
 
         trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
         for trade in self.report.get('trades', []):
@@ -333,6 +344,99 @@ class Economy(EconomyServices):
             free=max(0, supply-committed), shortage=max(0, committed-supply),
             rampable_free=max(0, capacity_supply-committed),
             suppliers=suppliers, consumers=consumers, projects=projects)
+
+    def sustainable_flow_headroom(self, state_id, good, reserved=None, path=(),
+                                  flow_balances=None):
+        """Максимальный дополнительный выпуск существующей цепочки.
+
+        Свободная мощность мельницы считается доступной только если её может
+        прокормить свободный поток зерна. ``reserved`` предназначен для
+        будущего общего ledger одновременных проектов; сейчас метод чистый.
+        """
+        if good in path:
+            raise ValueError('Цикл рецептов: '+' -> '.join(path+(good,)))
+        if reserved is None:
+            reserved = {}
+        balance = (flow_balances or {}).get((state_id, good))
+        if balance is None:
+            balance = self.investment_flow_balance(state_id, good)
+        capacity_headroom = max(0, balance['capacity_supply']-balance['committed']
+            -reserved.get((state_id, good), 0))
+        headroom = capacity_headroom
+        inputs = []
+        for input_good, ratio in sorted(self.goods[good]['inputs'].items()):
+            upstream = self.sustainable_flow_headroom(state_id, input_good,
+                reserved, path+(good,), flow_balances)
+            output_limit = upstream['headroom']/ratio
+            inputs.append(dict(good=input_good, ratio=ratio,
+                input_headroom=upstream['headroom'], output_limit=output_limit))
+            headroom = min(headroom, output_limit)
+        return dict(state_id=state_id, good=good,
+            capacity_headroom=capacity_headroom, headroom=max(0, headroom),
+            inputs=inputs)
+
+    def investment_candidate_capacity_limits(self, candidates, flow_balances=None):
+        """Теневой общий лимит кандидатов по существующей цепочке выпуска.
+
+        Это не gate и не резерв склада. Для каждого кандидата метод пытается
+        зарезервировать *устойчивый поток* его входов у уже открытых
+        поставщиков. Резерв мельницы рекурсивно резервирует зерно, резерв
+        ткацкой фабрики — лён и так далее. Поэтому два кандидата не могут
+        одновременно получить один и тот же свободный поток.
+
+        Порядок здесь намеренно стабилен и служит только для диагностики.
+        Выбор инвестиционного приоритета будет отдельным решением; этот метод
+        не меняет состояние экономики, отчёт и RNG.
+        """
+        def reserve_flow(state_id, good, quantity, ledger, path=()):
+            if good in path:
+                raise ValueError('Цикл рецептов: '+' -> '.join(path+(good,)))
+            available = self.sustainable_flow_headroom(state_id, good, ledger,
+                path, flow_balances)['headroom']
+            if quantity > available+EPS:
+                return None
+            trial = dict(ledger)
+            for input_good, ratio in sorted(self.goods[good]['inputs'].items()):
+                trial = reserve_flow(state_id, input_good, quantity*ratio, trial,
+                    path+(good,))
+                if trial is None:
+                    return None
+            key = (state_id, good)
+            trial[key] = trial.get(key, 0)+quantity
+            return trial
+
+        def reserve_candidate(candidate, quantity, ledger):
+            trial = dict(ledger)
+            for input_good, ratio in sorted(self.goods[candidate['good']]['inputs'].items()):
+                trial = reserve_flow(candidate['state_id'], input_good,
+                    quantity*ratio, trial, (candidate['good'],))
+                if trial is None:
+                    return None
+            return trial
+
+        ledger = {}
+        result = []
+        ordered = sorted(candidates, key=lambda row: (
+            row.get('state_id', ''), row.get('good', ''), row.get('project_id', ''),
+            row.get('investor', '')))
+        for order, candidate in enumerate(ordered):
+            desired = max(0, candidate.get('quantity', candidate.get('capacity', 0)))
+            best = 0.0
+            best_ledger = dict(ledger)
+            low, high = 0.0, desired
+            for _ in range(40):
+                middle = (low+high)/2
+                trial = reserve_candidate(candidate, middle, ledger)
+                if trial is None:
+                    high = middle
+                else:
+                    low, best, best_ledger = middle, middle, trial
+            ledger = best_ledger
+            result.append(dict(**copy.deepcopy(candidate), allocation_order=order,
+                desired_capacity=desired, sustainable_capacity=best,
+                reduction=max(0, desired-best),
+                status='fits_existing_flow' if desired-best <= EPS else 'capped_by_existing_flow'))
+        return result
 
     def investment_expansion_intents(self, demands, flow_balances=None):
         """Собрать агрегированные дефициты потоков для подтверждённого спроса.
@@ -1653,6 +1757,9 @@ class Economy(EconomyServices):
                 self.report['expansion_intent_diagnostics'])
             self.report['investment_shadow_gate'] = self.investment_shadow_gate(
                 self.report['investment_candidate_statuses'], self.report['investment_decisions'])
+            self.report['investment_candidate_capacity_limits'] = \
+                self.investment_candidate_capacity_limits(self.report['investment_candidates'],
+                    flow_balances)
         self.__dict__.pop('_investment_supply_cache', None)
         self.__dict__.pop('_upstream_candidate_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)

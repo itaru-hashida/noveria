@@ -403,6 +403,41 @@ def test_expansion_intents_use_existing_supplier_headroom_before_new_expansion(e
     assert {intent['good'] for intent in intents} == {'wood'}
 
 
+def test_sustainable_flow_headroom_recurses_into_supplier_inputs(engine):
+    grain, flour = firm(engine, 'grain'), firm(engine, 'flour')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    grain.update(status='open', capacity=96, planned_output=0)
+    flour.update(status='open', capacity=100, planned_output=0)
+
+    headroom = engine.sustainable_flow_headroom('s', 'flour')
+
+    assert headroom['capacity_headroom'] == pytest.approx(100)
+    assert headroom['headroom'] == pytest.approx(80)
+    assert headroom['inputs'] == [dict(good='grain', ratio=1.2,
+        input_headroom=96, output_limit=80)]
+
+
+def test_candidate_capacity_limits_recurse_and_share_input_flow(engine):
+    grain, flour, wood = firm(engine, 'grain'), firm(engine, 'flour'), firm(engine, 'wood')
+    for enterprise in engine.enterprises.values():
+        enterprise['status'] = 'closed'
+    grain.update(status='open', capacity=96, planned_output=0)
+    flour.update(status='open', capacity=100, planned_output=0)
+    wood.update(status='open', capacity=100, planned_output=0)
+    candidates = [
+        dict(state_id='s', good='bread', quantity=80, project_id='a'),
+        dict(state_id='s', good='bread', quantity=80, project_id='b'),
+    ]
+
+    limits = engine.investment_candidate_capacity_limits(candidates)
+    by_project = {row['project_id']: row for row in limits}
+
+    assert by_project['a']['sustainable_capacity'] == pytest.approx(80)
+    assert by_project['b']['sustainable_capacity'] == pytest.approx(20)
+    assert by_project['b']['reduction'] == pytest.approx(60)
+
+
 def test_expansion_diagnostics_explain_shared_resource_block(engine):
     flax, grain = firm(engine, 'flax'), firm(engine, 'grain')
     for enterprise in engine.enterprises.values():
