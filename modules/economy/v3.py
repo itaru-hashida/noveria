@@ -29,7 +29,8 @@ class Economy(EconomyServices):
     def reset_report(self):
         super().reset_report()
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
-            owner_consumption=[], owner_consumed={}, events=[])
+            owner_consumption=[], owner_consumed={}, events=[],
+            investment_candidates=[], expansion_intents=[])
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -70,6 +71,15 @@ class Economy(EconomyServices):
                 available=decision.get('available'),
                 already_reserved=decision.get('already_reserved'),
                 dependency_for=decision.get('dependency_for'))
+
+        for intent in self.report.get('expansion_intents', []):
+            self.log_event('investment.expansion_intent',
+                entity_id=f"{intent['state_id']}:{intent['good']}",
+                good=intent['good'], source='investment_expansion_intents',
+                decision_id=f"{intent['state_id']}:{intent['good']}",
+                status='diagnostic_only', required_flow=intent['required_flow'],
+                covered_by_free_flow=intent['covered_by_free_flow'],
+                parents=intent['parents'])
 
         trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
         for trade in self.report.get('trades', []):
@@ -290,7 +300,7 @@ class Economy(EconomyServices):
             free=max(0, supply-committed), shortage=max(0, committed-supply),
             suppliers=suppliers, consumers=consumers, projects=projects)
 
-    def investment_expansion_intents(self, demands):
+    def investment_expansion_intents(self, demands, flow_balances=None):
         """Собрать агрегированные дефициты потоков для подтверждённого спроса.
 
         ``demands`` содержит словари ``state_id``, ``good``, ``quantity`` и
@@ -305,7 +315,10 @@ class Economy(EconomyServices):
         def available(state_id, good):
             key = (state_id, good)
             if key not in free_flow:
-                free_flow[key] = self.investment_flow_balance(state_id, good)['free']
+                balance = (flow_balances or {}).get(key)
+                if balance is None:
+                    balance = self.investment_flow_balance(state_id, good)
+                free_flow[key] = balance['free']
             return free_flow[key]
 
         def require(state_id, product, quantity, decision_id, parent_good, path):
@@ -1412,6 +1425,12 @@ class Economy(EconomyServices):
         self._investment_supply_cache = {}
         self._investment_input_reserved = defaultdict(float)
         self._upstream_candidate_cache = {}
+        diagnostic_demands = []
+        flow_balances = None
+        if evaluate:
+            state_ids = sorted({a['state_id'] for a in self.accounts.values() if a.get('state_id')})
+            flow_balances = {(state_id, good): self.investment_flow_balance(state_id, good)
+                for state_id in state_ids for good in self.goods}
         queue = self.meta.setdefault('investment_queue', [])
         waiting = []
         for item in queue:
@@ -1433,6 +1452,12 @@ class Economy(EconomyServices):
         for a in self.shuffled(investors):
             project = self.project_candidate(a, sells) if evaluate and 'project' not in a else None
             if project:
+                demand = dict(state_id=a['state_id'], good=project['good'],
+                    quantity=project['capacity'], decision_id=project['project_id'],
+                    project_id=project['project_id'], investor=a['id'],
+                    province_id=project['location']['province_id'])
+                diagnostic_demands.append(demand)
+                self.report['investment_candidates'].append(copy.deepcopy(demand))
                 feasible = True
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
                     required = project['capacity']*ratio
@@ -1497,6 +1522,9 @@ class Economy(EconomyServices):
                 project['input_evidence'] = evidence
                 a['project'] = project
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
+        if evaluate:
+            self.report['expansion_intents'] = self.investment_expansion_intents(
+                diagnostic_demands, flow_balances)
         self.__dict__.pop('_investment_supply_cache', None)
         self.__dict__.pop('_upstream_candidate_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)

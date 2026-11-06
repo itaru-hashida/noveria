@@ -416,6 +416,32 @@ def project(engine, expansion=False):
         expected_investment=130, expected_unit_cost=2, expansion=expansion, created=1, delivery=0)
 
 
+def test_project_requests_publish_candidate_expansion_intents(engine, monkeypatch):
+    clear(engine)
+    investor = engine.accounts['private:s']
+    candidate = project(engine)
+    candidate.update(project_id='candidate:bread', capacity=5)
+    captured = {}
+
+    monkeypatch.setattr(engine, 'project_candidate',
+        lambda account, sells: copy.deepcopy(candidate) if account['id'] == investor['id'] else None)
+    def observe(demands, flow_balances=None):
+        captured['demands'] = copy.deepcopy(demands)
+        captured['balances'] = flow_balances
+        return [dict(state_id='s', good='flour', required_flow=4)]
+    monkeypatch.setattr(engine, 'investment_expansion_intents', observe)
+    engine.meta['investment_dirty'] = ['bread']
+
+    engine.project_requests(engine.sell_orders())
+
+    assert captured['demands'] == [dict(state_id='s', good='bread', quantity=5,
+        decision_id='candidate:bread', project_id='candidate:bread',
+        investor=investor['id'], province_id='p')]
+    assert ('s', 'flour') in captured['balances']
+    assert engine.report['investment_candidates'][0]['project_id'] == 'candidate:bread'
+    assert engine.report['expansion_intents'] == [dict(state_id='s', good='flour', required_flow=4)]
+
+
 def test_partial_project_and_locked_materials_survive_reload(engine, tmp_path):
     clear(engine)
     a = engine.accounts['merchant:s']
