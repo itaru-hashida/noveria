@@ -35,6 +35,20 @@
   "treasury_gold_per_capita": 0.4,
   "startup_cash": 120,
   "construction": {"planks": 2, "tools": 1},
+  "construction_modes": {
+    "normal": {"wage_multiplier": 1, "lodging_allowance": 0, "support_goods": {}},
+    "accelerated": {"wage_multiplier": 2, "lodging_allowance": 0.04, "support_goods": {"bread": 0.002, "fish": 0.0004}}
+  },
+  "institutions": {
+    "academy": {
+      "name": "Академия",
+      "materials": {"planks": 80, "stone": 120},
+      "equipment": {"tools": 6},
+      "equipment_wear": {"tools": 1},
+      "work_required": 120,
+      "max_workers": 20
+    }
+  },
   "initial_reserve_months": 2,
   "input_buffer": 2,
   "markup": 0.20,

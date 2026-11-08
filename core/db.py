@@ -21,7 +21,7 @@ RELATIONS = {
     'diplomacy': {('State', 'State')},
     'kinship': {('Character', 'Character')},
     'alliance': {('Character', 'Character')},
-    'located_in': {('SocialGroup', 'Province'), ('SocialGroup', 'City'), ('Character', 'City')},
+    'located_in': {('SocialGroup', 'Province'), ('SocialGroup', 'City'), ('Character', 'City'), ('Institution', 'City')},
     'institution_of': {('Institution', 'State')},
     'belongs_to': {('Army', 'State')},
 }

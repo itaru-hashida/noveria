@@ -43,7 +43,7 @@ def install_shock():
                 inside = {t['id'] for t in self.tiles.values() if t['province_id'] == pid}
                 cut = [(a, b) for a, b in list(self.graph.edges) if (a in inside) != (b in inside)]
                 self.graph.remove_edges_from(cut)
-                self.paths = {}
+                self.invalidate_routes()
     Economy.sync_locations = patched
 
 

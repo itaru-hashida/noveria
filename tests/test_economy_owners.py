@@ -256,6 +256,7 @@ def test_owner_orders_fail_without_spending_or_consuming(engine, scenario):
             if scenario == 'price':
                 for sell in sells.get(o['good'], []):
                     sell['price'] = 1e6
+                    engine.invalidate_market_books()
             engine.match(o, sells)
             engine.cancel_order(o)
     engine.consume_owner_purchases()
@@ -323,7 +324,8 @@ def test_short_run_conserves_money_goods_and_exposes_lab_metrics(engine):
         assert engine.gold() == pytest.approx(initial_gold)
         for good, before in stock.items():
             assert engine.total_stock()[good] == pytest.approx(before+r['production'].get(good, 0)
-                -r['inputs_used'].get(good, 0)-r['construction_used'].get(good, 0)-r['consumed'].get(good, 0))
+                -r['inputs_used'].get(good, 0)-r['construction_used'].get(good, 0)
+                -r['consumed'].get(good, 0)-r['equipment_wear'].get(good, 0))
         stock = engine.total_stock()
         for row in r['owner_consumption']:
             assert row['spent'] <= row['budget']+1e-7

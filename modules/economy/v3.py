@@ -13,6 +13,44 @@ OWNER_CONSUMPTION = 'Личное потребление собственник�
 CONSUMPTION_PURPOSES = ('Базовые нужды', 'Дополнительные нужды', OWNER_CONSUMPTION)
 
 
+class OfferView:
+    """Ленивое представление единой книги без копирования её офферов."""
+
+    def __init__(self, book, buyer_id, province_id, local_only=False):
+        self.book = book
+        self.buyer_id = buyer_id
+        self.province_id = province_id
+        self.local_only = local_only
+
+    def __iter__(self):
+        options = self.book['options']
+        first = self.book['first_live']
+        while first < len(options):
+            sell = options[first][1]
+            if sell['remaining'] > EPS and sell['status'] not in ('cancelled', 'expired'):
+                break
+            first += 1
+        self.book['first_live'] = first
+        for index in range(first, len(options)):
+            price, sell, quote = options[index]
+            if (sell['participant'] != self.buyer_id
+                    and sell['remaining'] > EPS
+                    and sell['status'] not in ('cancelled', 'expired')
+                    and (not self.local_only or sell['province_id'] == self.province_id)):
+                yield price, sell, quote
+
+    def __bool__(self):
+        return next(iter(self), None) is not None
+
+    def __getitem__(self, index):
+        if index < 0:
+            raise IndexError('OfferView не поддерживает отрицательный индекс')
+        for current, row in enumerate(self):
+            if current == index:
+                return row
+        raise IndexError(index)
+
+
 class Economy(EconomyServices):
     OWNER_FAMILY_SIZE = 4
     OWNER_FOOD_QUALITY = 4
@@ -27,12 +65,19 @@ class Economy(EconomyServices):
     ENTERPRISE_OVERHEAD_REVISION = 1
 
     def reset_report(self):
+        # Рыночные кэши живут строго один отчётный месяц. Это также нужно
+        # лабораторным сценариям, которые вручную начинают следующий месяц.
+        for key in ('_market_books', '_landed_cache', '_customer_order_index',
+                    '_physical_stock_totals', '_match_observation_count',
+                    '_customer_quotes_cache'):
+            self.__dict__.pop(key, None)
         super().reset_report()
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
             investment_candidates=[], expansion_intents=[],
             expansion_intent_diagnostics=[], investment_candidate_statuses=[],
-            investment_shadow_gate=[], investment_candidate_capacity_limits=[], migration=[])
+            investment_shadow_gate=[], investment_candidate_capacity_limits=[], migration=[],
+            public_projects=[], construction_labor=[], market_boards=[])
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -333,6 +378,65 @@ class Economy(EconomyServices):
                 stack.append((input_good, required, path + (product,)))
         return dict(requirements)
 
+    def build_investment_index(self):
+        """Неизменяемый срез рынка для одного прохода инвестиций.
+
+        Резервы проектов сюда не входят: они остаются живыми и обновляются в
+        project_requests(), чтобы второй кандидат не увидел мощность первого.
+        """
+        history = self.meta.get('market_history', [])
+        markets = defaultdict(set)
+        for order in self.report['orders']:
+            if order['side'] == 'buy' and order.get('province_id'):
+                markets[order['state_id']].add((order['province_id'], order['good']))
+        for month in history:
+            for row in month['markets']:
+                markets[row['state_id']].add((row['province_id'], row['good']))
+        resource_goods = {state_id: {good for _, good in rows if self.goods[good]['resource']}
+                          for state_id, rows in markets.items()}
+        resource_tiles = defaultdict(list)
+        for tile in self.tiles.values():
+            state_id = self.owners.get(tile['province_id'])
+            if state_id is None:
+                continue
+            for resource in tile['resources']:
+                resource_tiles[state_id, tile['province_id'], resource].append(tile)
+            for good in resource_goods.get(state_id, ()):
+                if self.goods[good]['resource'] in tile['resources']:
+                    markets[state_id].add((tile['province_id'], good))
+        labor_values = defaultdict(list)
+        for account in self.accounts.values():
+            if account['kind'] == 'household':
+                labor_values[account['state_id'], account['province_id']].append(
+                    self.population(account)*self.cfg['labor_share'])
+        labor = {key: sum(values) for key, values in labor_values.items()}
+        resource_values = defaultdict(list)
+        for firm in self.enterprises.values():
+            if firm['status'] != 'closed' and self.goods[firm['good']]['resource']:
+                resource_values[firm['province_id'], self.goods[firm['good']]['resource']].append(firm['capacity'])
+        resource_used = {key: sum(values) for key, values in resource_values.items()}
+        projects = defaultdict(list)
+        buyer_orders = defaultdict(list)
+        for order in self.report['orders']:
+            if order['side'] == 'buy':
+                buyer_orders[order['participant'], order['good']].append(order['id'])
+        for account in self.accounts.values():
+            project = account.get('project')
+            if project:
+                projects[project['good']].append((dict(project['location']),
+                    project['expected_price'], project['capacity']))
+        return dict(markets={state_id: tuple(sorted(rows)) for state_id, rows in markets.items()},
+            resource_tiles=resource_tiles, labor=labor, resource_used=resource_used,
+            projects=projects, buyer_orders={key: tuple(value) for key, value in buyer_orders.items()},
+            project_revision=0)
+
+    def register_investment_project(self, project):
+        index = getattr(self, '_investment_index', None)
+        if index is not None:
+            index['projects'][project['good']].append((dict(project['location']),
+                project['expected_price'], project['capacity']))
+            index['project_revision'] += 1
+
     def investment_flow_balance(self, state_id, good):
         """Вернуть устойчивый месячный поток товара внутри государства.
 
@@ -478,7 +582,9 @@ class Economy(EconomyServices):
         construction = max(0, project['expected_investment']-previous_working)
         working = 0 if project['expansion'] else max(self.cfg['startup_cash'],
             capacity*project['expected_unit_cost'])
-        project.update(requested_capacity=previous, capacity=capacity,
+        # Это диагностическая исходная величина; нормализация убирает шум
+        # порядка сложения в индексированных и прямых расчётах.
+        project.update(requested_capacity=round(previous, 12), capacity=capacity,
             working_cash=working,
             expected_profit=project['expected_profit']*capacity/previous,
             expected_investment=construction*capacity/previous+working,
@@ -647,9 +753,37 @@ class Economy(EconomyServices):
         return result
 
     def add_stock(self, account, good, quantity, value=0):
+        before = self.accounts[account]['stock'].get(good, 0)
         result = super().add_stock(account, good, quantity, value)
+        self._update_physical_stock_total(good, before,
+            self.accounts[account]['stock'].get(good, 0))
         self.mark_investment_dirty(good)
         return result
+
+    def _update_physical_stock_total(self, good, before, after):
+        """Обновить ленивый индекс физических запасов, если он уже построен."""
+        totals = getattr(self, '_physical_stock_totals', None)
+        if totals is None or good not in totals:
+            return
+        row = totals[good]
+        row['quantity'] += after-before
+        row['count'] += int(after > EPS)-int(before > EPS)
+
+    def physical_stock_summary(self, buyer_id, good):
+        """Запасы товара у остальных счетов: один полный обход на товар за месяц."""
+        totals = getattr(self, '_physical_stock_totals', {})
+        row = totals.get(good)
+        if row is None:
+            row = dict(quantity=0.0, count=0)
+            for account in self.accounts.values():
+                quantity = account['stock'].get(good, 0)
+                row['quantity'] += quantity
+                row['count'] += int(quantity > EPS)
+            totals[good] = row
+            self._physical_stock_totals = totals
+        own = self.accounts[buyer_id]['stock'].get(good, 0)
+        return dict(quantity=max(0, row['quantity']-own),
+            count=max(0, row['count']-int(own > EPS)))
 
     def open_enterprise(self, *args, **kwargs):
         e = super().open_enterprise(*args, **kwargs)
@@ -754,6 +888,52 @@ class Economy(EconomyServices):
                     raise ValueError('Некорректный начальный владелец добычи: '+product)
                 if not isinstance(recipe['seed_initial'], bool):
                     raise ValueError('Некорректный признак начальной добычи: '+product)
+        institutions = self.cfg.setdefault('institutions', {})
+        if not isinstance(institutions, dict):
+            raise ValueError('Некорректные учреждения')
+        for kind, blueprint in institutions.items():
+            if not isinstance(kind, str) or not kind or not isinstance(blueprint, dict):
+                raise ValueError('Некорректный тип учреждения')
+            if not isinstance(blueprint.get('name'), str) or not blueprint['name'].strip():
+                raise ValueError('У учреждения нет названия: '+kind)
+            for field in ('materials', 'equipment', 'equipment_wear'):
+                values = blueprint.setdefault(field, {})
+                if not isinstance(values, dict):
+                    raise ValueError('Некорректная смета учреждения: '+kind)
+                for good, quantity in values.items():
+                    if good not in self.goods or not math.isfinite(quantity) or quantity < 0:
+                        raise ValueError('Некорректная смета учреждения: '+kind+':'+str(good))
+            for good, quantity in blueprint['materials'].items():
+                if quantity <= 0:
+                    raise ValueError('Некорректный материал учреждения: '+kind+':'+good)
+            for good, quantity in blueprint['equipment'].items():
+                if quantity <= 0 or not self.goods[good].get('durable'):
+                    raise ValueError('Некорректное оснащение учреждения: '+kind+':'+good)
+            for good, quantity in blueprint['equipment_wear'].items():
+                if good not in blueprint['equipment'] or quantity < 0:
+                    raise ValueError('Некорректный износ учреждения: '+kind+':'+good)
+            for field in ('work_required', 'max_workers'):
+                value = blueprint.get(field)
+                if not math.isfinite(value) or value <= 0:
+                    raise ValueError('Некорректный труд учреждения: '+kind)
+            if blueprint['max_workers'] > blueprint['work_required']:
+                raise ValueError('Бригада больше всего объёма работ: '+kind)
+        modes = self.cfg.setdefault('construction_modes', {
+            'normal': dict(wage_multiplier=1, lodging_allowance=0, support_goods={})})
+        if not isinstance(modes, dict) or 'normal' not in modes:
+            raise ValueError('Некорректные режимы строительства')
+        for mode, values in modes.items():
+            if not isinstance(values, dict):
+                raise ValueError('Некорректный режим строительства: '+str(mode))
+            wage_multiplier = values.get('wage_multiplier')
+            lodging = values.get('lodging_allowance', 0)
+            support = values.setdefault('support_goods', {})
+            if (not math.isfinite(wage_multiplier) or wage_multiplier < 1
+                    or not math.isfinite(lodging) or lodging < 0 or not isinstance(support, dict)):
+                raise ValueError('Некорректный режим строительства: '+str(mode))
+            for good, quantity in support.items():
+                if good not in self.goods or not math.isfinite(quantity) or quantity < 0:
+                    raise ValueError('Некорректное содержание строителей: '+str(mode)+':'+str(good))
         for a in self.accounts.values():
             a.setdefault('reserved', 0.0)
             a.setdefault('protected', 0.0)
@@ -879,7 +1059,9 @@ class Economy(EconomyServices):
             if moved_quantity <= EPS:
                 continue
             moved_value = source['values'].get(good, 0)*share
+            before = source['stock'].get(good, 0)
             source['stock'][good] = max(0, quantity-moved_quantity)
+            self._update_physical_stock_total(good, before, source['stock'][good])
             source['values'][good] = max(0, source['values'].get(good, 0)-moved_value)
             stock[good] = moved_quantity
             for target in targets:
@@ -1073,7 +1255,213 @@ class Economy(EconomyServices):
         return super().transfer(sender, recipient, amount, reason)
 
     def locked_material(self, account, good):
-        return self.accounts[account].get('project', {}).get('materials', {}).get(good, 0)
+        a = self.accounts[account]
+        locked = a.get('project', {}).get('materials', {}).get(good, 0)
+        for project in a.get('public_projects', []):
+            locked += project.get('materials', {}).get(good, 0)
+            locked += project.get('equipment_held', {}).get(good, 0)
+            locked += project.get('support_stock', {}).get(good, 0)
+        return locked
+
+    def start_public_project(self, city_id, kind, mode='normal'):
+        """Создать муниципальный проект учреждения по статической смете."""
+        self.activate_rules()
+        city = self.entities.get(city_id)
+        if not city or city['kind'] != 'City':
+            raise ValueError('Город для стройки не найден')
+        blueprint = self.cfg['institutions'].get(kind)
+        if blueprint is None:
+            raise ValueError('Неизвестный тип учреждения: '+str(kind))
+        if mode not in self.cfg['construction_modes']:
+            raise ValueError('Неизвестный режим строительства: '+str(mode))
+        account = self.accounts.get('municipal:'+city_id)
+        if not account:
+            raise ValueError('У города нет муниципальной кассы')
+        if account.get('public_projects'):
+            raise ValueError('У города уже есть активная стройка')
+        sequence = self.meta.get('public_project_sequence', 0)+1
+        self.meta['public_project_sequence'] = sequence
+        loc = self.location(city_id)
+        project_id = f'public:{city_id}:{sequence}'
+        project = dict(id=project_id, institution_id=f'institution-{city_id}-{sequence:05d}',
+            kind=kind, name=blueprint['name'], city_id=city_id, location=loc, mode=mode,
+            materials={}, equipment_held={}, support_stock={}, material_bill=copy.deepcopy(blueprint['materials']),
+            equipment=copy.deepcopy(blueprint['equipment']),
+            equipment_wear=copy.deepcopy(blueprint['equipment_wear']),
+            work_required=float(blueprint['work_required']), work_done=0.0,
+            max_workers=float(blueprint['max_workers']), created=self.meta['month'],
+            status='procurement')
+        account['public_projects'] = [project]
+        self.log_event('public_project.started', entity_id=project_id, region_id=loc['province_id'],
+            cause='municipal_order', source='public_construction', project_id=project_id,
+            institution_kind=kind, city_id=city_id, mode=mode, material_bill=project['material_bill'],
+            equipment=project['equipment'], work_required=project['work_required'])
+        return copy.deepcopy(project)
+
+    def _claim_public_stock(self, account, project, bucket, good, required, sells):
+        """Закрепить уже купленный товар за муниципальной стройкой."""
+        held = project[bucket].get(good, 0)
+        wanted = max(0, required-held)
+        if wanted <= EPS:
+            return held
+        assign = min(wanted, max(0, account['stock'].get(good, 0)-self.locked_material(account['id'], good)))
+        release = max(0, assign-self.free_stock(account['id'], good))
+        for offer in sells.get(good, []):
+            if release <= EPS:
+                break
+            if offer['participant'] != account['id'] or offer['status'] in ('cancelled', 'expired'):
+                continue
+            take = min(release, offer['remaining'])
+            offer['quantity'] -= take
+            offer['remaining'] -= take
+            offer['backing'] -= take
+            account['stock_reserved'][good] = max(0, account['stock_reserved'].get(good, 0)-take)
+            release -= take
+            if offer['remaining'] <= EPS:
+                self.cancel_order(offer, 'Материалы закреплены за городской стройкой')
+        assign = min(wanted, self.free_stock(account['id'], good))
+        project[bucket][good] = held+assign
+        return project[bucket][good]
+
+    def public_project_requests(self, sells):
+        """Закупки городских строек идут через тот же рынок, что и все товары."""
+        for account in sorted(self.accounts.values(), key=lambda a: a['id']):
+            for project in account.get('public_projects', []):
+                for bucket, requirements, purpose in (
+                    ('materials', project['material_bill'], 'Материалы городской стройки'),
+                    ('equipment_held', project['equipment'], 'Оснащение городской стройки')):
+                    for good, required in requirements.items():
+                        held = self._claim_public_stock(account, project, bucket, good, required, sells)
+                        missing = max(0, required-held)
+                        if missing > EPS:
+                            _, price, _ = self.quoted_cost(account, good, missing, sells)
+                            order = self.order(account['id'], good, missing, 'buy', price, purpose)
+                            if order:
+                                order['project_id'] = project['id']
+                support = self.cfg['construction_modes'][project['mode']]['support_goods']
+                for good, per_worker in support.items():
+                    required = project['max_workers']*per_worker
+                    held = self._claim_public_stock(account, project, 'support_stock', good, required, sells)
+                    missing = max(0, required-held)
+                    if missing > EPS:
+                        _, price, _ = self.quoted_cost(account, good, missing, sells)
+                        order = self.order(account['id'], good, missing, 'buy', price,
+                            'Содержание ускоренной стройки')
+                        if order:
+                            order['project_id'] = project['id']
+
+    def reserve_expedited_construction_labor(self):
+        """До производства забронировать дорогие бригады, вытесняющие обычный труд."""
+        reservations, workers_by_project = defaultdict(float), {}
+        for account in sorted(self.accounts.values(), key=lambda a: a['id']):
+            for project in account.get('public_projects', []):
+                if project['mode'] != 'accelerated':
+                    continue
+                ready = (all(project['materials'].get(g, 0)+EPS >= q
+                             for g, q in project['material_bill'].items())
+                    and all(project['equipment_held'].get(g, 0)+EPS >= q
+                            for g, q in project['equipment'].items()))
+                if not ready:
+                    continue
+                mode = self.cfg['construction_modes']['accelerated']
+                loc = project['location']
+                key = (loc['state_id'], loc['province_id'])
+                available = sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
+                    if a['kind'] == 'household' and (a['state_id'], a['province_id']) == key)-reservations[key]
+                support_limit = min((project['support_stock'].get(g, 0)/per_worker
+                    for g, per_worker in mode['support_goods'].items() if per_worker > EPS), default=float('inf'))
+                cost_per_worker = self.cfg['wage']*mode['wage_multiplier']+mode['lodging_allowance']
+                workers = min(project['max_workers'], project['work_required']-project['work_done'],
+                    max(0, available), support_limit, self.free_cash(account['id'])/cost_per_worker)
+                if workers > EPS:
+                    reservations[key] += workers
+                    workers_by_project[project['id']] = workers
+        self._expedited_construction_reservations = reservations
+        self._expedited_construction_workers = workers_by_project
+
+    def advance_public_projects(self):
+        """Постройки используют только работников, не нанятых предприятиями в этом месяце."""
+        labor = getattr(self, '_construction_labor', defaultdict(float))
+        for account in sorted(self.accounts.values(), key=lambda a: a['id']):
+            remaining = []
+            for project in account.get('public_projects', []):
+                ready = (all(project['materials'].get(g, 0)+EPS >= q
+                             for g, q in project['material_bill'].items())
+                    and all(project['equipment_held'].get(g, 0)+EPS >= q
+                            for g, q in project['equipment'].items()))
+                loc = project['location']
+                key = (loc['state_id'], loc['province_id'])
+                workers = 0.0
+                if ready:
+                    mode = self.cfg['construction_modes'][project['mode']]
+                    if project['mode'] == 'accelerated':
+                        workers = getattr(self, '_expedited_construction_workers', {}).get(project['id'], 0)
+                    else:
+                        workers = min(project['max_workers'], project['work_required']-project['work_done'],
+                            labor[key], self.free_cash(account['id'])/self.cfg['wage'])
+                    if workers > EPS:
+                        wages = workers*self.cfg['wage']*mode['wage_multiplier']
+                        self.distribute(account['id'], self.workforce(loc), wages, 'Заработная плата строителей')
+                        lodging = workers*mode['lodging_allowance']
+                        if lodging > EPS:
+                            self.distribute(account['id'], self.workforce(loc), lodging, 'Временное жильё строителей')
+                        if project['mode'] != 'accelerated':
+                            labor[key] -= workers
+                        for good, per_worker in mode['support_goods'].items():
+                            quantity = workers*per_worker
+                            if quantity <= EPS:
+                                continue
+                            project['support_stock'][good] -= quantity
+                            self.use_stock(account['id'], good, quantity)
+                            self.report['consumed'][good] = self.report['consumed'].get(good, 0)+quantity
+                        fraction = workers/project['work_required']
+                        for good, total_wear in project['equipment_wear'].items():
+                            worn = min(project['equipment_held'].get(good, 0), total_wear*fraction)
+                            if worn <= EPS:
+                                continue
+                            project['equipment_held'][good] -= worn
+                            self.use_stock(account['id'], good, worn)
+                            self.report['equipment_wear'][good] = self.report['equipment_wear'].get(good, 0)+worn
+                        project['work_done'] += workers
+                        project['status'] = 'building'
+                complete = project['work_done']+EPS >= project['work_required']
+                row = dict(project_id=project['id'], city_id=project['city_id'], state_id=loc['state_id'],
+                    province_id=loc['province_id'], kind=project['kind'], status='completed' if complete else project['status'],
+                    workers=workers, work_done=project['work_done'], work_required=project['work_required'],
+                    progress=min(1.0, project['work_done']/project['work_required']), ready=ready,
+                    mode=project['mode'])
+                self.report['public_projects'].append(row)
+                if workers > EPS:
+                    self.report['construction_labor'].append(dict(state_id=loc['state_id'],
+                        province_id=loc['province_id'], workers=workers, project_id=project['id']))
+                if complete:
+                    self._complete_public_project(account, project)
+                else:
+                    remaining.append(project)
+            account['public_projects'] = remaining
+        self._construction_labor = labor
+
+    def _complete_public_project(self, account, project):
+        asset_value = 0.0
+        for good, quantity in project['material_bill'].items():
+            project['materials'][good] -= quantity
+            asset_value += self.use_stock(account['id'], good, quantity)
+            self.report['construction_used'][good] = self.report['construction_used'].get(good, 0)+quantity
+        properties = dict(kind=project['kind'], status='active', level=1,
+            city_id=project['city_id'], state_id=project['location']['state_id'],
+            province_id=project['location']['province_id'], tile_id=project['location']['tile_id'],
+            built_month=self.meta['month'], asset_value=asset_value,
+            construction_project_id=project['id'])
+        institution = dict(id=project['institution_id'], name=project['name'], properties=properties)
+        self.entities[institution['id']] = dict(institution, kind='Institution')
+        self.pending_institutions.append(institution)
+        self.report['lifecycle'].append(dict(enterprise=institution['id'], action='built',
+            good=project['kind'], province_id=project['location']['province_id'],
+            reason='Муниципальная стройка завершена'))
+        self.log_event('public_project.completed', entity_id=institution['id'],
+            region_id=project['location']['province_id'], cause='work_completed',
+            source='public_construction', project_id=project['id'], institution_kind=project['kind'],
+            city_id=project['city_id'], asset_value=asset_value)
 
     def free_stock(self, account, good):
         a = self.accounts[account]
@@ -1082,7 +1470,10 @@ class Economy(EconomyServices):
     def use_stock(self, account, good, quantity):
         if quantity > self.free_stock(account, good)+EPS:
             raise ValueError('Товар уже закреплён за продажей или стройкой')
+        before = self.accounts[account]['stock'].get(good, 0)
         result = super().use_stock(account, good, quantity)
+        self._update_physical_stock_total(good, before,
+            self.accounts[account]['stock'].get(good, 0))
         self.mark_investment_dirty(good)
         return result
 
@@ -1127,32 +1518,127 @@ class Economy(EconomyServices):
             order.update(status='cancelled', reason=reason)
 
     def landed(self, seller_tile, buyer_tile, good, price):
-        distance, path = self.path(seller_tile, buyer_tile)
-        if distance is None:
+        """Полная цена товара по неизменной в течение месяца сети."""
+        cache = getattr(self, '_landed_cache', {})
+        key = (seller_tile, buyer_tile, good, self.goods[good]['weight'], self.cfg['transport_rate'])
+        quote = cache.get(key)
+        if quote is None:
+            distance, path = self.path(seller_tile, buyer_tile)
+            if distance is None:
+                cache[key] = False
+                self._landed_cache = cache
+                return None
+            quote = (distance*self.goods[good]['weight']*self.cfg['transport_rate'], distance, path)
+            cache[key] = quote
+            self._landed_cache = cache
+        if quote is False:
             return None
-        freight = distance*self.goods[good]['weight']*self.cfg['transport_rate']
+        freight, distance, path = quote
         return price+freight, freight, distance, path
 
-    def offers(self, buyer, good, sells, local_only=False):
-        cache = getattr(self, '_offer_index', {})
-        signature = tuple((sell['id'], sell['price'], sell['tile_id'], sell['status'])
-                          for sell in sells.get(good, []))
-        key = (self.market_tile(buyer), good, signature)
-        options = cache.get(key)
-        if options is None:
-            options = []
-            for sell in sells.get(good, []):
-                quote = self.landed(sell['tile_id'], self.market_tile(buyer), good, sell['price'])
+    def _customer_orders(self, orders, good):
+        """Индекс заявок покупателей по товару для одной фазы рынка."""
+        cache = getattr(self, '_customer_order_index', {})
+        key = (id(orders), len(orders), good)
+        entry = cache.get(key)
+        result = entry[1] if entry and entry[0] is orders else None
+        if result is None:
+            result = [order for order in orders if order['side'] == 'buy' and order['good'] == good]
+            # Держим сам список: Python не сможет выдать его id новому
+            # временному списку до конца отчётного месяца.
+            cache[key] = (orders, result)
+            self._customer_order_index = cache
+        return result
+
+    def _customer_quote_index(self, tile_id, good, orders):
+        """Доставка от площадки к покупателям без цены производителя."""
+        cache = getattr(self, '_customer_quotes_cache', {})
+        key = (id(orders), len(orders), tile_id, good, self.goods[good]['weight'], self.cfg['transport_rate'])
+        entry = cache.get(key)
+        result = entry[1] if entry and entry[0] is orders else None
+        if result is None:
+            result = []
+            for order in self._customer_orders(orders, good):
+                quote = self.landed(tile_id, order['tile_id'], good, 0)
                 if quote:
-                    options.append((quote[0], sell, quote))
-            options.sort(key=lambda item: (item[0], item[1]['id']))
-            cache[key] = options
-            self._offer_index = cache
-        return [(price, sell, quote) for price, sell, quote in options
-                if sell['participant'] != buyer['id']
-                and sell['remaining'] > EPS
-                and sell['status'] not in ('cancelled', 'expired')
-                and (not local_only or sell['province_id'] == buyer['province_id'])]
+                    result.append((order, quote[1]))
+            cache[key] = (orders, result)
+            self._customer_quotes_cache = cache
+        return result
+
+    def _market_book(self, buyer, good, sells, record=False):
+        """Одна отсортированная доска предложений на рынок назначения.
+
+        Цена доставки зависит от назначения, поэтому книга общая не для всего
+        товара, а для пары (товар, торговая площадка покупателя). Сами заявки
+        остаются живыми объектами: сделки меняют только remaining/status.
+        """
+        books = getattr(self, '_market_books', {})
+        sell_list = sells.get(good, [])
+        key = (id(sell_list), self.market_tile(buyer), good)
+        entry = books.get(key)
+        if entry is not None and entry['source'] is sell_list:
+            if record and entry['board_id'] is None:
+                self._record_market_board(entry, buyer, good)
+            return entry
+
+        options = []
+        for sell in sell_list:
+            quote = self.landed(sell['tile_id'], self.market_tile(buyer), good, sell['price'])
+            if quote:
+                options.append((quote[0], sell, quote))
+        options.sort(key=lambda item: (item[0], item[1]['id']))
+        entry = dict(source=sell_list, options=options,
+            quotes={sell['id']: quote for _, sell, quote in options},
+            board_id=None, first_live=0)
+        books[key] = entry
+        self._market_books = books
+        if record:
+            self._record_market_board(entry, buyer, good)
+        return entry
+
+    def invalidate_market_books(self):
+        """Явно сбросить книги после изменения цены, тайла или состава офферов.
+
+        Обычный ход этого не требует: набор офферов создаётся заново в
+        sell_orders(). Метод нужен редактору мира и лабораторным сценариям,
+        которые вручную меняют уже опубликованный оффер.
+        """
+        self.__dict__.pop('_market_books', None)
+
+    def _record_market_board(self, book, buyer, good):
+        by_id = {sell['id']: quote for _, sell, quote in book['options']}
+        snapshot = []
+        for sell in book['source']:
+            quote = by_id.get(sell['id'])
+            snapshot.append(dict(sell_order=sell['id'], seller=sell['participant'],
+                price=sell['price'], quantity=sell['quantity'], remaining=sell['remaining'],
+                status=sell['status'], province_id=sell['province_id'], tile_id=sell['tile_id'],
+                route_available=quote is not None, landed_price=quote[0] if quote else None,
+                freight_per_unit=quote[1] if quote else None,
+                distance=quote[2] if quote else None))
+        board_id = f'{self.meta["month"]}:board:{len(self.report["market_boards"])}'
+        self.report['market_boards'].append(dict(board_id=board_id, month=self.meta['month'],
+            good=good, buyer_tile=self.market_tile(buyer),
+            created_trade_index=len(self.report['trades']), offers=snapshot))
+        book['board_id'] = board_id
+
+    def offers(self, buyer, good, sells, local_only=False):
+        book = self._market_book(buyer, good, sells)
+        return OfferView(book, buyer['id'], buyer['province_id'], local_only)
+
+    def replay_market_board(self, board_id, trade_index=None):
+        """Восстановить остатки книги перед указанной сделкой из snapshot+events."""
+        board = next(row for row in self.report['market_boards'] if row['board_id'] == board_id)
+        limit = len(self.report['trades']) if trade_index is None else trade_index
+        state = {row['sell_order']: dict(row) for row in board['offers']}
+        for trade in self.report['trades'][board['created_trade_index']:limit]:
+            row = state.get(trade['sell_order'])
+            if row is None:
+                continue
+            row['remaining'] = max(0, row['remaining']-trade['quantity'])
+            row['status'] = 'filled' if row['remaining'] <= EPS else 'partial'
+        return list(state.values())
 
     def reference_price(self, buyer, good, sells):
         offers = self.offers(buyer, good, sells)
@@ -1247,62 +1733,68 @@ class Economy(EconomyServices):
         options = (self.offers(buyer, buy['good'], sells, local_only=True)
             if local_only else self.offers(buyer, buy['good'], sells))
         observation = self.observe_match(buy, sells, options)
-        # Равная полная цена не даёт постоянного преимущества одному ID.
-        ordered, index = [], 0
-        while index < len(options):
-            end = index+1
-            while end < len(options) and math.isclose(options[index][0], options[end][0], rel_tol=1e-12, abs_tol=1e-12):
-                end += 1
-            ordered.extend(self.shuffled(options[index:end], key=lambda row: row[1]['id']))
-            index = end
-        for price, sell, quote in ordered:
-            if price > buy['price']+EPS:
-                continue
-            q = min(buy['remaining'], sell['remaining'], buy['reserved']/price,
-                self.purchase_quantity(buy, sells))
-            if q <= EPS:
-                continue
-            seller = self.accounts[sell['participant']]
-            freight, distance, path = quote[1:]
-            # Освобождается только резерв исполненной части, остальной остаётся защищён.
-            release = q*buy['price']
-            # Допуск цены задан на единицу. На большой партии разница может
-            # превысить денежный EPS: освобождаем обеспеченную фактическую сумму,
-            # не затрагивая резервы других заявок и не меняя обычные сделки.
-            if q*price > self.free_cash(buy['participant'])+release+EPS:
-                release = min(buy['reserved'], max(release, q*price))
-            buyer['reserved'] = max(0, buyer['reserved']-release)
-            buy['reserved'] = max(0, buy['reserved']-release)
-            seller['stock_reserved'][buy['good']] = max(0, seller['stock_reserved'][buy['good']]-q)
-            value = self.use_stock(sell['participant'], buy['good'], q)
-            self.add_stock(buy['participant'], buy['good'], q, q*price)
-            gross = q*sell['price']
-            tax = gross*self.cfg['consumption_tax'] if buy.get('final_consumption', False) else 0.0
-            flow_start = len(self.report['flows'])
-            trade_id = f'{self.meta["month"]}:trade:{len(self.report["trades"])}'
-            self.transfer(buy['participant'], sell['participant'], gross-tax, 'Товар')
-            self.transfer(buy['participant'], 'treasury:'+seller['state_id'], tax, 'Налог с конечной потребительской продажи')
-            self.transfer(buy['participant'], 'carrier:'+seller['state_id'], q*freight, 'Перевозка')
-            for flow in self.report['flows'][flow_start:]:
-                flow.update(buy_order=buy['id'], sell_order=sell['id'], good=buy['good'], quantity=q,
-                    trade_id=trade_id)
-            firm = self.enterprises.get(sell['participant'])
-            if firm:
-                firm['revenue'] += gross
-                firm['tax'] = firm.get('tax', 0)+tax
-                firm['cost_of_sales'] = firm.get('cost_of_sales', 0)+value
-            if buy['purpose'] == 'Строительные материалы':
-                materials = buyer['project']['materials']
-                materials[buy['good']] = materials.get(buy['good'], 0)+q
-            buy['remaining'] = max(0, buy['remaining']-q)
-            sell['remaining'] = max(0, sell['remaining']-q)
-            self.report['trades'].append(dict(trade_id=trade_id, good=buy['good'], quantity=q, price=sell['price'],
-                gold=gross, seller_gold=gross-tax, tax=tax, freight=q*freight, distance=distance, path=path,
-                buyer=buy['participant'], seller=sell['participant'], buy_order=buy['id'], sell_order=sell['id'],
-                buyer_state=buy['state_id'], seller_state=sell['state_id'],
-                buyer_province=buy['province_id'], seller_province=sell['province_id'],
-                purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
-            sell['status'] = 'filled' if sell['remaining'] <= EPS else 'partial'
+        # Равная полная цена не даёт постоянного преимущества одному ID. В
+        # памяти держим только текущую группу ничьей, а не копию всей книги.
+        ordered = iter(options)
+        pending = next(ordered, None)
+        while pending is not None:
+            price_level = pending[0]
+            tied = [pending]
+            pending = next(ordered, None)
+            while (pending is not None and math.isclose(price_level, pending[0],
+                    rel_tol=1e-12, abs_tol=1e-12)):
+                tied.append(pending)
+                pending = next(ordered, None)
+            for price, sell, quote in self.shuffled(tied, key=lambda row: row[1]['id']):
+                if price > buy['price']+EPS:
+                    continue
+                q = min(buy['remaining'], sell['remaining'], buy['reserved']/price,
+                    self.purchase_quantity(buy, sells))
+                if q <= EPS:
+                    continue
+                seller = self.accounts[sell['participant']]
+                freight, distance, path = quote[1:]
+                # Освобождается только резерв исполненной части, остальной остаётся защищён.
+                release = q*buy['price']
+                # Допуск цены задан на единицу. На большой партии разница может
+                # превысить денежный EPS: освобождаем обеспеченную фактическую сумму,
+                # не затрагивая резервы других заявок и не меняя обычные сделки.
+                if q*price > self.free_cash(buy['participant'])+release+EPS:
+                    release = min(buy['reserved'], max(release, q*price))
+                buyer['reserved'] = max(0, buyer['reserved']-release)
+                buy['reserved'] = max(0, buy['reserved']-release)
+                seller['stock_reserved'][buy['good']] = max(0, seller['stock_reserved'][buy['good']]-q)
+                value = self.use_stock(sell['participant'], buy['good'], q)
+                self.add_stock(buy['participant'], buy['good'], q, q*price)
+                gross = q*sell['price']
+                tax = gross*self.cfg['consumption_tax'] if buy.get('final_consumption', False) else 0.0
+                flow_start = len(self.report['flows'])
+                trade_id = f'{self.meta["month"]}:trade:{len(self.report["trades"])}'
+                self.transfer(buy['participant'], sell['participant'], gross-tax, 'Товар')
+                self.transfer(buy['participant'], 'treasury:'+seller['state_id'], tax, 'Налог с конечной потребительской продажи')
+                self.transfer(buy['participant'], 'carrier:'+seller['state_id'], q*freight, 'Перевозка')
+                for flow in self.report['flows'][flow_start:]:
+                    flow.update(buy_order=buy['id'], sell_order=sell['id'], good=buy['good'], quantity=q,
+                        trade_id=trade_id)
+                firm = self.enterprises.get(sell['participant'])
+                if firm:
+                    firm['revenue'] += gross
+                    firm['tax'] = firm.get('tax', 0)+tax
+                    firm['cost_of_sales'] = firm.get('cost_of_sales', 0)+value
+                if buy['purpose'] == 'Строительные материалы':
+                    materials = buyer['project']['materials']
+                    materials[buy['good']] = materials.get(buy['good'], 0)+q
+                buy['remaining'] = max(0, buy['remaining']-q)
+                sell['remaining'] = max(0, sell['remaining']-q)
+                self.report['trades'].append(dict(trade_id=trade_id, good=buy['good'], quantity=q, price=sell['price'],
+                    gold=gross, seller_gold=gross-tax, tax=tax, freight=q*freight, distance=distance, path=path,
+                    buyer=buy['participant'], seller=sell['participant'], buy_order=buy['id'], sell_order=sell['id'],
+                    buyer_state=buy['state_id'], seller_state=sell['state_id'],
+                    buyer_province=buy['province_id'], seller_province=sell['province_id'],
+                    purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
+                sell['status'] = 'filled' if sell['remaining'] <= EPS else 'partial'
+                if buy['remaining'] <= EPS:
+                    break
             if buy['remaining'] <= EPS:
                 break
         buy['status'] = 'filled' if buy['remaining'] <= EPS else 'partial' if buy['remaining'] < buy['quantity'] else 'unfilled'
@@ -1311,62 +1803,63 @@ class Economy(EconomyServices):
             buy['reason'] = observation['reason_code']
 
     def observe_match(self, buy, sells, options):
-        # Снимок снимается до исполнения, без изменения рынка и генератора случайных чисел.
-        quotes = {sell['id']: quote for _, sell, quote in options}
-        candidates = []
-        for sell in sells.get(buy['good'], []):
-            if sell['participant'] == buy['participant']:
-                continue
-            active = sell['status'] not in ('cancelled', 'expired') and sell['remaining'] > EPS
-            quote = quotes.get(sell['id']) or self.landed(sell['tile_id'], buy['tile_id'], buy['good'], sell['price'])
-            candidates.append(dict(sell_order=sell['id'], seller=sell['participant'],
-                price=sell['price'], remaining_before=sell['remaining'], status_before=sell['status'],
-                active=active, route_available=quote is not None,
-                landed_price=quote[0] if quote else None, freight_per_unit=quote[1] if quote else None,
-                distance=quote[2] if quote else None,
-                physical_stock=self.accounts[sell['participant']]['stock'].get(buy['good'], 0)))
-        observation = dict(version=1, match_index=sum('match_observation' in o for o in self.report['orders']),
-            remaining_before=buy['remaining'], reserved_before=buy['reserved'], candidates=candidates)
+        # Полный список продавцов уже записан один раз в market_boards. Здесь
+        # остаются только координаты для точного воспроизведения состояния.
+        book = self._market_book(self.accounts[buy['participant']], buy['good'], sells, record=True)
+        match_index = getattr(self, '_match_observation_count', 0)
+        self._match_observation_count = match_index+1
+        observation = dict(version=2, board_id=book['board_id'],
+            match_index=match_index,
+            trade_index_before=len(self.report['trades']), remaining_before=buy['remaining'],
+            reserved_before=buy['reserved'])
+        # Живой объект нужен только до finish_match_observation и не попадает в БД.
+        observation['_book'] = book
         buy['match_observation'] = observation
         return observation
 
     def finish_match_observation(self, buy, sells, observation):
-        by_id = {sell['id']: sell for sell in sells.get(buy['good'], [])}
-        for row in observation['candidates']:
-            row['remaining_after'] = by_id[row['sell_order']]['remaining']
-        active = [r for r in observation['candidates'] if r['active'] and r['remaining_after'] > EPS]
-        reachable = [r for r in active if r['route_available']]
-        affordable = [r for r in reachable if r['landed_price'] <= buy['price']+EPS]
-        holders = [dict(account=a['id'], quantity=a['stock'][buy['good']],
-            stock_reserved=a.get('stock_reserved', {}).get(buy['good'], 0),
-            project_locked=self.locked_material(a['id'], buy['good']))
-            for a in self.accounts.values() if a['id'] != buy['participant'] and a['stock'].get(buy['good'], 0) > EPS]
+        book = observation.pop('_book')
         if buy['remaining'] <= EPS:
             code = 'filled'
-        elif affordable:
-            code = 'insufficient_order_reserve' if all(
-                min(buy['remaining'], r['remaining_after'], buy['reserved']/r['landed_price']) <= EPS
-                for r in affordable) else 'executable_not_matched'
-        elif reachable:
-            code = 'landed_price_above_limit'
-        elif active:
-            code = 'offer_exhausted' if any(r['route_available'] and r['remaining_after'] <= EPS
-                and r['status_before'] not in ('cancelled', 'expired')
-                for r in observation['candidates']) else 'no_route'
-        elif any(r['remaining_before'] > EPS and r['active'] or
-                 r['remaining_before'] <= EPS and by_id[r['sell_order']]['quantity'] > EPS
-                 and r['status_before'] not in ('cancelled', 'expired')
-                 for r in observation['candidates']):
-            code = 'offer_exhausted'
         else:
-            code = 'stock_not_offered' if holders else 'no_physical_stock'
-        observation.update(reason_code=code, remaining_after=buy['remaining'], reserved_after=buy['reserved'])
+            reachable, affordable, historical_offer = False, [], False
+            exhausted_reachable = False
+            active_offer = False
+            for sell in book['source']:
+                if sell['participant'] == buy['participant']:
+                    continue
+                if sell['quantity'] > EPS and sell['status'] not in ('cancelled', 'expired'):
+                    historical_offer = True
+                quote = book['quotes'].get(sell['id'])
+                if sell['status'] in ('cancelled', 'expired') or sell['remaining'] <= EPS:
+                    exhausted_reachable = exhausted_reachable or quote is not None and sell['quantity'] > EPS
+                    continue
+                active_offer = True
+                if quote is None:
+                    continue
+                reachable = True
+                if quote[0] <= buy['price']+EPS:
+                    affordable.append((quote[0], sell))
+            if affordable:
+                code = 'insufficient_order_reserve' if all(
+                    min(buy['remaining'], sell['remaining'], buy['reserved']/price) <= EPS
+                    for price, sell in affordable) else 'executable_not_matched'
+            elif reachable:
+                code = 'landed_price_above_limit'
+            elif active_offer or historical_offer:
+                code = 'offer_exhausted' if exhausted_reachable else 'no_route' if active_offer else 'offer_exhausted'
+            else:
+                holders = self.physical_stock_summary(buy['participant'], buy['good'])
+                code = 'stock_not_offered' if holders['count'] else 'no_physical_stock'
+        observation.update(reason_code=code, trade_index_after=len(self.report['trades']),
+            remaining_after=buy['remaining'], reserved_after=buy['reserved'])
         if buy['remaining'] > EPS:
-            observation['stock_holders_after_match'] = holders
+            observation['stock_holders_after_match'] = self.physical_stock_summary(
+                buy['participant'], buy['good'])
 
     def sell_orders(self):
         # Новый набор предложений начинается с каждого торгового прохода.
-        self.__dict__.pop('_offer_index', None)
+        self.invalidate_market_books()
         result = defaultdict(list)
         for a in self.shuffled(self.accounts.values()):
             e = self.enterprises.get(a['id'])
@@ -1393,12 +1886,10 @@ class Economy(EconomyServices):
     def customer_quotes(self, e, orders=None):
         result = []
         orders = getattr(self, '_planning_orders', self.report.get('orders', [])) if orders is None else orders
-        for o in orders:
-            if o['side'] != 'buy' or o['good'] != e['good'] or o['participant'] == e['id'] or o['remaining'] <= EPS or o['status'] in ('cancelled', 'expired'):
+        for o, freight in self._customer_quote_index(e['tile_id'], e['good'], orders):
+            if o['participant'] == e['id'] or o['remaining'] <= EPS or o['status'] in ('cancelled', 'expired'):
                 continue
-            quote = self.landed(e['tile_id'], o['tile_id'], e['good'], e['price'])
-            if quote:
-                result.append((o, o['price']-quote[1]))
+            result.append((o, o['price']-freight))
         return result
 
     def reachable_demand(self, e, sells):
@@ -1764,6 +2255,18 @@ class Economy(EconomyServices):
 
     def investment_demand(self, candidate, sells):
         """Сначала пригодные мощности и начатые проекты, затем новая стройка."""
+        index = getattr(self, '_investment_index', None)
+        demand_cache = getattr(self, '_investment_demand_cache', None)
+        cache_key = None
+        if index is not None and demand_cache is not None:
+            own_orders = index['buyer_orders'].get((candidate['id'], candidate['good']), ())
+            cache_key = (candidate['good'], candidate['tile_id'], candidate['price'], own_orders,
+                         index['project_revision'])
+            cached = demand_cache.get(cache_key)
+            if cached is not None:
+                self._investment_demand_cache_hits = getattr(self, '_investment_demand_cache_hits', 0)+1
+                return cached
+            self._investment_demand_cache_misses = getattr(self, '_investment_demand_cache_misses', 0)+1
         suppliers = []
         cache = getattr(self, '_investment_supply_cache', None)
         cached = cache.get(candidate['good']) if cache is not None else None
@@ -1791,10 +2294,13 @@ class Economy(EconomyServices):
             suppliers = [list(s) for s in cached]
         elif cache is not None:
             cache[candidate['good']] = [tuple(s) for s in suppliers]
-        for a in self.accounts.values():
-            p = a.get('project')
-            if p and p['good'] == candidate['good']:
-                suppliers.append([dict(p['location']), p['expected_price'], p['capacity']])
+        if index is not None:
+            suppliers.extend([list(project) for project in index['projects'][candidate['good']]])
+        else:
+            for a in self.accounts.values():
+                p = a.get('project')
+                if p and p['good'] == candidate['good']:
+                    suppliers.append([dict(p['location']), p['expected_price'], p['capacity']])
         residual = 0.0
         cheap = {o['id']: o['remaining'] for offers in sells.values() for o in offers}
         for order, limit in self.customer_quotes(candidate):
@@ -1816,19 +2322,25 @@ class Economy(EconomyServices):
                     supply[2] -= covered
                     volume -= covered
             residual += volume
+        if cache_key is not None:
+            demand_cache[cache_key] = residual
         return residual
 
     def project_candidate(self, investor, sells, derived_demand=None, demand_region=None,
                           parent_project_id=None, diagnostics=None):
         candidates = []
         history = self.meta.get('market_history', [])
-        markets = {(o['province_id'], o['good']) for o in self.report['orders'] if o['side'] == 'buy' and o['state_id'] == investor['state_id'] and o['province_id']}
-        markets |= {(r['province_id'], r['good']) for h in history for r in h['markets'] if r['state_id'] == investor['state_id'] and r['province_id']}
-        # Рынок сбыта и площадка добычи могут находиться в разных провинциях.
-        resource_goods = {good for _, good in markets if self.goods[good]['resource']}
-        markets |= {(t['province_id'], good) for t in self.tiles.values() for good in resource_goods
-            if t['province_id'] and self.owners.get(t['province_id']) == investor['state_id']
-            and self.goods[good]['resource'] in t['resources']}
+        index = getattr(self, '_investment_index', None)
+        if index is not None:
+            markets = set(index['markets'].get(investor['state_id'], ()))
+        else:
+            markets = {(o['province_id'], o['good']) for o in self.report['orders'] if o['side'] == 'buy' and o['state_id'] == investor['state_id'] and o['province_id']}
+            markets |= {(r['province_id'], r['good']) for h in history for r in h['markets'] if r['state_id'] == investor['state_id'] and r['province_id']}
+            # Рынок сбыта и площадка добычи могут находиться в разных провинциях.
+            resource_goods = {good for _, good in markets if self.goods[good]['resource']}
+            markets |= {(t['province_id'], good) for t in self.tiles.values() for good in resource_goods
+                if t['province_id'] and self.owners.get(t['province_id']) == investor['state_id']
+                and self.goods[good]['resource'] in t['resources']}
         if derived_demand:
             for good, amount in derived_demand.items():
                 if amount > EPS and demand_region:
@@ -1842,7 +2354,9 @@ class Economy(EconomyServices):
                 continue
             recipe = self.goods[good]
             if recipe['resource']:
-                tiles = [t for t in self.tiles.values() if t['province_id'] == pid and recipe['resource'] in t['resources']]
+                tiles = (index['resource_tiles'].get((investor['state_id'], pid, recipe['resource']), [])
+                         if index is not None else
+                         [t for t in self.tiles.values() if t['province_id'] == pid and recipe['resource'] in t['resources']])
                 if not tiles:
                     continue
                 loc.update(tile_id=expansion['tile_id'] if expansion else self.shuffled(tiles)[0]['id'], city_id=None)
@@ -1968,6 +2482,9 @@ class Economy(EconomyServices):
             (a['kind'] == 'enterprise' and self.enterprises[a['id']]['status'] != 'closed' and self.enterprises[a['id']]['available_from'] <= self.meta['month'])]
         # Последующие инвесторы учитывают уже объявленные проекты; торгов ещё нет.
         self._investment_supply_cache = {}
+        self._investment_index = self.build_investment_index()
+        self._investment_demand_cache = {}
+        self._investment_demand_cache_hits = self._investment_demand_cache_misses = 0
         self._investment_input_reserved = defaultdict(float)
         self._upstream_candidate_cache = {}
         diagnostic_demands = []
@@ -1989,6 +2506,7 @@ class Economy(EconomyServices):
                 for good, ratio in self.goods[project['good']]['inputs'].items())
             if ready:
                 investor['project'] = project
+                self.register_investment_project(project)
                 self.report['investment_decisions'].append(dict(
                     kind='investment_decision', investor=investor['id'], outcome='resumed',
                     **copy.deepcopy(project)))
@@ -2054,6 +2572,7 @@ class Economy(EconomyServices):
                         owner, upstream_project = upstream
                         if not owner.get('project'):
                             owner['project'] = upstream_project
+                            self.register_investment_project(upstream_project)
                             upstream_decision = copy.deepcopy(upstream_project)
                             upstream_decision.update(kind='investment_decision',
                                 investor=owner['id'], outcome='started',
@@ -2083,6 +2602,7 @@ class Economy(EconomyServices):
                         historical_unmet=round(signal['unmet'], 6), historical_volume=round(signal['volume'], 6))
                 project['input_evidence'] = evidence
                 a['project'] = project
+                self.register_investment_project(project)
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
         if evaluate:
             self.report['expansion_intents'] = self.investment_expansion_intents(
@@ -2098,6 +2618,8 @@ class Economy(EconomyServices):
                 self.investment_candidate_capacity_limits(self.report['investment_candidates'],
                     flow_balances)
         self.__dict__.pop('_investment_supply_cache', None)
+        self.__dict__.pop('_investment_index', None)
+        self.__dict__.pop('_investment_demand_cache', None)
         self.__dict__.pop('_upstream_candidate_cache', None)
         self.__dict__.pop('_investment_input_reserved', None)
         self.meta['investment_dirty'] = []
@@ -2199,6 +2721,8 @@ class Economy(EconomyServices):
         for a in self.accounts.values():
             if a['kind'] == 'household':
                 labor[a['state_id'], a['province_id']] += self.population(a)*self.cfg['labor_share']
+        for key, reserved in getattr(self, '_expedited_construction_reservations', {}).items():
+            labor[key] = max(0, labor[key]-reserved)
         for t in self.tiles.values():
             for resource in t['resources']:
                 resources[t['province_id'], resource] += self.cfg['extraction_per_tile']
@@ -2255,6 +2779,7 @@ class Economy(EconomyServices):
             self.add_stock(e['id'], e['good'], q, cost)
             e.update(status='active', workers=workers, output=q, production_cost=cost, unit_cost=cost/q, wages=wages)
             self.report['production'][e['good']] = self.report['production'].get(e['good'], 0)+q
+        self._construction_labor = labor
 
     def return_capital(self, e):
         a = self.accounts[e['id']]
@@ -2338,7 +2863,6 @@ class Economy(EconomyServices):
         self.__dict__.pop('_planning_orders', None)
         self.__dict__.pop('_recovery_quotes', None)
         self.__dict__.pop('_stock_sales_cache', None)
-        self.__dict__.pop('_offer_index', None)
         self.activate_rules()
         self.accounts = dict(sorted(self.accounts.items()))
         self.enterprises = dict(sorted(self.enterprises.items()))
@@ -2370,6 +2894,7 @@ class Economy(EconomyServices):
         self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
         self.owner_requests(sells)
         self.recover_enterprises(sells)
+        self.public_project_requests(sells)
         # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
         self.project_requests(sells)
         # Один проход от конечных товаров ко входам, без рекурсивного перепланирования.
@@ -2407,7 +2932,9 @@ class Economy(EconomyServices):
                 o['status'] = 'expired'
                 o['execution_status'] = execution_status
                 o['reason'] = execution_reason or 'Окончание торгов месяца'
+        self.reserve_expedited_construction_labor()
         self.produce(existing, planning_sells)
+        self.advance_public_projects()
         self.finish_projects()
         self.consume_owner_purchases()
         for a in households:
@@ -2499,7 +3026,12 @@ class Economy(EconomyServices):
         for a in self.accounts.values():
             if any(not math.isfinite(a.get(k, 0)) or a.get(k, 0) < -EPS for k in ('reserved', 'protected')) or a.get('reserved', 0)+a.get('protected', 0) > a['balance']+EPS:
                 raise ValueError('Нарушен резерв средств')
-            for g in a.get('stock_reserved', {}).keys() | a.get('project', {}).get('materials', {}).keys():
+            public_locks = set()
+            for project in a.get('public_projects', []):
+                public_locks |= (project.get('materials', {}).keys()
+                    | project.get('equipment_held', {}).keys()
+                    | project.get('support_stock', {}).keys())
+            for g in a.get('stock_reserved', {}).keys() | a.get('project', {}).get('materials', {}).keys() | public_locks:
                 q = a.get('stock_reserved', {}).get(g, 0)
                 if q < -EPS or q+self.locked_material(a['id'], g) > a['stock'].get(g, 0)+EPS:
                     raise ValueError('Нарушен резерв товаров')

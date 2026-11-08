@@ -90,8 +90,9 @@ def snapshot(engine, report):
         row['offered_before'] += sum(c.get('remaining_before', 0) for c in candidates)
         row['reachable_after'] += sum(c.get('remaining_after', 0) for c in candidates
                                       if c.get('route_available'))
-        row['stock_holders'] += sum(h.get('quantity', 0)
-                                    for h in o.get('match_observation', {}).get('stock_holders_after_match', []))
+        holders = o.get('match_observation', {}).get('stock_holders_after_match', [])
+        row['stock_holders'] += (holders.get('quantity', 0) if isinstance(holders, dict)
+                                 else sum(h.get('quantity', 0) for h in holders))
     out['input_offer_exhaustion'] = {g: {k: round(v, 2) if isinstance(v, float) else v
                                         for k, v in row.items()} for g, row in exhaustion.items()}
     holder_rows = {}

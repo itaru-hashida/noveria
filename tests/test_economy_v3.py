@@ -1,5 +1,6 @@
 import copy
 import json
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -145,6 +146,72 @@ def test_durable_equipment_limits_output_and_only_wear_is_consumed(engine):
     assert event['good'] == 'tools' and event['output_good'] == 'grain'
 
 
+def test_public_project_hires_remaining_workers_wears_tools_and_builds_institution(engine):
+    clear(engine)
+    engine.goods['tools']['durable'] = {'wear_rate': .04}
+    engine.cfg['institutions'] = {
+        'academy': dict(name='Академия', materials={'planks': 2}, equipment={'tools': 1},
+            equipment_wear={'tools': .2}, work_required=10, max_workers=10)
+    }
+    project = engine.start_public_project('c', 'academy')
+    municipal = engine.accounts['municipal:c']
+    engine.add_stock(municipal['id'], 'planks', 2, 4)
+    engine.add_stock(municipal['id'], 'tools', 1, 5.5)
+    tools_before = municipal['stock']['tools']
+    project = municipal['public_projects'][0]
+    project['materials']['planks'] = 2
+    project['equipment_held']['tools'] = 1
+
+    engine._construction_labor = defaultdict(float, {('s', 'p'): 5})
+    engine.advance_public_projects()
+    project = municipal['public_projects'][0]
+    assert project['work_done'] == pytest.approx(5)
+    assert engine.report['construction_labor'][0]['workers'] == pytest.approx(5)
+    assert municipal['stock']['tools'] == pytest.approx(tools_before-.1)
+    assert engine.report['equipment_wear']['tools'] == pytest.approx(.1)
+
+    engine.add_stock(municipal['id'], 'tools', .1, .55)
+    project['equipment_held']['tools'] = 1
+    engine._construction_labor = defaultdict(float, {('s', 'p'): 5})
+    engine.advance_public_projects()
+    assert not municipal['public_projects']
+    institution = engine.entities[project['institution_id']]
+    assert institution['kind'] == 'Institution'
+    assert institution['properties']['city_id'] == 'c'
+    assert engine.report['construction_used']['planks'] == pytest.approx(2)
+
+
+def test_accelerated_public_project_preempts_enterprise_labor(engine):
+    clear(engine)
+    engine.goods['tools']['durable'] = {'wear_rate': .04}
+    engine.cfg.update(labor_share=10/100000,
+        institutions={'academy': dict(name='Академия', materials={'planks': 1}, equipment={'tools': 1},
+            equipment_wear={'tools': 0}, work_required=10, max_workers=10)},
+        construction_modes={
+            'normal': dict(wage_multiplier=1, lodging_allowance=0, support_goods={}),
+            'accelerated': dict(wage_multiplier=2, lodging_allowance=.04, support_goods={})})
+    engine.start_public_project('c', 'academy', mode='accelerated')
+    municipal = engine.accounts['municipal:c']
+    project = municipal['public_projects'][0]
+    engine.add_stock(municipal['id'], 'planks', 1, 2)
+    engine.add_stock(municipal['id'], 'tools', 1, 5.5)
+    project['materials']['planks'] = 1
+    project['equipment_held']['tools'] = 1
+    grain = firm(engine, 'grain')
+    grain.update(capacity=6, available_from=0, expected_margin=1, expected_unit_cost=1, expected_price=1,
+        production_plan={'month': engine.meta['month'], 'output': 6})
+    engine.reserve_expedited_construction_labor()
+    engine.produce([grain], {})
+    engine.advance_public_projects()
+
+    assert grain['output'] == 0
+    assert engine.report['construction_labor'][0]['workers'] == pytest.approx(10)
+    wages = sum(flow['gold'] for flow in engine.report['flows'] if flow['reason'] == 'Заработная плата строителей')
+    lodging = sum(flow['gold'] for flow in engine.report['flows'] if flow['reason'] == 'Временное жильё строителей')
+    assert wages == pytest.approx(10*engine.cfg['wage']*2)
+    assert lodging == pytest.approx(10*.04)
+
+
 def test_match_diagnosis_rechecks_price_after_cheap_offer_exhausted(engine):
     clear(engine)
     seller = firm(engine)['id']
@@ -155,9 +222,11 @@ def test_match_diagnosis_rechecks_price_after_cheap_offer_exhausted(engine):
     engine.match(buy, {'bread': [cheap, expensive]})
     assert buy['quantity']-buy['remaining'] == 1
     assert buy['reason'] == 'landed_price_above_limit'
-    rows = buy['match_observation']['candidates']
-    assert rows[0]['remaining_before'] == 1 and rows[0]['remaining_after'] == 0
-    assert rows[1]['remaining_after'] == 2 and rows[1]['landed_price'] == 20
+    observation = buy['match_observation']
+    before = engine.replay_market_board(observation['board_id'], observation['trade_index_before'])
+    after = engine.replay_market_board(observation['board_id'], observation['trade_index_after'])
+    assert before[0]['remaining'] == 1 and after[0]['remaining'] == 0
+    assert after[1]['remaining'] == 2 and after[1]['landed_price'] == 20
     trade = engine.report['trades'][0]
     assert all(f['trade_id'] == trade['trade_id'] for f in engine.report['flows'])
 
@@ -184,7 +253,9 @@ def test_match_diagnosis_distinguishes_exhaustion_route_and_unoffered_stock(engi
     buy = engine.order('h', 'bread', 1, 'buy', 5, 'Базовые нужды')
     engine.match(buy, {'bread': [sell]})
     assert buy['reason'] == 'offer_exhausted'
-    assert buy['match_observation']['candidates'][0]['route_available'] is True
+    observation = buy['match_observation']
+    rows = engine.replay_market_board(observation['board_id'], observation['trade_index_before'])
+    assert rows[0]['route_available'] is True
     engine.graph.add_node('isolated_seller')
     engine.accounts['merchant:s']['tile_id'] = 'isolated_seller'
     engine.add_stock('merchant:s', 'bread', 1, 1)
@@ -201,11 +272,13 @@ def test_match_diagnosis_distinguishes_exhaustion_route_and_unoffered_stock(engi
     assert buy['reason'] == 'no_route'
     engine.cancel_order(sell)
     engine.accounts['merchant:s']['stock']['bread'] = 0
+    engine.__dict__.pop('_physical_stock_totals', None)  # Ручная мутация лабораторного состояния.
     buy = engine.order('h', 'bread', 1, 'buy', 5, 'Базовые нужды')
     engine.match(buy, {'bread': [sell]})
     assert buy['reason'] == 'stock_not_offered'
     for a in engine.accounts.values():
         a['stock']['bread'] = 0
+    engine.__dict__.pop('_physical_stock_totals', None)  # Ручная мутация лабораторного состояния.
     buy = engine.order('h', 'bread', 1, 'buy', 5, 'Базовые нужды')
     engine.match(buy, {})
     assert buy['reason'] == 'no_physical_stock'

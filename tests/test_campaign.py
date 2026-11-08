@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from pathlib import Path
 import pytest
 import networkx as nx
@@ -37,6 +38,47 @@ def test_generated_stone_deposits_wait_for_private_demand(tmp_path):
         # должна появляться как заранее обречённая на закрытие фирма.
         assert not [enterprise for enterprise in engine.enterprises.values()
                     if enterprise['good'] == 'stone']
+
+
+def test_municipality_can_start_persisted_institution_project(tmp_path):
+    with WorldDB(tmp_path/'institution.lbug') as db:
+        load_world(db)
+        service = WorldService(db, EventBus())
+        service.initialize_economy()
+        event = service.start_institution_project('city-0-0', 'academy', action_id='academy-order')
+        engine = Economy.load(db)
+        project = engine.accounts['municipal:city-0-0']['public_projects'][0]
+        assert event['payload']['project_id'] == project['id']
+        assert project['material_bill']['stone'] == 120
+        assert project['status'] == 'procurement'
+
+
+def test_completed_institution_project_persists_entity_and_location(tmp_path):
+    with WorldDB(tmp_path/'completed-institution.lbug') as db:
+        load_world(db)
+        WorldService(db, EventBus()).initialize_economy()
+        engine = Economy.load(db)
+        engine.cfg['institutions'] = {
+            'academy': dict(name='Академия', materials={'planks': 1}, equipment={'tools': 1},
+                equipment_wear={'tools': 0}, work_required=1, max_workers=1)
+        }
+        project = engine.start_public_project('city-0-0', 'academy')
+        account = engine.accounts['municipal:city-0-0']
+        engine.add_stock(account['id'], 'planks', 1, 2)
+        engine.add_stock(account['id'], 'tools', 1, 5.5)
+        project = account['public_projects'][0]
+        project['materials']['planks'] = 1
+        project['equipment_held']['tools'] = 1
+        engine._construction_labor = defaultdict(float, {('noweria', 'province-0'): 1})
+        engine.advance_public_projects()
+        engine.save(db, include_month=False)
+
+        institution = db.get_entity(project['institution_id'])
+        assert institution['kind'] == 'Institution'
+        assert institution['properties']['city_id'] == 'city-0-0'
+        links = db.links(project['institution_id'])
+        assert {(row['kind'], row['target']) for row in links} == {
+            ('institution_of', 'noweria'), ('located_in', 'city-0-0')}
 
 
 def test_generator_reproducible_across_processes():

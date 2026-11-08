@@ -64,6 +64,20 @@ class WorldService:
                              lambda p: self.db.create_entity(entity_id, kind, name, p['properties']),
                              source, summary=f'Создана сущность: {name}', action_id=action_id)
 
+    def start_institution_project(self, city_id, kind, mode='normal', source='player', action_id=None):
+        """Заказать муниципальную постройку из статической сметы экономики."""
+        def operation(payload):
+            from modules.economy import Economy
+            engine = Economy.load(self.db)
+            project = engine.start_public_project(city_id, kind, mode)
+            engine.save(self.db, include_month=False)
+            payload.update(project_id=project['id'], institution_id=project['institution_id'],
+                kind=kind, city_id=city_id, mode=mode, materials=project['material_bill'],
+                equipment=project['equipment'], work_required=project['work_required'])
+        return self._execute('institution_project_started', dict(kind=kind, city_id=city_id),
+            [dict(id=city_id, role='construction_site')], operation, source,
+            summary='Начата муниципальная стройка: '+kind, action_id=action_id)
+
     def create_territory(self,kind,name,properties,entity_id,source='admin',action_id=None):
         """Создание города или выделение небольшой провинции из существующей."""
         from modules.population import create_groups

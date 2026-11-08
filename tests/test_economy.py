@@ -132,7 +132,10 @@ def test_monthly_invariants_for_all_states(service):
     assert any(f['reason']=='Заработная плата' and engine.accounts[f['recipient']]['kind']=='household' for r in records for f in r['flows'])
     after=engine.total_stock()
     for g in engine.goods:
-        assert after[g]==pytest.approx(initial_stock[g]+sum(r['production'].get(g,0)-r['inputs_used'].get(g,0)-r['consumed'].get(g,0)-r['construction_used'].get(g,0) for r in records),abs=1e-6)
+        assert after[g]==pytest.approx(initial_stock[g]+sum(
+            r['production'].get(g, 0)-r['inputs_used'].get(g, 0)
+            -r['consumed'].get(g, 0)-r['construction_used'].get(g, 0)
+            -r['equipment_wear'].get(g, 0) for r in records), abs=1e-6)
     with WorldDB(service.db.path,read_only=True) as reopened:
         assert reopened.economy_records('Enterprise')==service.db.economy_records('Enterprise')
 

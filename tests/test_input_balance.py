@@ -69,6 +69,7 @@ def test_unavailable_complement_does_not_justify_overbuying(engine, case):
         engine.graph.add_node('isolated')
         for offer in sells['wood']:
             offer['tile_id'] = 'isolated'
+    engine.invalidate_market_books()
     cap = engine.purchase_quantity(orders['flour'], sells)
     assert cap == pytest.approx(0 if case == 'reserved' else 2.4)
 

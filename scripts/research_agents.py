@@ -184,9 +184,9 @@ class ObservedEconomy(Economy):
             input_orders=plan['input_orders'], inputs=dict(inputs), prices=prices,
             held=held, wage_unit=wage)
 
-    def match(self, buy, sells):
+    def match(self, buy, sells, local_only=False):
         if buy is None or buy['status'] in ('cancelled', 'expired', 'filled'):
-            return super().match(buy, sells)
+            return super().match(buy, sells, local_only=local_only)
         p = self.probe
         a = self.accounts[buy['participant']]
         original = buy['price']
@@ -203,7 +203,7 @@ class ObservedEconomy(Economy):
                 buy['reserved'] += extra
                 buy.update(price=price, backing=buy['reserved'])
                 changed = True
-        super().match(buy, sells)
+        super().match(buy, sells, local_only=local_only)
         changed = changed or (buy['purpose'] == 'Сырьё' and buy.get('adaptive_input_budget', False)
             and buy['price'] > original+EPS)
         remaining = buy['remaining']

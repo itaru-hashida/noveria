@@ -13,6 +13,9 @@ from modules.geography import topology
 CONFIG_PATH = Path(__file__).resolve().parents[2] / 'content/economy.json'
 EPS = 1e-7
 PLANNING_DEFAULTS = dict(price_step=0.05, minimum_price=1e-6, maximum_price=1e9, initial_sales_fraction=0.5)
+# Дороги обычно не меняются между месяцами, а WorldService заново загружает
+# Economy. Кэш процесса переживает такую загрузку, но разделён отпечатком карты.
+ROUTE_TREE_CACHE = {}
 
 
 def tuples(value):
@@ -26,6 +29,10 @@ class EconomyServices:
         self.tiles = {t['id']: t for t in tiles}
         self.graph = topology(tiles)
         self.paths = {}
+        self._route_cache_key = tuple(sorted((tile['id'], tile.get('cost'),
+            bool(tile.get('road')), bool(tile.get('passable', True)))
+            for tile in self.tiles.values()))
+        self._route_graph_shape = (self.graph.number_of_nodes(), self.graph.number_of_edges())
         self.accounts = {a['id']: copy.deepcopy(a) for a in accounts or []}
         self.enterprises = {e['id']: copy.deepcopy(e) for e in enterprises or []}
         self.meta = copy.deepcopy(meta) if meta else dict(
@@ -201,10 +208,26 @@ class EconomyServices:
         return e
 
     def path(self, start, end):
+        if (self.graph.number_of_nodes(), self.graph.number_of_edges()) != self._route_graph_shape:
+            # Защита для редактора и тестов, которые меняют graph напрямую.
+            self.invalidate_routes()
         if start not in self.paths:
-            self.paths[start] = nx.single_source_dijkstra(self.graph, start, weight='weight') if start in self.graph else ({}, {})
+            trees = ROUTE_TREE_CACHE.setdefault(self._route_cache_key, {})
+            tree = trees.get(start)
+            if tree is None:
+                tree = nx.single_source_dijkstra(self.graph, start, weight='weight') if start in self.graph else ({}, {})
+                trees[start] = tree
+            self.paths[start] = tree
         distances, paths = self.paths[start]
         return (distances.get(end), paths.get(end, []))
+
+    def invalidate_routes(self):
+        """Сбросить маршруты после изменения дороги или ручной правки графа."""
+        self.paths = {}
+        # Изменённый вручную graph может не совпадать с данными tiles. Нельзя
+        # записывать его дерево под ключом исходной карты.
+        self._route_cache_key = ('runtime', id(self.graph), self.meta.get('month', 0))
+        self._route_graph_shape = (self.graph.number_of_nodes(), self.graph.number_of_edges())
 
     def distribute(self, sender, recipients, amount, reason):
         total = sum(self.population(a) for a in recipients)
@@ -240,6 +263,13 @@ class EconomyServices:
                             if a['kind']=='household' and a['state_id']==state and a['province_id']==pid)
             if count > available + EPS:
                 raise ValueError('Двойной наём работников')
+        for row in self.report.get('construction_labor', []):
+            key = (row['state_id'], row['province_id'])
+            hired[key] += row['workers']
+            available = sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
+                            if a['kind']=='household' and a['state_id']==key[0] and a['province_id']==key[1])
+            if hired[key] > available + EPS:
+                raise ValueError('Двойной наём работников на стройку')
         for (pid, resource), quantity in used_resources.items():
             available = sum(self.cfg['extraction_per_tile'] for t in self.tiles.values()
                             if t['province_id']==pid and resource in t['resources'])
@@ -327,6 +357,11 @@ class EconomyServices:
                 reason='Изменение денег: зарплаты и доходы минус покупки и доставка; дефицит: остаток неисполненной корзины'))
 
     def save(self, db, include_month=True):
+        for institution in getattr(self, 'pending_institutions', []):
+            db.create_entity(institution['id'], 'Institution', institution['name'], institution['properties'])
+            db.put_link(institution['id'], institution['properties']['state_id'], 'institution_of')
+            db.put_link(institution['id'], institution['properties']['city_id'], 'located_in')
+        self.pending_institutions = []
         db.store_economy('EconomyAccount',list(self.accounts.values()))
         db.store_economy('Enterprise',list(self.enterprises.values()))
         db.store_economy('EconomyMeta',[self.meta])
@@ -343,6 +378,7 @@ class EconomyServices:
         if self.meta.get('rng_state') is not None:
             self.rng.setstate(tuples(self.meta['rng_state']))
         self.construction_receipts = {}
+        self.pending_institutions = []
 
     @classmethod
     def load(cls, db):

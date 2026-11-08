@@ -57,9 +57,9 @@ class SupplyEconomy(research.ObservedEconomy):
             demand=p['demand'], plan=p['plan'], requested=p['requested'], capacity=p['capacity'],
             margin=p['margin'], sale_price=firm['planned_price'], planning_reason=firm['production_plan']['reason']))
 
-    def match(self, buy, sells):
+    def match(self, buy, sells, local_only=False):
         active = buy and buy['status'] not in ('filled', 'cancelled', 'expired')
-        super().match(buy, sells)
+        super().match(buy, sells, local_only=local_only)
         if not active or buy['purpose'] != 'Сырьё' or buy['good'] not in CHAIN or buy['remaining'] <= EPS:
             return
         options = self.offers(self.accounts[buy['participant']], buy['good'], sells)
