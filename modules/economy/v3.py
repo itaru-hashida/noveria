@@ -63,6 +63,7 @@ class Economy(EconomyServices):
     BASIC_BUDGET_REVISION = 1
     OUTPUT_SMOOTHING_REVISION = 1
     ENTERPRISE_OVERHEAD_REVISION = 1
+    QUOTE_CACHE = True
 
     def report_detail(self):
         detail = self.meta.get('report_detail', 'deep')
@@ -75,8 +76,10 @@ class Economy(EconomyServices):
         # лабораторным сценариям, которые вручную начинают следующий месяц.
         for key in ('_market_books', '_landed_cache', '_customer_order_index',
                     '_physical_stock_totals', '_match_observation_count',
-                    '_customer_quotes_cache'):
+                    '_customer_quotes_cache', '_quoted_cost_cache',
+                    '_reference_price_cache'):
             self.__dict__.pop(key, None)
+        self._market_quote_version = 0
         super().reset_report()
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
@@ -1323,6 +1326,7 @@ class Economy(EconomyServices):
             offer['backing'] -= take
             account['stock_reserved'][good] = max(0, account['stock_reserved'].get(good, 0)-take)
             release -= take
+            self.mark_market_quotes_dirty()
             if offer['remaining'] <= EPS:
                 self.cancel_order(offer, 'Материалы закреплены за городской стройкой')
         assign = min(wanted, self.free_stock(account['id'], good))
@@ -1508,7 +1512,15 @@ class Economy(EconomyServices):
         else:
             a.setdefault('stock_reserved', {})[good] = a.get('stock_reserved', {}).get(good, 0)+quantity
         self.report['orders'].append(o)
+        if side == 'sell':
+            self.mark_market_quotes_dirty()
         return o
+
+    def mark_market_quotes_dirty(self):
+        """Сбросить точные котировки после изменения доступного предложения."""
+        self._market_quote_version = getattr(self, '_market_quote_version', 0)+1
+        self.__dict__.pop('_quoted_cost_cache', None)
+        self.__dict__.pop('_reference_price_cache', None)
 
     def cancel_order(self, order, reason='Отмена заявки'):
         if order['status'] in ('cancelled', 'expired'):
@@ -1520,6 +1532,7 @@ class Economy(EconomyServices):
             order['reserved'] = 0.0
         else:
             a['stock_reserved'][order['good']] = max(0, a['stock_reserved'].get(order['good'], 0)-order['remaining'])
+            self.mark_market_quotes_dirty()
         if not filled:
             order.update(status='cancelled', reason=reason)
 
@@ -1611,6 +1624,7 @@ class Economy(EconomyServices):
         которые вручную меняют уже опубликованный оффер.
         """
         self.__dict__.pop('_market_books', None)
+        self.mark_market_quotes_dirty()
 
     def _record_market_board(self, book, buyer, good):
         by_id = {sell['id']: quote for _, sell, quote in book['options']}
@@ -1647,13 +1661,32 @@ class Economy(EconomyServices):
         return list(state.values())
 
     def reference_price(self, buyer, good, sells):
+        source = sells.get(good, [])
+        key = (id(source), buyer['id'], self.market_tile(buyer), good,
+            getattr(self, '_market_quote_version', 0))
+        cache = getattr(self, '_reference_price_cache', {}) if self.QUOTE_CACHE else {}
+        entry = cache.get(key)
+        if entry is not None and entry[0] is source:
+            return entry[1]
         offers = self.offers(buyer, good, sells)
         if offers:
-            return offers[0][0]
-        signal = self.market_signal(self.meta.get('market_history', []), buyer['state_id'], self.market_province(buyer), good)
-        return signal['landed_price'] or self.goods[good]['price']
+            result = offers[0][0]
+        else:
+            signal = self.market_signal(self.meta.get('market_history', []), buyer['state_id'], self.market_province(buyer), good)
+            result = signal['landed_price'] or self.goods[good]['price']
+        if self.QUOTE_CACHE:
+            cache[key] = (source, result)
+            self._reference_price_cache = cache
+        return result
 
     def quoted_cost(self, buyer, good, quantity, sells):
+        source = sells.get(good, [])
+        key = (id(source), buyer['id'], self.market_tile(buyer), good, quantity,
+            getattr(self, '_market_quote_version', 0))
+        cache = getattr(self, '_quoted_cost_cache', {}) if self.QUOTE_CACHE else {}
+        entry = cache.get(key)
+        if entry is not None and entry[0] is source:
+            return entry[1]
         left, value, ceiling = quantity, 0.0, 0.0
         for price, sell, _ in self.offers(buyer, good, sells):
             q = min(left, sell['remaining'])
@@ -1672,7 +1705,11 @@ class Economy(EconomyServices):
                 reference = max(reference, min(quotes))
             value += left*reference
             ceiling = max(ceiling, reference)
-        return value, max(ceiling, EPS), left <= EPS
+        result = value, max(ceiling, EPS), left <= EPS
+        if self.QUOTE_CACHE:
+            cache[key] = (source, result)
+            self._quoted_cost_cache = cache
+        return result
 
     def input_bid_ceiling(self, buy):
         """Предельная цена автоматической закупки при зафиксированной марже."""
@@ -1799,6 +1836,7 @@ class Economy(EconomyServices):
                     buyer_province=buy['province_id'], seller_province=sell['province_id'],
                     purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
                 sell['status'] = 'filled' if sell['remaining'] <= EPS else 'partial'
+                self.mark_market_quotes_dirty()
                 if buy['remaining'] <= EPS:
                     break
             if buy['remaining'] <= EPS:
@@ -2684,6 +2722,7 @@ class Economy(EconomyServices):
                     offer['backing'] -= take
                     a['stock_reserved'][g] = max(0, a['stock_reserved'].get(g, 0)-take)
                     release -= take
+                    self.mark_market_quotes_dirty()
                     if offer['remaining'] <= EPS:
                         self.cancel_order(offer, 'Материалы закреплены за собственной стройкой')
                 assign = min(max(0, quantity-held), self.free_stock(a['id'], g))
