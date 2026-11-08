@@ -316,13 +316,38 @@ class EconomyServices:
             else:
                 e['suspended'] = False
 
+    def market_summary_index(self):
+        """Один индекс месяца вместо сканов заказов и сделок на каждую провинцию."""
+        index = dict(orders=defaultdict(list), buyer_trades=defaultdict(list),
+            seller_trades=defaultdict(list), province_trades=defaultdict(list),
+            good_trades=defaultdict(list), households=defaultdict(list),
+            firms=defaultdict(list), stocks=defaultdict(list))
+        for order in self.report['orders']:
+            index['orders'][order.get('province_id'), order.get('good'), order.get('side')].append(order)
+        for trade in self.report['trades']:
+            index['buyer_trades'][trade['buyer_province'], trade['good']].append(trade)
+            index['seller_trades'][trade['seller_province'], trade['good']].append(trade)
+            index['province_trades'][trade['buyer_province']].append(trade)
+            if trade['seller_province'] != trade['buyer_province']:
+                index['province_trades'][trade['seller_province']].append(trade)
+            index['good_trades'][trade['good']].append(trade)
+        for account in self.accounts.values():
+            if account['kind'] == 'household':
+                index['households'][account['province_id']].append(account)
+            for good, quantity in account['stock'].items():
+                index['stocks'][account['province_id'], good].append(quantity)
+        for firm in self.enterprises.values():
+            index['firms'][firm['province_id']].append(firm)
+        return index
+
     def summarize(self, prior_cash):
+        index = self.market_summary_index()
         for good in self.goods:
-            trades=[t for t in self.report['trades'] if t['good']==good]
+            trades = index['good_trades'][good]
             volume=sum(t['quantity'] for t in trades)
             self.report['prices'][good]=sum(t['gold'] for t in trades)/volume if volume else None
         for pid in sorted(e['id'] for e in self.entities.values() if e['kind']=='Province'):
-            households=[a for a in self.accounts.values() if a['kind']=='household' and a['province_id']==pid]
+            households = index['households'][pid]
             population=sum(self.population(a) for a in households)
             deficits={g:sum(a.get('needs',{}).get(g,{}).get('deficit',0) for a in households) for g in self.cfg['basic_needs']|self.cfg['extra_needs']}
             for a in households:
@@ -330,9 +355,9 @@ class EconomyServices:
                 needed=sum(a.get('needs',{}).get(g,{}).get('needed',0) for g in self.cfg['basic_needs'])
                 # Благосостояние — наблюдаемое покрытие базовой корзины, а не заданный тренд.
                 a['welfare']=min(100,max(0,100*basic/needed)) if needed else 100
-            imports=[t for t in self.report['trades'] if t['buyer_province']==pid and t['seller_province']!=pid]
-            exports=[t for t in self.report['trades'] if t['seller_province']==pid and t['buyer_province']!=pid]
-            firms=[e for e in self.enterprises.values() if e['province_id']==pid]
+            imports=[t for t in index['province_trades'][pid] if t['buyer_province']==pid and t['seller_province']!=pid]
+            exports=[t for t in index['province_trades'][pid] if t['seller_province']==pid and t['buyer_province']!=pid]
+            firms = index['firms'][pid]
             demography = self.report.get('demography_by_province', {}).get(pid, {})
             self.report['provinces'].append(dict(province_id=pid,state_id=self.owners[pid],population=population,
                 household_gold=sum(a['balance'] for a in households),
@@ -342,8 +367,8 @@ class EconomyServices:
                 deficits=deficits, production={g:sum(e['output'] for e in firms if e['good']==g) for g in self.goods},
                 consumption={g:sum(a.get('needs',{}).get(g,{}).get('consumed',0) for a in households) for g in self.goods},
                 import_volume=sum(t['quantity'] for t in imports),export_volume=sum(t['quantity'] for t in exports),
-                transport=sum(t['freight'] for t in self.report['trades'] if t['buyer_province']==pid),
-                prices={g:sum(t['gold']+t['freight'] for t in self.report['trades'] if t['buyer_province']==pid and t['good']==g)/sum(t['quantity'] for t in self.report['trades'] if t['buyer_province']==pid and t['good']==g) if any(t['buyer_province']==pid and t['good']==g for t in self.report['trades']) else None for g in self.goods},
+                transport=sum(t['freight'] for t in index['province_trades'][pid] if t['buyer_province']==pid),
+                prices={g:sum(t['gold']+t['freight'] for t in index['buyer_trades'][pid, g])/sum(t['quantity'] for t in index['buyer_trades'][pid, g]) if index['buyer_trades'][pid, g] else None for g in self.goods},
                 population_before=demography.get('population_before', population),
                 population_change=population-demography.get('population_before', population),
                 births=demography.get('births', 0), deaths=demography.get('deaths', 0),
@@ -356,7 +381,9 @@ class EconomyServices:
                 protected_by_subsistence=demography.get('protected_by_subsistence', 0),
                 reason='Изменение денег: зарплаты и доходы минус покупки и доставка; дефицит: остаток неисполненной корзины'))
 
-    def save(self, db, include_month=True):
+    def save(self, db, include_month=None):
+        if include_month is None:
+            include_month = self.meta.get('report_detail', 'deep') != 'none'
         for institution in getattr(self, 'pending_institutions', []):
             db.create_entity(institution['id'], 'Institution', institution['name'], institution['properties'])
             db.put_link(institution['id'], institution['properties']['state_id'], 'institution_of')

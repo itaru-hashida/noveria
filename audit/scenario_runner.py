@@ -10,6 +10,7 @@
 import argparse
 import csv
 import json
+from concurrent.futures import ProcessPoolExecutor
 import sys
 import tempfile
 from collections import defaultdict
@@ -47,7 +48,7 @@ def install_shock():
     Economy.sync_locations = patched
 
 
-def build_world(seed, directory):
+def build_world(seed, directory, report_detail='deep'):
     content = json.loads((ROOT/'content/initial_world.json').read_text(encoding='utf-8'))
     content['generation']['seed'] = seed
     scenario = Path(directory)/'scenario.json'
@@ -56,6 +57,9 @@ def build_world(seed, directory):
     load_world(db, scenario)
     service = WorldService(db, EventBus())
     service.initialize_economy()
+    engine = Economy.load(db)
+    engine.meta['report_detail'] = report_detail
+    engine.save(db, include_month=False)
     return db, service
 
 
@@ -108,7 +112,25 @@ def row_for(engine, report, scenario, seed):
     )
 
 
-def run(seed, months, scenario, shock, out, events_path=None):
+def row_for_none(engine, scenario, seed):
+    """Минимальная строка для скоростного прогона без EconomyMonth в БД."""
+    population = sum(engine.population(a) for a in engine.accounts.values()
+                     if a['kind'] == 'household')
+    balances = defaultdict(float)
+    for account in engine.accounts.values():
+        balances[account['kind']] += account['balance']
+    stocks = engine.total_stock()
+    return dict(scenario=scenario, seed=seed, month=engine.meta['month'],
+        population=round(population), gold_total=round(engine.gold(), 4),
+        gold_household=round(balances['household'], 2), gold_enterprise=round(balances['enterprise'], 2),
+        active=sum(e['status'] == 'active' for e in engine.enterprises.values()),
+        open=sum(e['status'] != 'closed' for e in engine.enterprises.values()),
+        total_firms=len(engine.enterprises), goods_stock_bread=round(stocks.get('bread', 0), 2),
+        goods_stock_flour=round(stocks.get('flour', 0), 2),
+        goods_stock_grain=round(stocks.get('grain', 0), 2), report_detail='none')
+
+
+def run(seed, months, scenario, shock, out, events_path=None, report_detail='standard'):
     SHOCK.update(kind=shock[0] if shock else None, province=None, start=shock[2] if shock else 0,
                  end=shock[3] if shock else 0)
     rows = []
@@ -117,7 +139,7 @@ def run(seed, months, scenario, shock, out, events_path=None):
         events_path = Path(events_path)
         events_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
-        db, service = build_world(seed, tmp)
+        db, service = build_world(seed, tmp, report_detail=report_detail)
         try:
             engine = Economy.load(db)
             if shock:
@@ -125,10 +147,13 @@ def run(seed, months, scenario, shock, out, events_path=None):
             for step in range(1, months+1):
                 service.advance_turn(command_id=f'audit-{scenario}-{seed}-{step}', source='audit')
                 engine = Economy.load(db)
-                report = db.economy_month(engine.meta['month'])
-                if events_path:
-                    events.extend(report.get('events', []))
-                r = row_for(engine, report, scenario, seed)
+                if report_detail == 'none':
+                    r = row_for_none(engine, scenario, seed)
+                else:
+                    report = db.economy_month(engine.meta['month'])
+                    if events_path:
+                        events.extend(report.get('events', []))
+                    r = row_for(engine, report, scenario, seed)
                 r['shock_province'] = SHOCK['province'] if SHOCK['kind'] and SHOCK['start'] <= r['month'] <= SHOCK['end'] else ''
                 rows.append(r)
                 if step in (1, months):
@@ -146,6 +171,13 @@ def run(seed, months, scenario, shock, out, events_path=None):
     return rows
 
 
+def run_worker(task):
+    """Отдельный процесс = независимый мир и независимый RNG."""
+    seed, months, scenario, shock, out, report_detail = task
+    install_shock()
+    return seed, run(seed, months, scenario, shock, out, report_detail=report_detail)
+
+
 def choose_province(engine):
     """Провинция с наибольшим числом предприятий пищевой цепочки (зерно/мука/хлеб/рыба)."""
     count = defaultdict(int)
@@ -157,7 +189,7 @@ def choose_province(engine):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('--seed', type=int, required=True)
+    p.add_argument('--seed', type=int, nargs='+', required=True)
     p.add_argument('--months', type=int, default=36)
     p.add_argument('--scenario', choices=['baseline', 'route_cut', 'halt'], default='baseline')
     p.add_argument('--shock-start', type=int, default=7)
@@ -165,14 +197,27 @@ if __name__ == '__main__':
     p.add_argument('--province', default='auto')
     p.add_argument('--out', type=Path, default=ROOT/'audit/_runs')
     p.add_argument('--events', type=Path, help='CSV-файл причинных событий экономики')
+    p.add_argument('--workers', type=int, default=1,
+        help='Число процессов для независимых seed; один мир остаётся последовательным')
+    p.add_argument('--report-detail', choices=['none', 'standard', 'deep'], default='standard',
+        help='none: не писать EconomyMonth; standard: компактный отчёт; deep: полная реконструкция')
     a = p.parse_args()
     install_shock()
     shock = None if a.scenario == 'baseline' else (a.scenario, a.province, a.shock_start, a.shock_end)
-    rows = run(a.seed, a.months, a.scenario, shock, a.out, a.events)
     a.out.mkdir(parents=True, exist_ok=True)
-    target = a.out/f'{a.scenario}_{a.seed}.csv'
-    with target.open('w', newline='', encoding='utf-8') as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0]))
-        w.writeheader()
-        w.writerows(rows)
-    print('written', target)
+    if a.events and len(a.seed) != 1:
+        p.error('--events поддерживается только для одного seed')
+    tasks = [(seed, a.months, a.scenario, shock, a.out, a.report_detail) for seed in a.seed]
+    if a.workers > 1 and len(tasks) > 1:
+        with ProcessPoolExecutor(max_workers=min(a.workers, len(tasks))) as pool:
+            results = list(pool.map(run_worker, tasks))
+    else:
+        results = [(seed, run(seed, a.months, a.scenario, shock, a.out,
+                              a.events, a.report_detail)) for seed in a.seed]
+    for seed, rows in sorted(results):
+        target = a.out/f'{a.scenario}_{seed}.csv'
+        with target.open('w', newline='', encoding='utf-8') as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0]))
+            w.writeheader()
+            w.writerows(rows)
+        print('written', target)

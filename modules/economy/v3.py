@@ -64,6 +64,12 @@ class Economy(EconomyServices):
     OUTPUT_SMOOTHING_REVISION = 1
     ENTERPRISE_OVERHEAD_REVISION = 1
 
+    def report_detail(self):
+        detail = self.meta.get('report_detail', 'deep')
+        if detail not in ('none', 'standard', 'deep'):
+            raise ValueError('Неизвестная детализация отчёта: '+str(detail))
+        return detail
+
     def reset_report(self):
         # Рыночные кэши живут строго один отчётный месяц. Это также нужно
         # лабораторным сценариям, которые вручную начинают следующий месяц.
@@ -2889,7 +2895,8 @@ class Economy(EconomyServices):
         self.prepare_recovery_quotes()
         sells = self.sell_orders()
         households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')
-        food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS else None
+        detail = self.report_detail()
+        food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS and detail == 'deep' else None
         self.household_requests(households, self.cfg['basic_needs'], 'Базовые нужды', sells)
         self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
         self.owner_requests(sells)
@@ -2993,7 +3000,15 @@ class Economy(EconomyServices):
         self.validate(before)
         if food_trace:
             self.report['food_diagnostics'] = food_trace.finish(self)
-        self.build_causal_events()
+        if detail == 'deep':
+            self.build_causal_events()
+        elif detail == 'standard':
+            # Стандартный отчёт хранит результаты рынка, но не тяжёлый снимок
+            # каждой книги и не дублирующий слой причинных событий.
+            self.report['market_boards'] = []
+            self.report['events'] = []
+            for order in self.report['orders']:
+                order.pop('match_observation', None)
         return self.report
 
     def validate(self, before=None):
