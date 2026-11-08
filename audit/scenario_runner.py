@@ -72,6 +72,13 @@ def row_for(engine, report, scenario, seed):
     firm_cash = sum(a['balance'] for a in engine.accounts.values() if a['kind'] == 'enterprise')
     return dict(
         scenario=scenario, seed=seed, month=report['month'],
+        population=round(pop), births=round(sum(p.get('births', 0) for p in prov), 2),
+        deaths=round(sum(p.get('deaths', 0) for p in prov), 2),
+        hunger_deaths=round(sum(p.get('hunger_deaths', 0) for p in prov), 2),
+        population_change=round(sum(p.get('population_change', 0) for p in prov)),
+        migration_in=round(sum(p.get('migration_in', 0) for p in prov)),
+        migration_out=round(sum(p.get('migration_out', 0) for p in prov)),
+        food_stress=round(sum(p.get('food_stress', 0)*p['population'] for p in prov)/pop, 6) if pop else 0,
         gold_total=round(report['gold_after'], 4),
         gold_household=round(kinds.get('household', 0), 2), gold_enterprise=round(kinds.get('enterprise', 0), 2),
         gold_owners=round(kinds.get('private', 0)+kinds.get('merchant', 0), 2),
@@ -105,11 +112,10 @@ def run(seed, months, scenario, shock, out, events_path=None):
     SHOCK.update(kind=shock[0] if shock else None, province=None, start=shock[2] if shock else 0,
                  end=shock[3] if shock else 0)
     rows = []
-    events_file = None
+    events = []
     if events_path:
         events_path = Path(events_path)
         events_path.parent.mkdir(parents=True, exist_ok=True)
-        events_file = events_path.open('w', encoding='utf-8')
     with tempfile.TemporaryDirectory() as tmp:
         db, service = build_world(seed, tmp)
         try:
@@ -120,10 +126,8 @@ def run(seed, months, scenario, shock, out, events_path=None):
                 service.advance_turn(command_id=f'audit-{scenario}-{seed}-{step}', source='audit')
                 engine = Economy.load(db)
                 report = db.economy_month(engine.meta['month'])
-                if events_file:
-                    for event in report.get('events', []):
-                        events_file.write(json.dumps(event, ensure_ascii=False, separators=(',', ':'))+'\n')
-                    events_file.flush()
+                if events_path:
+                    events.extend(report.get('events', []))
                 r = row_for(engine, report, scenario, seed)
                 r['shock_province'] = SHOCK['province'] if SHOCK['kind'] and SHOCK['start'] <= r['month'] <= SHOCK['end'] else ''
                 rows.append(r)
@@ -131,8 +135,14 @@ def run(seed, months, scenario, shock, out, events_path=None):
                     print(scenario, seed, 'month', r['month'], 'gold', r['gold_total'], 'active', r['active'], flush=True)
         finally:
             db.close()
-            if events_file:
-                events_file.close()
+    if events_path:
+        standard = ('event_id', 'month', 'event_type', 'entity_id', 'region_id', 'good',
+                    'cause', 'source', 'parent_event_id', 'decision_id', 'project_id')
+        fields = list(standard)+sorted({key for event in events for key in event if key not in standard})
+        with events_path.open('w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
+            writer.writeheader()
+            writer.writerows(events)
     return rows
 
 
@@ -154,7 +164,7 @@ if __name__ == '__main__':
     p.add_argument('--shock-end', type=int, default=12)
     p.add_argument('--province', default='auto')
     p.add_argument('--out', type=Path, default=ROOT/'audit/_runs')
-    p.add_argument('--events', type=Path, help='JSONL-файл причинных событий экономики')
+    p.add_argument('--events', type=Path, help='CSV-файл причинных событий экономики')
     a = p.parse_args()
     install_shock()
     shock = None if a.scenario == 'baseline' else (a.scenario, a.province, a.shock_start, a.shock_end)

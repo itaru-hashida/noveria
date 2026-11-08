@@ -30,10 +30,119 @@ def firm(engine, good='bread'):
     return next(e for e in engine.enterprises.values() if e['good'] == good)
 
 
+def test_demography_smooths_food_stress_and_subsistence_protects_population(engine):
+    household = engine.accounts['h']
+    engine.cfg['demography'] = dict(enabled=True, birth_rate=.003, base_death_rate=.0028,
+        stress_decay=.85, hunger_death_rate=.006, subsistence_share=.25)
+    household['needs'] = {'bread': dict(needed=100, consumed=0)}
+    engine.meta['month'] = 1
+    engine.update_demography()
+
+    row = engine.report['demography'][0]
+    assert row['market_food_shortfall'] == pytest.approx(1)
+    assert row['protected_by_subsistence'] == pytest.approx(25)
+    assert row['food_stress'] == pytest.approx(.1125)
+    assert engine.entities['h']['properties']['population'] < 100000
+    engine.build_causal_events()
+    event = next(e for e in engine.report['events'] if e['event_type'] == 'demography.population_change')
+    assert event['cause'] == 'food_stress'
+    assert event['population_delta'] < 0
+    assert event['hunger_deaths'] > 0
+
+    engine.meta['month'] = 2
+    engine.reset_report()
+    household['needs'] = {'bread': dict(needed=100, consumed=0)}
+    engine.update_demography()
+    engine.build_causal_events()
+    next_event = next(e for e in engine.report['events'] if e['event_type'] == 'demography.population_change')
+    assert next_event['parent_event_id'] == event['event_id']
+
+    protected = copy.deepcopy(engine)
+    protected.entities['h']['properties']['population'] = 100000
+    protected.meta['demography'] = {}
+    protected.cfg['demography']['subsistence_share'] = 1
+    protected.reset_report()
+    protected.accounts['h']['needs'] = {'bread': dict(needed=100, consumed=0)}
+    protected.update_demography()
+
+    row = protected.report['demography'][0]
+    assert row['food_stress'] == 0
+    assert protected.entities['h']['properties']['population'] > 100000
+
+
+def test_internal_migration_moves_people_money_and_household_stock(engine):
+    engine.entities.update(
+        p2=dict(id='p2', kind='Province', name='P2', properties={'capital_id': 'c2'}),
+        c2=dict(id='c2', kind='City', name='C2', properties={'province_id': 'p2', 'tile_id': 't2'}),
+        h2=dict(id='h2', kind='SocialGroup', name='H2', properties={'owner_id': 'p2', 'population': 100000}),
+    )
+    engine.owners.update(p2='s', c2='s')
+    engine.tiles['t2'] = dict(id='t2', x=1, y=0, passable=True, cost=1, road=True,
+        province_id='p2', resources=[], terrain='plain')
+    engine.graph.add_node('t2')
+    engine.graph.add_edge('t', 't2', weight=1)
+    engine.paths = {}
+    target = engine.account('h2', 'household', 100000, state_id='s', province_id='p2', city_id=None, tile_id='t2')
+    target['group_id'] = 'h2'
+    source = engine.accounts['h']
+    source.update(reserved=0, protected=0, stock_reserved={})
+    engine.add_stock('h', 'bread', 100, 100)
+    engine.cfg['migration'] = dict(enabled=True, stress_threshold=.1, minimum_advantage=.05,
+        pressure_rate=.004, max_monthly_rate=.002, destination_max_rate=.002)
+    before_population = engine.population(source)+engine.population(target)
+    before_gold = engine.gold()
+    before_bread = sum(a['stock'].get('bread', 0) for a in engine.accounts.values())
+    source_row = dict(province_id='p', population_before=100000, population_after=100000,
+        births=0, deaths=0, baseline_deaths=0, hunger_deaths=0, food_stress=.6,
+        market_food_shortfall=.6, protected_by_subsistence=0, migration_in=0, migration_out=0)
+    target_row = dict(province_id='p2', population_before=100000, population_after=100000,
+        births=0, deaths=0, baseline_deaths=0, hunger_deaths=0, food_stress=.1,
+        market_food_shortfall=.1, protected_by_subsistence=0, migration_in=0, migration_out=0)
+    engine.report['demography'] = [source_row, target_row]
+    engine.report['demography_by_province'] = {'p': source_row, 'p2': target_row}
+
+    engine.apply_migration()
+
+    assert source_row['migration_out'] == target_row['migration_in'] == 200
+    assert engine.population(source)+engine.population(target) == before_population
+    assert engine.gold() == pytest.approx(before_gold)
+    assert sum(a['stock'].get('bread', 0) for a in engine.accounts.values()) == pytest.approx(before_bread)
+    engine.build_causal_events()
+    migration = next(e for e in engine.report['events'] if e['event_type'] == 'demography.migration')
+    assert migration['cause'] == 'chronic_food_stress'
+    assert migration['people'] == 200
+
+
 def clear(engine):
     engine.reset_report()
     for a in engine.accounts.values():
         a.update(reserved=0, protected=0, stock_reserved={})
+
+
+def test_durable_equipment_limits_output_and_only_wear_is_consumed(engine):
+    clear(engine)
+    engine.goods['grain']['equipment'] = {'tools': .04}
+    engine.goods['tools']['durable'] = {'wear_rate': .04}
+    enterprise = firm(engine, 'grain')
+    account = engine.accounts[enterprise['id']]
+    enterprise.update(capacity=10, available_from=0, equipment_wear={},
+        expected_margin=1, expected_unit_cost=1, expected_price=1)
+    account.update(balance=1000, stock={}, values={})
+    # Зерну нужно 0.04 инструмента на единицу мощности: .2 хватает лишь на 5 выпуска.
+    engine.add_stock(enterprise['id'], 'tools', .2, 1.1)
+    enterprise['production_plan'] = {'month': engine.meta['month'], 'output': 10}
+
+    engine.produce([enterprise], {})
+
+    assert enterprise['output'] == pytest.approx(5)
+    assert enterprise['production_limit'] == 'Оборудование: tools'
+    # Это оснащение, а не сырьё: изнашивается 4% от требуемого набора (.2 * .04).
+    assert account['stock']['tools'] == pytest.approx(.192)
+    assert enterprise['equipment_wear']['tools'] == pytest.approx(.008)
+    assert engine.report['equipment_wear']['tools'] == pytest.approx(.008)
+    engine.build_causal_events()
+    event = next(row for row in engine.report['events'] if row['event_type'] == 'equipment.wear')
+    assert event['good'] == 'tools' and event['output_good'] == 'grain'
 
 
 def test_match_diagnosis_rechecks_price_after_cheap_offer_exhausted(engine):

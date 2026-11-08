@@ -43,7 +43,7 @@ class EconomyServices:
     def reset_report(self):
         self.report = dict(id=str(self.meta['month']), month=self.meta['month'], orders=[], trades=[],
                            flows=[], lifecycle=[], diagnostics=[], production={}, consumed={},
-                           inputs_used={}, construction_used={}, provinces=[], prices={})
+                           inputs_used={}, equipment_wear={}, construction_used={}, provinces=[], prices={}, demography=[])
 
     def location(self, territory):
         e = self.entities[territory]
@@ -122,14 +122,16 @@ class EconomyServices:
         for pid in sorted(e['id'] for e in self.entities.values() if e['kind'] == 'Province'):
             land = [t for t in self.tiles.values() if t['province_id'] == pid]
             loc = self.location(pid)
-            for good in ('grain', 'wood', 'ore', 'fish', 'flax'):
-                candidates = [t for t in land if self.goods[good]['resource'] in t['resources']]
+            for good, recipe in self.goods.items():
+                if not recipe['resource'] or not recipe.get('seed_initial', True):
+                    continue
+                candidates = [t for t in land if recipe['resource'] in t['resources']]
                 if not candidates:
                     continue
-                fraction = self.cfg['seed_grain_land_share'] if good == 'grain' else 1-self.cfg['seed_grain_land_share'] if good == 'flax' else 1
+                fraction = recipe.get('seed_share', 1)
                 capacity = len(candidates) * self.cfg['extraction_per_tile'] * fraction
                 tile = min(candidates, key=lambda t: (not t['road'], t['cost'], t['id']))
-                owner = ('private:' if good in ('grain', 'fish', 'flax') else 'treasury:') + loc['state_id']
+                owner = recipe.get('extraction_owner', 'private')+':'+loc['state_id']
                 self.open_enterprise(good, dict(loc, tile_id=tile['id'], city_id=None), owner, capacity, initial=True)
         for city in sorted((e for e in self.entities.values() if e['kind'] == 'City'), key=lambda e: e['id']):
             loc = self.location(city['id']); pid = loc['province_id']
@@ -160,6 +162,13 @@ class EconomyServices:
     def population(self, account):
         return self.entities[account['group_id']]['properties']['population'] if account['kind'] == 'household' else 0
 
+    def equipment_requirements(self, recipe, output):
+        return {good: ratio*output for good, ratio in recipe.get('equipment', {}).items()}
+
+    def equipment_wear(self, recipe, output):
+        return {good: quantity*self.goods[good].get('durable', {}).get('wear_rate', 0)
+                for good, quantity in self.equipment_requirements(recipe, output).items()}
+
     def workforce(self, loc):
         return [a for a in self.accounts.values() if a['kind'] == 'household'
                 and a['state_id'] == loc['state_id'] and a['province_id'] == loc['province_id']]
@@ -181,6 +190,8 @@ class EconomyServices:
             self.add_stock(identity, good, capacity * months, capacity * months * e['price'])
             for g, ratio in self.goods[good]['inputs'].items():
                 q = capacity * ratio * months
+                self.add_stock(identity, g, q, q * self.goods[g]['price'])
+            for g, q in self.equipment_requirements(self.goods[good], capacity).items():
                 self.add_stock(identity, g, q, q * self.goods[g]['price'])
             for g, q in self.cfg['construction'].items():
                 reserve=q*self.cfg['seed_construction_reserve_factor']
@@ -237,7 +248,7 @@ class EconomyServices:
         if before is not None:
             after = self.total_stock()
             for good in self.goods:
-                expected = before[good]+self.report['production'].get(good,0)-self.report['consumed'].get(good,0)-self.report['inputs_used'].get(good,0)-self.report['construction_used'].get(good,0)
+                expected = before[good]+self.report['production'].get(good,0)-self.report['consumed'].get(good,0)-self.report['inputs_used'].get(good,0)-self.report['equipment_wear'].get(good,0)-self.report['construction_used'].get(good,0)
                 if abs(after[good]-expected) > max(1e-5, abs(expected)*1e-10):
                     raise ValueError('Нарушен баланс товара: '+good)
             balances=dict(self.report['opening_balances'])
@@ -292,6 +303,7 @@ class EconomyServices:
             imports=[t for t in self.report['trades'] if t['buyer_province']==pid and t['seller_province']!=pid]
             exports=[t for t in self.report['trades'] if t['seller_province']==pid and t['buyer_province']!=pid]
             firms=[e for e in self.enterprises.values() if e['province_id']==pid]
+            demography = self.report.get('demography_by_province', {}).get(pid, {})
             self.report['provinces'].append(dict(province_id=pid,state_id=self.owners[pid],population=population,
                 household_gold=sum(a['balance'] for a in households),
                 gold_change=sum(a['balance']-prior_cash.get(a['id'],0) for a in households),
@@ -302,6 +314,16 @@ class EconomyServices:
                 import_volume=sum(t['quantity'] for t in imports),export_volume=sum(t['quantity'] for t in exports),
                 transport=sum(t['freight'] for t in self.report['trades'] if t['buyer_province']==pid),
                 prices={g:sum(t['gold']+t['freight'] for t in self.report['trades'] if t['buyer_province']==pid and t['good']==g)/sum(t['quantity'] for t in self.report['trades'] if t['buyer_province']==pid and t['good']==g) if any(t['buyer_province']==pid and t['good']==g for t in self.report['trades']) else None for g in self.goods},
+                population_before=demography.get('population_before', population),
+                population_change=population-demography.get('population_before', population),
+                births=demography.get('births', 0), deaths=demography.get('deaths', 0),
+                baseline_deaths=demography.get('baseline_deaths', 0),
+                hunger_deaths=demography.get('hunger_deaths', 0),
+                migration_in=demography.get('migration_in', 0),
+                migration_out=demography.get('migration_out', 0),
+                food_stress=demography.get('food_stress', 0),
+                market_food_shortfall=demography.get('market_food_shortfall', 0),
+                protected_by_subsistence=demography.get('protected_by_subsistence', 0),
                 reason='Изменение денег: зарплаты и доходы минус покупки и доставка; дефицит: остаток неисполненной корзины'))
 
     def save(self, db, include_month=True):
@@ -310,7 +332,8 @@ class EconomyServices:
         db.store_economy('EconomyMeta',[self.meta])
         if include_month:
             db.store_economy('EconomyMonth',[self.report])
-        db.update_welfare({a['group_id']:a['welfare'] for a in self.accounts.values() if 'welfare' in a})
+        db.update_social_groups({a['group_id']: self.entities[a['group_id']]['properties']
+            for a in self.accounts.values() if a['kind'] == 'household' and a['group_id'] in self.entities})
 
     def __init__(self, *args, **kwargs):
         self._initialize_state(*args, **kwargs)

@@ -68,8 +68,13 @@ def generate(content):
                 'mountain' if math.sin(x*.39)+math.cos(y*.5)>1.25 else
                 'forest' if math.sin(x*.27-y*.4)>.35 else 'plain')
             cost={'water':0,'plain':1,'river':2,'forest':2,'mountain':5}[terrain]
+            resources = [] if sea else [dict(plain='зерно',forest='лес',mountain='железо',river='рыба')[terrain]]
+            # Горная порода — отдельное месторождение, а не вариант железной руды:
+            # каменоломни и рудники могут существовать на одной горной клетке.
+            if terrain == 'mountain':
+                resources.append('камень')
             tiles.append(dict(id=f'tile-{x}-{y}',x=x,y=y,terrain=terrain,province_id='',road=False,
-                              resources=[] if sea else [dict(plain='зерно',forest='лес',mountain='железо',river='рыба')[terrain]],
+                              resources=resources,
                               passable=not sea,cost=cost))
     graph=topology(tiles)
     states=[e['id'] for e in content['entities'] if e['kind']=='State']

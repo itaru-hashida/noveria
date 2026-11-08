@@ -452,6 +452,16 @@ class WorldDB:
         if rows:
             self._query('UNWIND $rows AS r MATCH (n:Entity {id:r.id}) SET n.properties=r.data', dict(rows=rows))
 
+    def update_social_groups(self, values):
+        """Сохраняет изменяемые свойства социальных групп (численность и welfare)."""
+        rows = []
+        for entity in self.snapshot()['entities']:
+            properties = values.get(entity['id'])
+            if entity['kind'] == 'SocialGroup' and properties is not None:
+                rows.append(dict(id=entity['id'], data=encode(properties)))
+        if rows:
+            self._query('UNWIND $rows AS r MATCH (n:Entity {id:r.id}) SET n.properties=r.data', dict(rows=rows))
+
     def fork_to(self, destination):
         """Логическая копия под блокировкой, без копирования открытого файла БД."""
         destination = Path(destination)

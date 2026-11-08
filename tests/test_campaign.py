@@ -9,6 +9,7 @@ from core.db import WorldDB
 from core.world_service import WorldService
 from core.events import EventBus
 from loader import load_world,validate_content
+from modules.economy import Economy
 
 
 def test_generator_reproducible():
@@ -23,6 +24,19 @@ def test_generator_reproducible():
     ids=list(a['placements'])
     result=route(a['tiles'],a['placements'][ids[0]]['tile_id'],a['placements'][ids[-1]]['tile_id'])
     assert result['reachable'] and result['cost']>0
+    assert all('камень' in tile['resources'] for tile in a['tiles'] if tile['terrain']=='mountain')
+
+
+def test_generated_stone_deposits_wait_for_private_demand(tmp_path):
+    with WorldDB(tmp_path/'stone.lbug') as db:
+        load_world(db)
+        WorldService(db, EventBus()).initialize_economy()
+        engine = Economy.load(db)
+        assert any('камень' in tile['resources'] for tile in engine.tiles.values())
+        # До первого строительного заказа добыча камня не имеет сбыта и не
+        # должна появляться как заранее обречённая на закрытие фирма.
+        assert not [enterprise for enterprise in engine.enterprises.values()
+                    if enterprise['good'] == 'stone']
 
 
 def test_generator_reproducible_across_processes():

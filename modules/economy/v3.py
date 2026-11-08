@@ -32,7 +32,7 @@ class Economy(EconomyServices):
             owner_consumption=[], owner_consumed={}, events=[],
             investment_candidates=[], expansion_intents=[],
             expansion_intent_diagnostics=[], investment_candidate_statuses=[],
-            investment_shadow_gate=[], investment_candidate_capacity_limits=[])
+            investment_shadow_gate=[], investment_candidate_capacity_limits=[], migration=[])
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -56,6 +56,34 @@ class Economy(EconomyServices):
         events = self.report['events']
         decisions = self.report.get('investment_decisions', [])
         gap_events = {}
+        demography_cache = self.meta.get('demography', {}).get('provinces', {})
+        prior_population_events = {pid: row.get('last_population_event_id')
+            for pid, row in demography_cache.items()}
+        for row in self.report.get('demography', []):
+            moved = row.get('migration_in', 0) or row.get('migration_out', 0)
+            cause = ('food_stress_and_migration' if row.get('hunger_deaths', 0) > EPS and moved
+                     else 'food_stress' if row.get('hunger_deaths', 0) > EPS
+                     else 'migration' if moved else 'natural_change')
+            event_id = self.log_event('demography.population_change', region_id=row['province_id'],
+                cause=cause, source='demography.update',
+                parent_event_id=prior_population_events.get(row['province_id']),
+                population_before=row['population_before'], population_after=row['population_after'],
+                population_delta=row['population_after']-row['population_before'],
+                births=row['births'], baseline_deaths=row['baseline_deaths'],
+                hunger_deaths=row['hunger_deaths'], food_stress=row['food_stress'],
+                migration_in=row.get('migration_in', 0), migration_out=row.get('migration_out', 0),
+                market_food_shortfall=row['market_food_shortfall'],
+                protected_by_subsistence=row['protected_by_subsistence'])
+            demography_cache.setdefault(row['province_id'], {})['last_population_event_id'] = event_id
+        for migration in self.report.get('migration', []):
+            self.log_event('demography.migration', entity_id=(migration['source_province']+':'
+                +migration['destination_province']), region_id=migration['source_province'],
+                cause=migration['cause'], source='migration.apply',
+                parent_event_id=prior_population_events.get(migration['source_province']),
+                destination_region_id=migration['destination_province'], state_id=migration['state_id'],
+                people=migration['people'], source_stress=migration['source_stress'],
+                destination_stress=migration['destination_stress'], distance=migration['distance'],
+                gold=migration['gold'], stock=migration['stock'])
         for decision in decisions:
             project_id = decision.get('project_id') or decision.get('investor')
             self.log_event('investment.' + decision.get('outcome', 'decision'),
@@ -166,8 +194,8 @@ class Economy(EconomyServices):
             actual = enterprise.get('output', 0)
             constraints = observation.get('constraints', {})
             limiting = min(constraints, key=constraints.get) if constraints else None
+            recipe = self.goods[enterprise['good']]
             if actual + EPS < planned or limiting not in (None, 'План'):
-                recipe = self.goods[enterprise['good']]
                 account = self.accounts[enterprise['id']]
                 input_details = {}
                 for input_good, ratio in recipe.get('inputs', {}).items():
@@ -176,6 +204,11 @@ class Economy(EconomyServices):
                         available=account.get('stock', {}).get(input_good, 0),
                         reserved=account.get('stock_reserved', {}).get(input_good, 0),
                         consumed=actual*ratio)
+                equipment_details = {good: dict(required=planned*ratio,
+                    available=account.get('stock', {}).get(good, 0),
+                    reserved=account.get('stock_reserved', {}).get(good, 0),
+                    worn=self.equipment_wear(recipe, actual).get(good, 0))
+                    for good, ratio in recipe.get('equipment', {}).items()}
                 self.log_event('production.limited', entity_id=enterprise['id'],
                     region_id=enterprise.get('province_id'), good=enterprise.get('good'),
                     cause=limiting or 'unexplained_gap', source='production.constraints',
@@ -184,7 +217,15 @@ class Economy(EconomyServices):
                     expected_margin=enterprise.get('expected_margin'),
                     wages=enterprise.get('wages'), overhead=self.enterprise_overhead(enterprise),
                     input_limited=enterprise.get('input_limited', False),
-                    input_orders=plan.get('input_orders', []), input_details=input_details)
+                    input_orders=plan.get('input_orders', []), input_details=input_details,
+                    equipment_details=equipment_details)
+            for equipment_good, worn in enterprise.get('equipment_wear', {}).items():
+                if worn > EPS:
+                    self.log_event('equipment.wear', entity_id=enterprise['id'],
+                        region_id=enterprise.get('province_id'), good=equipment_good,
+                        cause='production', source='production.consume',
+                        output_good=enterprise.get('good'), output=actual, worn=worn,
+                        deployed=self.equipment_requirements(recipe, actual).get(equipment_good, 0))
 
         for lifecycle in self.report.get('lifecycle', []):
             action = lifecycle.get('action')
@@ -212,10 +253,14 @@ class Economy(EconomyServices):
                 if not (demand or offered or trades or stock > EPS
                         or province.get('deficits', {}).get(market_good, 0) > EPS):
                     continue
+                demography = self.report.get('demography_by_province', {}).get(pid, {})
                 self.log_event('market.snapshot', region_id=pid, good=market_good,
+                    parent_event_id=prior_population_events.get(pid),
                     source='market.clearance', demand=demand, executed=executed,
                     unmet=max(0, demand-executed), offered=offered,
                     sales=sum(t.get('quantity', 0) for t in trades), stock=stock,
+                    population_demand_basis=demography.get('population_before', province.get('population')),
+                    population_after_month=demography.get('population_after', province.get('population')),
                     price=province.get('prices', {}).get(market_good),
                     imports=sum(t.get('quantity', 0) for t in trades
                                 if t.get('buyer_province') == pid and t.get('seller_province') != pid),
@@ -640,6 +685,8 @@ class Economy(EconomyServices):
         self.cfg.setdefault('output_decline_rate', 0.25)
         self.cfg.setdefault('output_overstock_factor', 2.0)
         self.cfg.setdefault('enterprise_overhead_rate', 0.02)
+        self.cfg.setdefault('demography', {'enabled': False})
+        self.cfg.setdefault('migration', {'enabled': False})
         self.cfg.setdefault('project_stall_months', 12)
         if (not isinstance(self.cfg['project_stall_months'], int)
                 or isinstance(self.cfg['project_stall_months'], bool)
@@ -656,6 +703,57 @@ class Economy(EconomyServices):
             raise ValueError('Некорректные параметры сглаживания выпуска')
         if not 0 <= self.cfg['enterprise_overhead_rate'] <= 1:
             raise ValueError('Некорректная ставка оброка предприятия')
+        demography = self.cfg['demography']
+        if not isinstance(demography, dict):
+            raise ValueError('Некорректные параметры демографии')
+        demography.setdefault('enabled', False)
+        if demography['enabled']:
+            defaults = dict(birth_rate=0.003, base_death_rate=0.0028,
+                            stress_decay=0.85, hunger_death_rate=0.006,
+                            subsistence_share=0.25)
+            for key, value in defaults.items():
+                demography.setdefault(key, value)
+            for key in ('birth_rate', 'base_death_rate', 'hunger_death_rate'):
+                if not math.isfinite(demography[key]) or demography[key] < 0:
+                    raise ValueError('Некорректный параметр демографии: '+key)
+            for key in ('stress_decay', 'subsistence_share'):
+                if not math.isfinite(demography[key]) or not 0 <= demography[key] <= 1:
+                    raise ValueError('Некорректный параметр демографии: '+key)
+        migration = self.cfg['migration']
+        if not isinstance(migration, dict):
+            raise ValueError('Некорректные параметры миграции')
+        migration.setdefault('enabled', False)
+        if migration['enabled']:
+            defaults = dict(stress_threshold=.10, minimum_advantage=.05,
+                            pressure_rate=.004, max_monthly_rate=.002,
+                            destination_max_rate=.002)
+            for key, value in defaults.items():
+                migration.setdefault(key, value)
+            for key, value in migration.items():
+                if key != 'enabled' and (not math.isfinite(value) or value < 0):
+                    raise ValueError('Некорректный параметр миграции: '+key)
+            if migration['stress_threshold'] >= 1:
+                raise ValueError('Порог миграции должен быть меньше единицы')
+        for product, recipe in self.goods.items():
+            equipment = recipe.setdefault('equipment', {})
+            if not isinstance(equipment, dict):
+                raise ValueError('Некорректное оборудование рецепта: '+product)
+            for good, ratio in equipment.items():
+                durable = self.goods.get(good, {}).get('durable')
+                if (not durable or not math.isfinite(ratio) or ratio <= 0
+                        or not math.isfinite(durable.get('wear_rate', -1))
+                        or not 0 <= durable['wear_rate'] <= 1):
+                    raise ValueError('Некорректное оборудование рецепта: '+product+':'+good)
+            if recipe['resource']:
+                share = recipe.setdefault('seed_share', 1)
+                owner = recipe.setdefault('extraction_owner', 'private')
+                recipe.setdefault('seed_initial', True)
+                if not math.isfinite(share) or not 0 < share <= 1:
+                    raise ValueError('Некорректная начальная доля добычи: '+product)
+                if owner not in ('private', 'treasury'):
+                    raise ValueError('Некорректный начальный владелец добычи: '+product)
+                if not isinstance(recipe['seed_initial'], bool):
+                    raise ValueError('Некорректный признак начальной добычи: '+product)
         for a in self.accounts.values():
             a.setdefault('reserved', 0.0)
             a.setdefault('protected', 0.0)
@@ -675,6 +773,178 @@ class Economy(EconomyServices):
         """Ежемесячный оброк за площадку и мастерскую при открытом предприятии."""
         return (e['capacity']*self.goods[e['good']]['labor']*self.cfg['wage']
                 *self.cfg.get('enterprise_overhead_rate', 0))
+
+    def update_demography(self):
+        """Агрегированная демография после фактического потребления месяца.
+
+        Численность остаётся в SocialGroup. В meta хранится только сглаженный
+        продовольственный стресс провинции и дробный остаток округления.
+        Самопрокорм не создаёт товар: он защищает часть населения от рыночного
+        дефицита при расчёте смертности.
+        """
+        cfg = self.cfg['demography']
+        if not cfg.get('enabled'):
+            return
+        cache = self.meta.setdefault('demography', {})
+        provinces = cache.setdefault('provinces', {})
+        groups = cache.setdefault('groups', {})
+        by_province = {}
+        basic_goods = self.cfg['basic_needs']
+        for pid in sorted(e['id'] for e in self.entities.values() if e['kind'] == 'Province'):
+            households = [a for a in self.accounts.values()
+                          if a['kind'] == 'household' and a['province_id'] == pid]
+            population = sum(self.population(a) for a in households)
+            needed = sum(a.get('needs', {}).get(good, {}).get('needed', 0)
+                         for a in households for good in basic_goods)
+            consumed = sum(a.get('needs', {}).get(good, {}).get('consumed', 0)
+                           for a in households for good in basic_goods)
+            market_shortfall = max(0, needed-consumed)/needed if needed > EPS else 0.0
+            protected = min(max(0, needed-consumed), needed*cfg['subsistence_share'])
+            effective_shortfall = max(0, needed-consumed-protected)/needed if needed > EPS else 0.0
+            province_cache = provinces.setdefault(pid, {})
+            prior = province_cache.get('food_stress', 0.0)
+            stress = cfg['stress_decay']*prior+(1-cfg['stress_decay'])*effective_shortfall
+            province_cache.update(food_stress=stress, last_month=self.meta['month'])
+            births = baseline_deaths = hunger_deaths = 0.0
+            for household in households:
+                group = self.entities[household['group_id']]['properties']
+                count = group['population']
+                births += count*cfg['birth_rate']
+                baseline_deaths += count*cfg['base_death_rate']
+                hunger_deaths += count*stress*cfg['hunger_death_rate']
+                group_cache = groups.setdefault(household['group_id'], {})
+                change = (count*(cfg['birth_rate']-cfg['base_death_rate']-stress*cfg['hunger_death_rate'])
+                          + group_cache.get('rounding_carry', 0.0))
+                delta = math.floor(change) if change >= 0 else math.ceil(change)
+                group_cache['rounding_carry'] = change-delta
+                group['population'] = max(0, count+delta)
+            row = dict(province_id=pid, population_before=population,
+                population_after=sum(self.population(a) for a in households), births=births,
+                deaths=baseline_deaths+hunger_deaths, baseline_deaths=baseline_deaths,
+                hunger_deaths=hunger_deaths, food_stress=stress, market_food_shortfall=market_shortfall,
+                protected_by_subsistence=protected, migration_in=0, migration_out=0)
+            self.report['demography'].append(row)
+            by_province[pid] = row
+        self.report['demography_by_province'] = by_province
+
+    def _province_population(self, province_id):
+        return sum(self.population(a) for a in self.accounts.values()
+                   if a['kind'] == 'household' and a['province_id'] == province_id)
+
+    def _split_people(self, total, households):
+        """Точное целочисленное деление переселенцев пропорционально группам."""
+        population = sum(self.population(a) for a in households)
+        if total <= 0 or population <= 0:
+            return {}
+        raw = [(a, total*self.population(a)/population) for a in households]
+        result = {a['id']: math.floor(value) for a, value in raw}
+        left = total-sum(result.values())
+        for account, value in sorted(raw, key=lambda row: (-(row[1]-math.floor(row[1])), row[0]['id']))[:left]:
+            result[account['id']] += 1
+        return {account: count for account, count in result.items() if count}
+
+    def _migration_targets(self, source, destination):
+        category = self.entities[source['group_id']]['properties'].get('category')
+        households = [a for a in self.accounts.values()
+                      if a['kind'] == 'household' and a['province_id'] == destination]
+        matching = [a for a in households
+                    if self.entities[a['group_id']]['properties'].get('category') == category]
+        return matching or households
+
+    def _move_household_share(self, source, destination, people):
+        """Перенести людей и пропорциональную долю их денег и домашнего склада."""
+        source_population = self.population(source)
+        if people <= 0 or source_population <= 0:
+            return dict(gold=0.0, stock={})
+        targets = self._migration_targets(source, destination)
+        if not targets:
+            return dict(gold=0.0, stock={})
+        target_split = self._split_people(people, targets)
+        if sum(target_split.values()) != people:
+            raise ValueError('Переселение потеряло население')
+        share = people/source_population
+        self.entities[source['group_id']]['properties']['population'] -= people
+        for target in targets:
+            moved = target_split.get(target['id'], 0)
+            if moved:
+                self.entities[target['group_id']]['properties']['population'] += moved
+        gold = source['balance']*share
+        for target in targets:
+            moved = target_split.get(target['id'], 0)
+            if moved:
+                self.transfer(source['id'], target['id'], gold*moved/people, 'Переселение внутри государства')
+        stock = {}
+        for good, quantity in list(source['stock'].items()):
+            moved_quantity = quantity*share
+            if moved_quantity <= EPS:
+                continue
+            moved_value = source['values'].get(good, 0)*share
+            source['stock'][good] = max(0, quantity-moved_quantity)
+            source['values'][good] = max(0, source['values'].get(good, 0)-moved_value)
+            stock[good] = moved_quantity
+            for target in targets:
+                moved = target_split.get(target['id'], 0)
+                if moved:
+                    self.add_stock(target['id'], good, moved_quantity*moved/people,
+                                   moved_value*moved/people)
+        return dict(gold=gold, stock=stock)
+
+    def apply_migration(self):
+        """Медленное переселение между провинциями одного государства."""
+        cfg = self.cfg['migration']
+        rows = self.report.get('demography_by_province', {})
+        if not cfg.get('enabled') or not rows:
+            return
+        incoming = defaultdict(int)
+        sources = sorted(rows.values(), key=lambda row: (-row['food_stress'], row['province_id']))
+        for source_row in sources:
+            source_id = source_row['province_id']
+            # Прибывшие в этом месяце не продолжают путь через полкарты за тот же ход.
+            if incoming[source_id]:
+                continue
+            push = max(0, source_row['food_stress']-cfg['stress_threshold'])
+            if push <= EPS:
+                continue
+            rate = min(cfg['max_monthly_rate'], cfg['pressure_rate']*push/(1-cfg['stress_threshold']))
+            requested = math.floor(self._province_population(source_id)*rate)
+            if requested <= 0:
+                continue
+            source_tile = self.location(source_id)['tile_id']
+            candidates = []
+            for destination_id, destination_row in rows.items():
+                if destination_id == source_id or self.owners[destination_id] != self.owners[source_id]:
+                    continue
+                advantage = source_row['food_stress']-destination_row['food_stress']-cfg['minimum_advantage']
+                distance, _ = self.path(source_tile, self.location(destination_id)['tile_id'])
+                if advantage > EPS and distance is not None:
+                    candidates.append((advantage/(1+distance), destination_id, distance, destination_row))
+            if not candidates:
+                continue
+            _, destination_id, distance, destination_row = max(
+                self.shuffled(candidates, key=lambda row: row[1]), key=lambda row: row[0])
+            room = max(0, math.floor(self._province_population(destination_id)*cfg['destination_max_rate'])
+                       - incoming[destination_id])
+            people = min(requested, room)
+            if people <= 0:
+                continue
+            households = [a for a in self.accounts.values()
+                          if a['kind'] == 'household' and a['province_id'] == source_id]
+            moved_gold, moved_stock = 0.0, defaultdict(float)
+            for account_id, count in self._split_people(people, households).items():
+                moved = self._move_household_share(self.accounts[account_id], destination_id, count)
+                moved_gold += moved['gold']
+                for good, quantity in moved['stock'].items():
+                    moved_stock[good] += quantity
+            source_row['migration_out'] += people
+            destination_row['migration_in'] += people
+            incoming[destination_id] += people
+            self.report['migration'].append(dict(source_province=source_id,
+                destination_province=destination_id, state_id=self.owners[source_id], people=people,
+                source_stress=source_row['food_stress'], destination_stress=destination_row['food_stress'],
+                distance=distance, gold=moved_gold, stock=dict(moved_stock),
+                cause='chronic_food_stress'))
+        for row in rows.values():
+            row['population_after'] = self._province_population(row['province_id'])
 
     def market_tile(self, account):
         return account.get('cell_id') or account['tile_id']
@@ -708,6 +978,9 @@ class Economy(EconomyServices):
         needed = quantity*recipe['labor']*self.cfg['wage']
         for good, ratio in recipe['inputs'].items():
             missing = max(0, quantity*ratio-self.free_stock(e['id'], good))
+            needed += missing*self.quoted_cost(self.accounts[e['id']], good, missing, sells)[1]
+        for good, required in self.equipment_requirements(recipe, quantity).items():
+            missing = max(0, required-self.free_stock(e['id'], good))
             needed += missing*self.quoted_cost(self.accounts[e['id']], good, missing, sells)[1]
         return needed
 
@@ -1108,6 +1381,8 @@ class Economy(EconomyServices):
                     recent = max((h.get('output', 0) for h in history), default=e['capacity']*self.rules['initial_sales_fraction'])
                     reserve = min(e['capacity'], max(planned, recent))*self.cfg['input_buffer']
                     quantity = max(0, quantity-reserve*recipe['inputs'].get(good, 0))
+                    deployed = min(e['capacity'], max(planned, recent))
+                    quantity = max(0, quantity-self.equipment_requirements(recipe, deployed).get(good, 0))
                 prices = a.setdefault('ask_prices', {})
                 price = e['price'] if e and good == e['good'] else prices.setdefault(good, self.goods[good]['price'])
                 o = self.order(a['id'], good, quantity, 'sell', price, 'Продажа запасов')
@@ -1146,7 +1421,10 @@ class Economy(EconomyServices):
 
     def unit_cost(self, e, sells):
         recipe = self.goods[e['good']]
-        return recipe['labor']*self.cfg['wage']+sum(ratio*self.reference_price(e, good, sells) for good, ratio in recipe['inputs'].items())
+        raw = sum(ratio*self.reference_price(e, good, sells) for good, ratio in recipe['inputs'].items())
+        wear = sum(quantity*self.reference_price(e, good, sells)
+                   for good, quantity in self.equipment_wear(recipe, 1).items())
+        return recipe['labor']*self.cfg['wage']+raw+wear
 
     def volume_input_prices(self, e, quantity, sells):
         """Средние доставленные цены входов для объёма производственного плана."""
@@ -1193,6 +1471,10 @@ class Economy(EconomyServices):
                 quotes = [quote[0] for firm, price in self._recovery_quotes[good]
                     if (quote := self.landed(firm['tile_id'], e['tile_id'], good, price))]
                 cost += ratio*(min(quotes) if quotes else self.goods[good]['price'])
+            for good, quantity in self.equipment_wear(recipe, 1).items():
+                quotes = [quote[0] for firm, price in self._recovery_quotes[good]
+                    if (quote := self.landed(firm['tile_id'], e['tile_id'], good, price))]
+                cost += quantity*(min(quotes) if quotes else self.goods[good]['price'])
             consumer = e['good'] in (self.cfg['basic_needs'] | self.cfg['extra_needs'])
             net = 1-self.cfg['consumption_tax'] if consumer else 1
             price = (cost*(1+self.cfg['markup'])/net
@@ -1215,6 +1497,9 @@ class Economy(EconomyServices):
             required = target*recipe['labor']*self.cfg['wage']
             for good, ratio in recipe['inputs'].items():
                 missing = max(0, target*ratio-self.free_stock(e['id'], good))
+                required += missing*self.quoted_cost(a, good, missing, sells)[1]
+            for good, amount in self.equipment_requirements(recipe, target).items():
+                missing = max(0, amount-self.free_stock(e['id'], good))
                 required += missing*self.quoted_cost(a, good, missing, sells)[1]
             owner = self.accounts[e['owner_id']]
             available = self.cash_after_commitments(owner['id'], self.project_cash_reserve(owner['id'], sells))
@@ -1433,6 +1718,9 @@ class Economy(EconomyServices):
             for good, ratio in recipe['inputs'].items():
                 missing = max(0, quantity*ratio-self.free_stock(e['id'], good))
                 needed += missing*self.quoted_cost(a, good, missing, sells)[1]
+            for good, required in self.equipment_requirements(recipe, quantity).items():
+                missing = max(0, required-self.free_stock(e['id'], good))
+                needed += missing*self.quoted_cost(a, good, missing, sells)[1]
             return needed
 
         # Оплаченное ранее сырьё влияет на маржу, но не требует второй оплаты из кассы.
@@ -1454,6 +1742,8 @@ class Economy(EconomyServices):
             sale_price=e['planned_price'],
             expected_net_price=e['expected_price'], input_prices=input_prices,
             input_ratios=dict(recipe['inputs']), wage_unit=recipe['labor']*self.cfg['wage'],
+            equipment_required=self.equipment_requirements(recipe, target),
+            equipment_wear=self.equipment_wear(recipe, target),
             fixed_unit=e.get('expected_fixed_unit', 0),
             requested_output=requested, free_cash=cash, known_order_count=first_order,
             reachable_demand=e['reachable_demand'], sales_forecast=e['sales_forecast'],
@@ -1466,6 +1756,10 @@ class Economy(EconomyServices):
             order = self.order(e['id'], good, quantity, 'buy', price, 'Сырьё')
             if order:
                 order['adaptive_input_budget'] = True
+        for good, required in self.equipment_requirements(recipe, target).items():
+            quantity = max(0, required-self.free_stock(e['id'], good))
+            _, price, _ = self.quoted_cost(a, good, quantity, sells)
+            self.order(e['id'], good, quantity, 'buy', price, 'Оборудование')
         e['production_plan']['input_orders'] = [o['id'] for o in self.report['orders'][first_order:]]
 
     def investment_demand(self, candidate, sells):
@@ -1597,16 +1891,20 @@ class Economy(EconomyServices):
             bill = self.construction_bill(1)
             material = sum(q*self.quoted_cost(investor, g, q, sells)[0]/max(q, EPS) for g, q in bill.items())
             delivery = sum(q*self.goods[g]['weight'] for g, q in bill.items())*distance*self.cfg['transport_rate']
+            equipment_capital = sum(ratio*self.quoted_cost(investor, equipment, ratio, sells)[1]
+                for equipment, ratio in recipe.get('equipment', {}).items())
             available = self.free_cash(investor['id'])
             startup = 0 if expansion else self.cfg['startup_cash']
-            capacity = min(capacity, max(0, available-startup)/max(material+delivery+unit, EPS))
+            capacity = min(capacity, max(0, available-startup)/max(material+delivery+unit+equipment_capital, EPS))
             if capacity < self.cfg['minimum_capacity']:
                 if diagnostics is not None:
                     diagnostics.append(dict(investor=investor['id'], good=good,
                         province_id=pid, stage='funding_capacity', capacity=capacity,
                         minimum=self.cfg['minimum_capacity']))
                 continue
-            working = 0 if expansion else max(startup, capacity*(unit+fixed_unit))
+            working = capacity*equipment_capital
+            if not expansion:
+                working += max(startup, capacity*(unit+fixed_unit))
             investment = capacity*(material+delivery)+working
             profit = capacity*margin
             self.profile(investor)
@@ -1921,6 +2219,8 @@ class Economy(EconomyServices):
                 constraints['Природный ресурс'] = resources[e['province_id'], recipe['resource']]
             for g, ratio in recipe['inputs'].items():
                 constraints['Сырьё: '+g] = self.free_stock(e['id'], g)/ratio
+            for g, ratio in recipe.get('equipment', {}).items():
+                constraints['Оборудование: '+g] = self.free_stock(e['id'], g)/ratio
             e['production_observation'] = dict(month=self.meta['month'], constraints=dict(constraints),
                 stocks_before=dict(a['stock']), free_cash_before=self.free_cash(e['id']),
                 procurement_plan=copy.deepcopy(plan) if plan.get('month') == self.meta['month'] else None,
@@ -1945,6 +2245,10 @@ class Economy(EconomyServices):
             for g, ratio in recipe['inputs'].items():
                 cost += self.use_stock(e['id'], g, q*ratio)
                 self.report['inputs_used'][g] = self.report['inputs_used'].get(g, 0)+q*ratio
+            for g, quantity in self.equipment_wear(recipe, q).items():
+                cost += self.use_stock(e['id'], g, quantity)
+                self.report['equipment_wear'][g] = self.report['equipment_wear'].get(g, 0)+quantity
+                e['equipment_wear'][g] = e['equipment_wear'].get(g, 0)+quantity
             # Цена нового выпуска заменяет цену распродажи только у пустого склада.
             if a['stock'].get(e['good'], 0) <= EPS:
                 e['price'] = plan.get('sale_price', e['price'])
@@ -2055,7 +2359,8 @@ class Economy(EconomyServices):
             e.pop('production_observation', None)
             e.update(revenue=0, tax=0, expenses=0, profit=0, output=0, workers=0, wages=0, cost_of_sales=0,
                 production_cost=0, input_limited=False, fixed_cost_due=0, fixed_cost_paid=0,
-                dividends=0.0, working_reserve=0.0, project_reserve=0.0)
+                dividends=0.0, working_reserve=0.0, project_reserve=0.0,
+                equipment_wear={})
         self.update_prices()
         self.prepare_recovery_quotes()
         sells = self.sell_orders()
@@ -2126,6 +2431,8 @@ class Economy(EconomyServices):
             a['protected'] = min(a['balance'], hold)
         self.settle(list(self.enterprises.values()), households)
         self.pay_dividends(planning_sells)
+        self.update_demography()
+        self.apply_migration()
         for a in self.accounts.values():
             a['project_reserve'] = self.project_cash_reserve(a['id'], planning_sells)
         self.report['diagnostics'].extend(self.report['investment_decisions'])
@@ -2164,6 +2471,31 @@ class Economy(EconomyServices):
 
     def validate(self, before=None):
         super().validate(before)
+        for entity in self.entities.values():
+            if entity['kind'] != 'SocialGroup' or 'population' not in entity['properties']:
+                continue
+            population = entity['properties']['population']
+            if isinstance(population, bool) or not isinstance(population, int) or population < 0:
+                raise ValueError('Нарушена численность социальной группы')
+        demography = self.report.get('demography', [])
+        migration = self.report.get('migration', [])
+        moved_out = sum(row.get('migration_out', 0) for row in demography)
+        moved_in = sum(row.get('migration_in', 0) for row in demography)
+        moved = sum(row.get('people', 0) for row in migration)
+        if abs(moved_out-moved) > EPS or abs(moved_in-moved) > EPS:
+            raise ValueError('Нарушен баланс переселения')
+        for row in demography:
+            actual = row['population_after']-row['population_before']
+            expected = row['births']-row['deaths']+row.get('migration_in', 0)-row.get('migration_out', 0)
+            households = sum(a['kind'] == 'household' and a['province_id'] == row['province_id']
+                             for a in self.accounts.values())
+            if abs(actual-expected) > households+EPS:
+                raise ValueError('Изменение численности не объяснено')
+        for row in migration:
+            if (row['people'] <= 0 or self.owners[row['source_province']] != row['state_id']
+                    or self.owners[row['destination_province']] != row['state_id']):
+                raise ValueError('Недопустимое переселение')
+        self.report['invariants'].update(population=True, migration=True)
         for a in self.accounts.values():
             if any(not math.isfinite(a.get(k, 0)) or a.get(k, 0) < -EPS for k in ('reserved', 'protected')) or a.get('reserved', 0)+a.get('protected', 0) > a['balance']+EPS:
                 raise ValueError('Нарушен резерв средств')
