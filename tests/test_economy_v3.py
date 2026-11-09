@@ -314,6 +314,23 @@ def test_observations_preserve_economic_results_and_survive_real_db(engine, tmp_
         assert any('production_observation' in e for e in captured['enterprises'])
 
 
+def test_none_report_skips_market_observations_without_changing_economy(engine):
+    deep = copy.deepcopy(engine)
+    fast = copy.deepcopy(engine)
+    deep.meta['report_detail'] = 'deep'
+    fast.meta['report_detail'] = 'none'
+
+    deep_report = deep.step()
+    fast_report = fast.step()
+
+    assert fast.accounts == deep.accounts
+    assert fast.enterprises == deep.enterprises
+    assert fast_report['trades'] == deep_report['trades']
+    assert fast_report['market_boards'] == []
+    assert fast_report['events'] == []
+    assert all('match_observation' not in order for order in fast_report['orders'])
+
+
 @pytest.mark.parametrize('missing_options,expected', [(True, 'executable_not_matched'),
     (False, 'insufficient_order_reserve')])
 def test_match_observation_detects_missed_pair_or_broken_backing(engine, monkeypatch, missing_options, expected):

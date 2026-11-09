@@ -96,6 +96,8 @@ class Economy(EconomyServices):
         События хранятся в отчёте и потому попадают в существующее хранилище
         turn results. Идентификатор детерминирован и не влияет на RNG.
         """
+        if self.report_detail() != 'deep':
+            return None
         event_id = f"{self.meta['month']}:event:{len(self.report['events'])}"
         row = dict(event_id=event_id, month=self.meta['month'], event_type=event_type)
         row.update({k: v for k, v in dict(entity_id=entity_id, region_id=region_id,
@@ -1927,7 +1929,10 @@ class Economy(EconomyServices):
     def observe_match(self, buy, sells, options):
         # Полный список продавцов уже записан один раз в market_boards. Здесь
         # остаются только координаты для точного воспроизведения состояния.
-        book = self._market_book(self.accounts[buy['participant']], buy['good'], sells, record=True)
+        deep = self.report_detail() == 'deep'
+        book = self._market_book(self.accounts[buy['participant']], buy['good'], sells, record=deep)
+        if not deep:
+            return {'_book': book}
         match_index = getattr(self, '_match_observation_count', 0)
         self._match_observation_count = match_index+1
         observation = dict(version=2, board_id=book['board_id'],
@@ -1941,6 +1946,7 @@ class Economy(EconomyServices):
 
     def finish_match_observation(self, buy, sells, observation):
         book = observation.pop('_book')
+        deep = 'version' in observation
         if buy['remaining'] <= EPS:
             code = 'filled'
         else:
@@ -1973,9 +1979,11 @@ class Economy(EconomyServices):
             else:
                 holders = self.physical_stock_summary(buy['participant'], buy['good'])
                 code = 'stock_not_offered' if holders['count'] else 'no_physical_stock'
-        observation.update(reason_code=code, trade_index_after=len(self.report['trades']),
-            remaining_after=buy['remaining'], reserved_after=buy['reserved'])
-        if buy['remaining'] > EPS:
+        observation['reason_code'] = code
+        if deep:
+            observation.update(trade_index_after=len(self.report['trades']),
+                remaining_after=buy['remaining'], reserved_after=buy['reserved'])
+        if deep and buy['remaining'] > EPS:
             observation['stock_holders_after_match'] = self.physical_stock_summary(
                 buy['participant'], buy['good'])
 
@@ -3177,8 +3185,9 @@ class Economy(EconomyServices):
         for a in self.accounts.values():
             a['project_reserve'] = self.project_cash_reserve(a['id'], planning_sells)
         self.report['diagnostics'].extend(self.report['investment_decisions'])
-        self.report['diagnostics'].extend(dict(kind='owner_consumption', **copy.deepcopy(row))
-            for row in self.report['owner_consumption'])
+        if detail != 'none':
+            self.report['diagnostics'].extend(dict(kind='owner_consumption', **copy.deepcopy(row))
+                for row in self.report['owner_consumption'])
         self.summarize(prior_cash)
         self.report['account_flows'] = []
         sectors = defaultdict(float)
@@ -3210,7 +3219,7 @@ class Economy(EconomyServices):
             self.report['food_diagnostics'] = food_trace.finish(self)
         if detail == 'deep':
             self.build_causal_events()
-        elif detail == 'standard':
+        elif detail in ('standard', 'none'):
             # Стандартный отчёт хранит результаты рынка, но не тяжёлый снимок
             # каждой книги и не дублирующий слой причинных событий.
             self.report['market_boards'] = []
