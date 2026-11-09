@@ -3,6 +3,9 @@
 .tools/
 __pycache__/
 .pytest_cache/
+# Временные каталоги pytest: тесты работают с настоящей LadybugDB и оставляют
+# сотни мегабайт после падений.
+pytest-of-*/
 tmp/
 .tmp*/
 *.tmp
