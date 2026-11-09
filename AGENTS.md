@@ -86,6 +86,7 @@ git push
 - Не коммить сломанное состояние: тесты должны проходить (см. §6).
 - Схему БД и совместимость сохранений описывать в сообщении явно.
 - Не пушить секреты, `data/*.lbug`, логи.
+- Под песочницей пуш требует настроенного askpass — см. §3.4.
 
 ### 3.3. Мультиагентность
 
@@ -96,6 +97,66 @@ git push
 - крупные решения и результаты замеров **фиксируй в `docs/`**, иначе знание
   останется в чужом контексте и потеряется;
 - хеши коммитов и состояние прогонов указывать явно: «на `a1b363d` было X».
+
+### 3.4. Пуш под песочницей DSH (Windows)
+
+`git push` здесь падает не из-за пароля, а из-за песочницы: она запрещает
+именованные каналы, а git запускает credential helper через `sh`. `sh` не может
+форкнуть себя, умирает — и helper не отвечает, хотя пароль в хранилище Windows
+уже лежит. Обход: git запускает `GIT_ASKPASS` **напрямую, без оболочки**, а наш
+askpass читает пароль из хранилища сам.
+
+Симптомы — любой из них означает именно это:
+
+```text
+schannel: SEC_E_NO_CREDENTIALS (server denied the supplied credentials)
+sh.exe: *** fatal error - couldn't create signal pipe, Win32 error 5
+fatal: could not read Username for 'https://github.com': No such device or address
+```
+
+Рабочая схема — два **локальных** ключа в `.git/config` (в репозиторий не
+попадают, на каждой машине свои):
+
+```powershell
+# 1. askpass вместо credential helper: git зовёт его без sh
+git config --local core.askpass "D:/rpg/.tools/git-askpass/askpass.cmd"
+# 2. schannel не отдаёт сохранённый пароль под песочницей, openssl отдаёт
+git config --local http.sslbackend openssl
+```
+
+Скрипты лежат в `.tools/git-askpass/` — каталог в `.gitignore`, после свежего
+клона его надо создать заново:
+
+- `askpass.cmd` — обёртка, жёстко зовёт `.venv312` проекта; при другом пути к
+  интерпретатору поправь строку;
+- `askpass.py` — `CredReadW` по целям `git:https://itaru-hashida@github.com` и
+  `git:https://github.com`, отдаёт username/пароль по подсказке git. Пароль
+  **только читает** и ничего не сохраняет.
+
+Проверка, что путь жив (ничего не пушит, но проходит полную аутентификацию):
+
+```powershell
+git -c credential.helper= push --dry-run
+# Everything up-to-date
+```
+
+`-c credential.helper=` гасит глобальный `credential.helper=manager`: под
+песочницей он всё равно не работает и печатает по два безобидных
+`sh.exe ... signal pipe` на каждый пуш. Локальным `git config credential.helper ""`
+это **не** лечится — git продолжает брать helper из глобального конфига, гасится
+только опцией в командной строке. Пушить можно и просто `git push`: ошибки `sh`
+в выводе — шум, пуш проходит.
+
+Если askpass пишет «Сохранённый пароль GitHub не найден в хранилище Windows» —
+пароля там нет, его надо положить один раз:
+
+```powershell
+cmdkey /generic:git:https://itaru-hashida@github.com /user:itaru-hashida /pass:<PAT>
+```
+
+Чего не делать: `http.sslVerify=false` (ошибка не в сертификате, не поможет) и
+не вписывать токен в `remote.origin.url` (утечёт в `.git/config`, в `git remote -v`
+и в логи агентов).
 
 ## 4. Архитектура
 
@@ -308,6 +369,7 @@ python -m venv .venv312
 | Копирование всего мира на каждом ходу | Мир грузится из БД несколько раз за ход; лишний `deepcopy` удваивал время загрузки. |
 | Проверка «в памяти» вместо тестов | Логику можно проверить без БД, но `conftest` без `ladybug` не соберётся — не выдавай успешный импорт за рабочий прогон. |
 | Перепутанные ветки | Рабочая ветка — `work`. Если код «не тот», проверь `git status -sb`, прежде чем делать выводы о содержимом репозитория. |
+| Пуш падает под песочницей | `schannel: SEC_E_NO_CREDENTIALS` и `sh.exe ... couldn't create signal pipe` — это не пароль, а песочница: git зовёт credential helper через `sh`, а sh не может форкнуть себя. Лечится `core.askpass` + `http.sslbackend=openssl`, см. §3.4. |
 
 ## 10. Короткий чек-лист перед сдачей шага
 
