@@ -793,6 +793,24 @@ def test_investment_state_caches_flow_balance_for_one_review(engine):
     assert engine._investment_state['flow_balances'][('s', 'grain')] is first
 
 
+def test_investment_state_reserves_labor_resource_and_invalidates_consumers(engine):
+    clear(engine)
+    engine._investment_state = engine.build_investment_state()
+    candidate = project(engine)
+    candidate.update(good='grain', capacity=5,
+        location=dict(state_id='s', province_id='p', city_id='c', tile_id='t'))
+
+    engine.register_investment_project(candidate)
+    state = engine._investment_state
+
+    assert state['labor_reserved'][('s', 'p')] == pytest.approx(
+        5*engine.goods['grain']['labor'])
+    assert state['resource_reserved'][('p', engine.goods['grain']['resource'])] == pytest.approx(5)
+    assert state['supply_revision']['grain'] == 1
+    assert 'grain' in state['dirty_goods']
+    assert 'flour' in state['dirty_goods']
+
+
 def test_candidate_statuses_follow_aggregate_intent_diagnostics(engine):
     candidates = [
         dict(project_id='cloth-project', investor='private:s', good='cloth', province_id='p'),

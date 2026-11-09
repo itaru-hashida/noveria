@@ -459,7 +459,21 @@ class Economy(EconomyServices):
         """
         return dict(index=self.build_investment_index(), supply_cache={}, demand_cache={},
             flow_balances={}, flow_reserved={}, input_reserved=defaultdict(float),
-            upstream_candidates={})
+            labor_reserved=defaultdict(float), resource_reserved=defaultdict(float),
+            supply_revision=defaultdict(int), dirty_goods=set(), upstream_candidates={})
+
+    def reserve_investment_project(self, project):
+        """Применить решение к ledger до обработки следующего инвестора."""
+        state = getattr(self, '_investment_state', None)
+        if state is None:
+            return
+        recipe, loc = self.goods[project['good']], project['location']
+        capacity = project['capacity']
+        state['labor_reserved'][loc['state_id'], loc['province_id']] += capacity*recipe['labor']
+        if recipe['resource']:
+            state['resource_reserved'][loc['province_id'], recipe['resource']] += capacity
+        state['supply_revision'][project['good']] += 1
+        state['dirty_goods'].update(self.recipe_graph()['affected'][project['good']])
 
     def register_investment_project(self, project):
         state = getattr(self, '_investment_state', None)
@@ -468,6 +482,7 @@ class Economy(EconomyServices):
             index['projects'][project['good']].append((dict(project['location']),
                 project['expected_price'], project['capacity']))
             index['project_revision'] += 1
+        self.reserve_investment_project(project)
 
     def investment_flow_balance(self, state_id, good):
         """Вернуть устойчивый месячный поток товара внутри государства.
@@ -2344,8 +2359,10 @@ class Economy(EconomyServices):
         cache_key = None
         if index is not None and demand_cache is not None:
             own_orders = index['buyer_orders'].get((candidate['id'], candidate['good']), ())
-            cache_key = (candidate['good'], candidate['tile_id'], candidate['price'], own_orders,
-                         index['project_revision'])
+            state = getattr(self, '_investment_state', None)
+            revision = (state['supply_revision'][candidate['good']]
+                        if state is not None else index['project_revision'])
+            cache_key = (candidate['good'], candidate['tile_id'], candidate['price'], own_orders, revision)
             cached = demand_cache.get(cache_key)
             if cached is not None:
                 self._investment_demand_cache_hits = getattr(self, '_investment_demand_cache_hits', 0)+1
@@ -2463,9 +2480,14 @@ class Economy(EconomyServices):
             capacity = min(demand, derived_demand[good]) if derived_demand and good in derived_demand else demand
             labor = sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
                 if a['kind'] == 'household' and a['state_id'] == loc['state_id'] and a['province_id'] == pid)
+            state = getattr(self, '_investment_state', None)
+            if state is not None:
+                labor -= state['labor_reserved'][loc['state_id'], pid]
             capacity = min(capacity, labor/recipe['labor'])
             if recipe['resource']:
                 used = sum(e['capacity'] for e in self.enterprises.values() if e['status'] != 'closed' and e['province_id'] == pid and self.goods[e['good']]['resource'] == recipe['resource'])
+                if state is not None:
+                    used += state['resource_reserved'][pid, recipe['resource']]
                 capacity = min(capacity, max(0, len(tiles)*self.cfg['extraction_per_tile']-used))
             if capacity < self.cfg['minimum_capacity']:
                 if diagnostics is not None:
