@@ -2503,21 +2503,23 @@ class Economy(EconomyServices):
         residual = 0.0
         # Та же рабочая книга только для оцениваемого товара.
         cheap = {o['id']: o['remaining'] for o in sells.get(candidate['good'], [])}
-        for order, limit in self.customer_quotes(candidate):
+        for participant, tile_id, order_price, limit, order_remaining, order_reserved in self.customer_demand_groups(candidate):
+            if participant == candidate['id']:
+                continue
             if limit+EPS < candidate['price']:
                 continue
-            buyer = self.accounts[order['participant']]
-            landed = self.landed(candidate['tile_id'], order['tile_id'], candidate['good'], candidate['price'])[0]
-            volume = min(order['remaining'], order['reserved']/landed)
+            buyer = self.accounts[participant]
+            landed = self.landed(candidate['tile_id'], tile_id, candidate['good'], candidate['price'])[0]
+            volume = min(order_remaining, order_reserved/landed)
             for price, sell, _ in self.offers(buyer, candidate['good'], sells):
-                if price > order['price']+EPS:
+                if price > order_price+EPS:
                     continue
                 covered = min(volume, cheap[sell['id']])
                 cheap[sell['id']] -= covered
                 volume -= covered
             for supply in suppliers:
-                quote = self.landed(supply[0]['tile_id'], order['tile_id'], candidate['good'], supply[1])
-                if quote and quote[0] <= order['price']+EPS:
+                quote = self.landed(supply[0]['tile_id'], tile_id, candidate['good'], supply[1])
+                if quote and quote[0] <= order_price+EPS:
                     covered = min(volume, supply[2])
                     supply[2] -= covered
                     volume -= covered
