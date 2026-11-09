@@ -450,8 +450,20 @@ class Economy(EconomyServices):
             projects=projects, buyer_orders={key: tuple(value) for key, value in buyer_orders.items()},
             project_revision=0)
 
+    def build_investment_state(self):
+        """Единый изменяемый ledger одного инвестиционного обзора.
+
+        Снимок рынка неизменяем, а резервы, проекты и рассчитанные потоки
+        принадлежат этому объекту. Поэтому следующий инвестор видит решение
+        предыдущего без нового прохода по миру.
+        """
+        return dict(index=self.build_investment_index(), supply_cache={}, demand_cache={},
+            flow_balances={}, flow_reserved={}, input_reserved=defaultdict(float),
+            upstream_candidates={})
+
     def register_investment_project(self, project):
-        index = getattr(self, '_investment_index', None)
+        state = getattr(self, '_investment_state', None)
+        index = state['index'] if state is not None else getattr(self, '_investment_index', None)
         if index is not None:
             index['projects'][project['good']].append((dict(project['location']),
                 project['expected_price'], project['capacity']))
@@ -464,6 +476,11 @@ class Economy(EconomyServices):
         склад, проекты, отчёт или RNG. Запас товара намеренно не входит в
         баланс — он не является постоянным выпуском для новой мощности.
         """
+        state = getattr(self, '_investment_state', None)
+        key = (state_id, good)
+        if state is not None and key in state['flow_balances']:
+            return state['flow_balances'][key]
+
         def active(firm):
             return (firm['state_id'] == state_id and firm['status'] != 'closed'
                 and not firm.get('suspended')
@@ -508,13 +525,16 @@ class Economy(EconomyServices):
                     demand=demand))
 
         committed = operating_demand+construction_demand
-        return dict(state_id=state_id, good=good, supply=supply,
+        result = dict(state_id=state_id, good=good, supply=supply,
             capacity_supply=capacity_supply,
             operating_demand=operating_demand,
             construction_demand=construction_demand, committed=committed,
             free=max(0, supply-committed), shortage=max(0, committed-supply),
             rampable_free=max(0, capacity_supply-committed),
             suppliers=suppliers, consumers=consumers, projects=projects)
+        if state is not None:
+            state['flow_balances'][key] = result
+        return result
 
     def sustainable_flow_headroom(self, state_id, good, reserved=None, path=(),
                                   flow_balances=None):
@@ -2563,12 +2583,13 @@ class Economy(EconomyServices):
         # Дорогой срез строится лишь для полного либо адресного обзора. Очередь
         # ниже может возобновиться и без него: она смотрит только на офферы.
         if evaluate:
-            self._investment_supply_cache = {}
-            self._investment_index = self.build_investment_index()
-            self._investment_demand_cache = {}
+            self._investment_state = self.build_investment_state()
+            self._investment_supply_cache = self._investment_state['supply_cache']
+            self._investment_index = self._investment_state['index']
+            self._investment_demand_cache = self._investment_state['demand_cache']
             self._investment_demand_cache_hits = self._investment_demand_cache_misses = 0
-            self._investment_input_reserved = defaultdict(float)
-            self._upstream_candidate_cache = {}
+            self._investment_input_reserved = self._investment_state['input_reserved']
+            self._upstream_candidate_cache = self._investment_state['upstream_candidates']
         diagnostic_demands = []
         flow_reserved = {}
         flow_balances = None
@@ -2576,8 +2597,9 @@ class Economy(EconomyServices):
             state_ids = sorted({a['state_id'] for a in self.accounts.values() if a.get('state_id')})
             flow_balances = {(state_id, good): self.investment_flow_balance(state_id, good)
                 for state_id in state_ids for good in self.goods}
+            self._investment_state['flow_balances'].update(flow_balances)
         elif evaluate:
-            flow_balances = {}
+            flow_balances = self._investment_state['flow_balances']
         queue = self.meta.setdefault('investment_queue', [])
         waiting = []
         for item in queue:
@@ -2610,7 +2632,7 @@ class Economy(EconomyServices):
                 flow_candidate = dict(state_id=a['state_id'], good=project['good'],
                     quantity=project['capacity'], project_id=project['project_id'])
                 sustainable_capacity, flow_trial = self.sustainable_candidate_capacity(
-                    flow_candidate, flow_reserved, flow_balances)
+                    flow_candidate, self._investment_state['flow_reserved'], flow_balances)
                 if sustainable_capacity+EPS < project['capacity']:
                     if sustainable_capacity < self.cfg['minimum_capacity']:
                         self.report['investment_decisions'].append(dict(
@@ -2674,6 +2696,7 @@ class Economy(EconomyServices):
                     project = None
             if project:
                 flow_reserved = flow_trial
+                self._investment_state['flow_reserved'] = flow_reserved
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
                     self._investment_input_reserved[input_good] += project['capacity']*ratio
                 evidence = {}
@@ -2708,6 +2731,7 @@ class Economy(EconomyServices):
             self.__dict__.pop('_investment_demand_cache', None)
             self.__dict__.pop('_upstream_candidate_cache', None)
             self.__dict__.pop('_investment_input_reserved', None)
+            self.__dict__.pop('_investment_state', None)
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:

@@ -782,6 +782,17 @@ def test_investment_dirty_is_cached_in_memory_and_persisted_once(engine):
     assert engine.meta['investment_state']['dirty_goods'] == engine.meta['investment_dirty']
 
 
+def test_investment_state_caches_flow_balance_for_one_review(engine):
+    clear(engine)
+    engine._investment_state = engine.build_investment_state()
+
+    first = engine.investment_flow_balance('s', 'grain')
+    second = engine.investment_flow_balance('s', 'grain')
+
+    assert first is second
+    assert engine._investment_state['flow_balances'][('s', 'grain')] is first
+
+
 def test_candidate_statuses_follow_aggregate_intent_diagnostics(engine):
     candidates = [
         dict(project_id='cloth-project', investor='private:s', good='cloth', province_id='p'),
