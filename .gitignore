@@ -11,6 +11,8 @@ tmp/
 *.tmp
 *.temp
 *.py[cod]
+# Бинарные профили cProfile: воспроизводятся прогоном, в репозиторий не нужны.
+*.prof
 audit_results/
 archives/experiments/
 data/*

@@ -10,8 +10,10 @@
 """
 import argparse
 import cProfile
+import contextlib
 import io
 import pstats
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -21,6 +23,24 @@ sys.path.insert(0, str(ROOT))
 
 import scenario_runner as sr  # noqa: E402
 from modules.economy import Economy  # noqa: E402
+
+
+@contextlib.contextmanager
+def workdir(name):
+    """Каталог мира внутри проекта вместо системного временного.
+
+    Системный %TEMP% под песочницей недоступен, а каталог, созданный через
+    mkdtemp(mode=0o700), становится нечитаемым для записи. Прошлый мир нужно
+    снести: load_world строит его с нуля, а не дописывает.
+    """
+    path = ROOT / 'tmp' / name
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 # Функции, входящие в месячный ход. Замеряем их отдельно, чтобы видеть
@@ -82,11 +102,14 @@ def main():
     parser.add_argument('--detail', choices=['none', 'standard', 'deep'], default=None,
                         help='режим отчётности движка; None — как в конфиге')
     parser.add_argument('--top', type=int, default=25)
+    parser.add_argument('--plain', action='store_true',
+                        help='без cProfile и таймеров фаз: честная скорость игры')
+    parser.add_argument('--no-cprofile', action='store_true',
+                        help='таймеры фаз без cProfile: честные доли фаз')
     parser.add_argument('--out', type=Path, default=ROOT / 'audit/_runs')
     args = parser.parse_args()
 
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmp:
+    with workdir('profile_run') as tmp:
         db, service = sr.build_world(args.seed, tmp,
                                      report_detail=args.detail or 'deep')
         try:
@@ -99,15 +122,41 @@ def main():
                 warm_caches(engine, args.warmup)
                 print('прогрев %d мес: %.2fs' % (args.warmup, time.perf_counter() - t0))
 
+            if args.plain:
+                # cProfile честно показывает структуру, но удваивает время:
+                # для вывода «сколько стоит ход» нужен прогон без него.
+                step_times = []
+                t_all = time.perf_counter()
+                for i in range(args.months):
+                    started = time.perf_counter()
+                    report = engine.step()
+                    step_times.append(time.perf_counter() - started)
+                    if i in (0, args.months - 1):
+                        print('месяц %3d: %.2fs  заявок=%d  сделок=%d'
+                              % (report['month'], step_times[-1],
+                                 len(report['orders']), len(report['trades'])), flush=True)
+                wall = time.perf_counter() - t_all
+                mean = sum(step_times) / len(step_times)
+                print()
+                print('=== ИТОГ БЕЗ ПРОФИЛИРОВЩИКА: %d месяцев, seed %d, detail=%s ==='
+                      % (args.months, args.seed, args.detail or 'deep'))
+                print('всего %.1fs, в среднем %.3f s/ход' % (wall, mean))
+                print('быстрейший %.2fs, медленнейший %.2fs, разброс %.2fx'
+                      % (min(step_times), max(step_times),
+                         max(step_times) / max(min(step_times), 1e-9)))
+                return
+
             totals, counts, restore = install_phase_timers()
             profiler = cProfile.Profile()
             step_times = []
             t_all = time.perf_counter()
             for i in range(args.months):
                 started = time.perf_counter()
-                profiler.enable()
+                if not args.no_cprofile:
+                    profiler.enable()
                 report = engine.step()
-                profiler.disable()
+                if not args.no_cprofile:
+                    profiler.disable()
                 step_times.append(time.perf_counter() - started)
                 if i in (0, args.months - 1):
                     print('месяц %3d: %.2fs  заявок=%d  сделок=%d'
@@ -118,8 +167,9 @@ def main():
 
             mean = sum(step_times) / len(step_times)
             print()
-            print('=== ИТОГ: %d месяцев, seed %d, detail=%s ==='
-                  % (args.months, args.seed, args.detail or 'deep'))
+            print('=== ИТОГ: %d месяцев, seed %d, detail=%s%s ==='
+                  % (args.months, args.seed, args.detail or 'deep',
+                     ', без cProfile' if args.no_cprofile else ''))
             print('всего %.1fs, в среднем %.3f s/ход' % (wall, mean))
             print('быстрейший %.2fs, медленнейший %.2fs, разброс %.2fx'
                   % (min(step_times), max(step_times),
@@ -131,6 +181,9 @@ def main():
             for name, seconds in sorted(totals.items(), key=lambda kv: -kv[1]):
                 print('%10.2f %7.1f%% %8d  %s'
                       % (seconds, 100 * seconds / wall, counts[name], name))
+
+            if args.no_cprofile:
+                return
 
             stream = io.StringIO()
             stats = pstats.Stats(profiler, stream=stream).sort_stats('tottime')
