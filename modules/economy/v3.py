@@ -77,7 +77,7 @@ class Economy(EconomyServices):
         for key in ('_market_books', '_landed_cache', '_customer_order_index',
                     '_physical_stock_totals', '_match_observation_count',
                     '_customer_quotes_cache', '_quoted_cost_cache',
-                    '_reference_price_cache'):
+                    '_reference_price_cache', '_unit_cost_cache'):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
         super().reset_report()
@@ -1624,6 +1624,29 @@ class Economy(EconomyServices):
             self._customer_order_index = cache
         return result
 
+    # После клиринга исходные заявки ещё будут отменены, но планирование
+    # следующей фазы должно видеть их состояние на момент закрытия рынка.
+    # Раньше здесь делался deepcopy всего графа диагностических объектов.
+    _PLANNING_ORDER_FIELDS = (
+        'id', 'participant', 'good', 'quantity', 'remaining', 'price', 'side',
+        'purpose', 'status', 'reason', 'expires', 'final_consumption',
+        'state_id', 'province_id', 'tile_id', 'reserved', 'backing',
+        'adaptive_input_budget', 'superseded_by_top_up')
+
+    def _planning_order_snapshot(self, order):
+        """Компактная копия заявки для пострыночного планирования.
+
+        Только скаляры, которые читают offers/customer_quotes/quoted_cost и
+        project_cash_reserve. Вложенные match_observation и пути не нужны.
+        """
+        return {field: order[field] for field in self._PLANNING_ORDER_FIELDS
+                if field in order}
+
+    def _planning_market_snapshot(self, sells):
+        """Снимок книг без рекурсивного копирования диагностических данных."""
+        return {good: [self._planning_order_snapshot(order) for order in orders]
+                for good, orders in sells.items()}
+
     def _customer_quote_index(self, tile_id, good, orders):
         """Доставка от площадки к покупателям без цены производителя."""
         cache = getattr(self, '_customer_quotes_cache', {})
@@ -2012,11 +2035,21 @@ class Economy(EconomyServices):
         return demand
 
     def unit_cost(self, e, sells):
+        source_key = id(sells)
+        key = (source_key, e['id'], e['tile_id'], e['good'],
+            getattr(self, '_market_quote_version', 0))
+        cache = getattr(self, '_unit_cost_cache', {})
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
         recipe = self.goods[e['good']]
         raw = sum(ratio*self.reference_price(e, good, sells) for good, ratio in recipe['inputs'].items())
         wear = sum(quantity*self.reference_price(e, good, sells)
                    for good, quantity in self.equipment_wear(recipe, 1).items())
-        return recipe['labor']*self.cfg['wage']+raw+wear
+        result = recipe['labor']*self.cfg['wage']+raw+wear
+        cache[key] = result
+        self._unit_cost_cache = cache
+        return result
 
     def volume_input_prices(self, e, quantity, sells):
         """Средние доставленные цены входов для объёма производственного плана."""
@@ -3070,8 +3103,9 @@ class Economy(EconomyServices):
         self.record_market()
         if food_trace:
             food_trace.clearing(self, sells)
-        self._planning_orders = copy.deepcopy(self.report['orders'])
-        planning_sells = copy.deepcopy(sells)
+        self._planning_orders = [self._planning_order_snapshot(order)
+            for order in self.report['orders']]
+        planning_sells = self._planning_market_snapshot(sells)
         # Снимок спроса сделан до поздних доходов; остатки заявок больше не блокируют кассу.
         for o in self.report['orders']:
             if o['side'] == 'buy':
