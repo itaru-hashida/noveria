@@ -33,6 +33,7 @@ class EconomyServices:
             bool(tile.get('road')), bool(tile.get('passable', True)))
             for tile in self.tiles.values()))
         self._route_graph_shape = (self.graph.number_of_nodes(), self.graph.number_of_edges())
+        self._route_shape_checked_month = None
         self.accounts = {a['id']: copy.deepcopy(a) for a in accounts or []}
         self.enterprises = {e['id']: copy.deepcopy(e) for e in enterprises or []}
         self.meta = copy.deepcopy(meta) if meta else dict(
@@ -208,9 +209,14 @@ class EconomyServices:
         return e
 
     def path(self, start, end):
-        if (self.graph.number_of_nodes(), self.graph.number_of_edges()) != self._route_graph_shape:
-            # Защита для редактора и тестов, которые меняют graph напрямую.
-            self.invalidate_routes()
+        # ``number_of_edges()`` NetworkX проходит весь граф. Проверять форму
+        # на каждом расчёте доставленной цены превращало путь в O(E). Дороги
+        # штатно инвалидируют кэш явно; эта страховка для редактора нужна лишь
+        # раз в месяц.
+        if self._route_shape_checked_month != self.meta.get('month'):
+            if (self.graph.number_of_nodes(), self.graph.number_of_edges()) != self._route_graph_shape:
+                self.invalidate_routes()
+            self._route_shape_checked_month = self.meta.get('month')
         if start not in self.paths:
             trees = ROUTE_TREE_CACHE.setdefault(self._route_cache_key, {})
             tree = trees.get(start)
@@ -228,6 +234,7 @@ class EconomyServices:
         # записывать его дерево под ключом исходной карты.
         self._route_cache_key = ('runtime', id(self.graph), self.meta.get('month', 0))
         self._route_graph_shape = (self.graph.number_of_nodes(), self.graph.number_of_edges())
+        self._route_shape_checked_month = self.meta.get('month')
 
     def distribute(self, sender, recipients, amount, reason):
         total = sum(self.population(a) for a in recipients)
