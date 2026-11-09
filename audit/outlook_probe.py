@@ -1,8 +1,15 @@
-"""Проба дублирования расчётов планирования: сколько вызовов production_outlook
-и customer_quotes повторяются в пределах одного месяца по одному предприятию.
+"""Проба повторных расчётов и кандидатов на кэш в месячном ходе.
+
+Отвечает на вопросы, которые по одному профилю не решаются:
+  * сколько раз `production_outlook` считается для одной пары
+    (месяц, предприятие) и какое поле ключа кэша мешает попаданию;
+  * сколько стоит каждая группа вызовов `recover_enterprises`;
+  * даёт ли кэш `customer_quotes` / `market_signal` верный ответ — для этого
+    результат сверяется с предыдущим, а не только считается попадание ключа;
+  * сколько раз вызывается `market_signal` при скольких разных ключах.
 
 Запуск:
-    python audit/outlook_probe.py --seed 73129 --months 8 --warmup 2
+    python audit/outlook_probe.py --seed 73129 --months 16 --warmup 4 --detail none
 
 Скрипт ничего не меняет в движке: он оборачивает методы счётчиками и печатает
 статистику. Никакого влияния на расчёт — обёртки вызывают оригинал как есть.
@@ -65,14 +72,15 @@ def main():
     quotes_calls = Counter()
     recover_calls = Counter()
     recover_time = {}
-    quotes_seen = set()
-    quotes_hits = Counter()
-    quotes_same = Counter()
-    quotes_fingerprints = {}
+    memo = {'narrow': dict(calls=0, hits=0, correct=0, last={}, month=None),
+            'full': dict(calls=0, hits=0, correct=0, last={}, month=None)}
     quotes_by_source = Counter()
     signals_calls = [0]
     signals_repeat = [0]
-    signals_seen = set()
+    signals_correct = [0]
+    signals_wrong = [0]
+    signals_month = [None]
+    signals_seen = {}
 
     def recover(self, sells, enterprises=None):
         label = 'полный проход' if enterprises is None else 'одиночное предприятие'
@@ -101,36 +109,66 @@ def main():
     def quotes(self, e, orders=None):
         who = caller_name()
         quotes_calls[who] += 1
-        # Симуляция кэша: тот же ключ, что у _customer_quotes_cache, плюс
-        # версия книги заявок. Ключ НЕ включает remaining/reserved заявок,
-        # поэтому попадания — только верхняя граница: ниже отдельно считаем,
-        # у скольких повторов результат совпал полностью.
+        # Сравниваем два возможных ключа мемоизации customer_quotes.
+        #   узкий — как у _customer_quotes_cache: без состояния заявок;
+        #   полный — плюс всё, что влияет на фильтр и на резервы.
+        # Для каждого считаем попадания и сколько из них ВЕРНЫ (отпечаток
+        # совпал с последним сохранённым под этим ключом).
         source = getattr(self, '_planning_orders', self.report.get('orders', [])) if orders is None else orders
-        key = (id(source), len(source), e['tile_id'], e['good'],
-               getattr(self, '_market_quote_version', 0))
+        base = (id(source), len(source), e['tile_id'], e['good'])
+        narrow = base
+        full = base + (self._demand_revision[e['good']],
+                       getattr(self, '_market_quote_version', 0),
+                       len(self.report['trades']))
         result = original_quotes(self, e, orders)
-        # Отпечаток включает остаток, резерв и статус: тогда совпадение
-        # доказывает, что и отфильтрованный список заявок был бы тем же.
-        fingerprint = tuple((o['id'], o['price']-freight, o['remaining'],
-                             o['reserved'], o['status']) for o, freight in result)
-        if key in quotes_seen:
-            quotes_hits[key] += 1
-            if quotes_fingerprints.get(key) == fingerprint:
-                quotes_same[key] += 1
-        else:
-            quotes_seen.add(key)
-            quotes_fingerprints[key] = fingerprint
+        # customer_quotes возвращает только прошедшие фильтр заявки и их
+        # предельную цену. Значит его результат полностью определяется набором
+        # (id, price-freight): точные remaining/reserved на ответ не влияют,
+        # потому что фильтр смотрит лишь remaining > EPS.
+        fingerprint = tuple((o['id'], o['price']-freight) for o, freight in result)
+        for label, key in (('narrow', narrow), ('full', full)):
+            stat = memo[label]
+            # Кэш живёт один отчётный месяц: id() списка переиспользуется
+            # сборщиком мусора, и без сброса ключи разных месяцев столкнулись
+            # бы, дав ложные «попадания».
+            if stat['month'] != self.meta['month']:
+                stat['month'] = self.meta['month']
+                stat['last'] = {}
+            stat['calls'] += 1
+            if key in stat['last']:
+                stat['hits'] += 1
+                if stat['last'][key] == fingerprint:
+                    stat['correct'] += 1
+                    stat.setdefault('correct_by_caller', Counter())[who] += 1
+                else:
+                    # Важно, КТО получил устаревший ответ: этим определяется,
+                    # можно ли включать кэш только на фазе инвестиций.
+                    stat.setdefault('wrong_by_caller', Counter())[who] += 1
+            stat['last'][key] = fingerprint
         quotes_by_source[id(source)] += 1
         return result
 
     def signal(self, history, state, province, good):
+        # market_history — чистая функция месяца: список пересобирается в
+        # record_market и до этого не меняется. Проверяем кэш так же строго,
+        # как это делал бы движок: сверяем САМ объект истории, а не только id,
+        # и сбрасываем словарь на смене месяца (id переиспользуется).
         signals_calls[0] += 1
-        key = (id(history), len(history), state, province, good)
-        if key in signals_seen:
+        if signals_month[0] != self.meta['month']:
+            signals_month[0] = self.meta['month']
+            signals_seen.clear()
+        key = (state, province, good)
+        entry = signals_seen.get(key)
+        result = original_signal(self, history, state, province, good)
+        fingerprint = tuple(sorted(result.items()))
+        if entry is not None and entry[0] is history:
             signals_repeat[0] += 1
-        else:
-            signals_seen.add(key)
-        return original_signal(self, history, state, province, good)
+            if entry[1] == fingerprint:
+                signals_correct[0] += 1
+            else:
+                signals_wrong[0] += 1
+        signals_seen[key] = (history, fingerprint)
+        return result
 
     Economy.production_outlook = outlook
     Economy.customer_quotes = quotes
@@ -151,12 +189,12 @@ def main():
         quotes_calls.clear()
         recover_calls.clear()
         recover_time.clear()
-        quotes_seen.clear()
-        quotes_hits.clear()
-        quotes_same.clear()
-        quotes_fingerprints.clear()
+        for stat in memo.values():
+            stat.update(calls=0, hits=0, correct=0, last={}, month=None)
         quotes_by_source.clear()
         signals_calls[0] = signals_repeat[0] = 0
+        signals_correct[0] = signals_wrong[0] = 0
+        signals_month[0] = None
         signals_seen.clear()
         t0 = time.perf_counter()
         for _ in range(args.months):
@@ -219,23 +257,33 @@ def main():
     print()
     print('=== customer_quotes ===')
     total_quotes = sum(quotes_calls.values())
-    hits = sum(quotes_hits.values())
-    print('вызовов=%d, повторов того же ключа=%d (%.0f%% можно было бы не считать)'
-          % (total_quotes, hits, 100*hits/max(total_quotes, 1)))
-    same = sum(quotes_same.values())
-    print('из повторов с ПОЛНОСТЬЮ тем же результатом (цена, остаток, резерв, статус): %d (%.0f%% всех вызовов)'
-          % (same, 100*same/max(total_quotes, 1)))
-    print('разных ключей=%d' % len(quotes_seen))
+    print('вызовов=%d' % total_quotes)
+    for label, title in (('narrow', 'узкий ключ (id, len, tile, good)'),
+                         ('full', 'полный (+demand_revision, quote_version, trades)')):
+        stat = memo[label]
+        wrong = stat['hits']-stat['correct']
+        print('  %s: попаданий %d (%.0f%%), из них верных %d, ОШИБОЧНЫХ %d'
+              % (title, stat['hits'], 100*stat['hits']/max(total_quotes, 1),
+                 stat['correct'], wrong))
+        if wrong:
+            print('     устаревший ответ получили: '
+                  + ', '.join('%s=%d' % kv for kv in
+                              stat.get('wrong_by_caller', Counter()).most_common()))
+        print('     верные попадания по вызывающим: '
+              + ', '.join('%s=%d' % kv for kv in
+                          stat.get('correct_by_caller', Counter()).most_common()))
     print('уникальных источников заявок (id списка): %d' % len(quotes_by_source))
     for name, count in quotes_calls.most_common():
         print('  %-28s %8d вызовов' % (name, count))
 
     print()
     print('=== market_signal ===')
-    print('вызовов=%d, повторов того же (history, state, province, good)=%d (%.0f%%)'
+    print('вызовов=%d, повторов по (history, state, province, good)=%d (%.0f%%)'
           % (signals_calls[0], signals_repeat[0],
              100*signals_repeat[0]/max(signals_calls[0], 1)))
-    print('разных ключей=%d' % len(signals_seen))
+    print('из них с тем же результатом: %d, расхождений: %d'
+          % (signals_correct[0], signals_wrong[0]))
+    print('разных ключей за месяц: %d' % len(signals_seen))
 
 
 if __name__ == '__main__':
