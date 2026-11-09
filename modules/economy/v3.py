@@ -1993,7 +1993,9 @@ class Economy(EconomyServices):
 
     def reachable_demand(self, e, sells):
         demand = 0.0
-        remaining = {sell['id']: sell['remaining'] for offers in sells.values() for sell in offers}
+        # Конкуренты важны лишь для товара кандидата: копия всех книг рынка
+        # создавалась тысячи раз при планировании выпуска.
+        remaining = {sell['id']: sell['remaining'] for sell in sells.get(e['good'], [])}
         for order, limit in self.customer_quotes(e):
             if limit+EPS < e['price']:
                 continue
@@ -2403,7 +2405,8 @@ class Economy(EconomyServices):
                 if p and p['good'] == candidate['good']:
                     suppliers.append([dict(p['location']), p['expected_price'], p['capacity']])
         residual = 0.0
-        cheap = {o['id']: o['remaining'] for offers in sells.values() for o in offers}
+        # Та же рабочая книга только для оцениваемого товара.
+        cheap = {o['id']: o['remaining'] for o in sells.get(candidate['good'], [])}
         for order, limit in self.customer_quotes(candidate):
             if limit+EPS < candidate['price']:
                 continue
