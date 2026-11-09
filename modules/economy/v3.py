@@ -76,7 +76,7 @@ class Economy(EconomyServices):
         # лабораторным сценариям, которые вручную начинают следующий месяц.
         for key in ('_market_books', '_landed_cache', '_customer_order_index',
                     '_physical_stock_totals', '_match_observation_count',
-                    '_customer_quotes_cache', '_quoted_cost_cache',
+                    '_customer_quotes_cache', '_customer_demand_groups_cache', '_quoted_cost_cache',
                     '_reference_price_cache', '_unit_cost_cache'):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
@@ -2014,19 +2014,49 @@ class Economy(EconomyServices):
             result.append((o, o['price']-freight))
         return result
 
+    def customer_demand_groups(self, e, orders=None):
+        """Агрегировать одинаковый спрос для оценки нового предложения.
+
+        Реальные заявки и порядок сделок не меняются. Группировка используется
+        только чистым прогнозом reachable_demand.
+        """
+        orders = getattr(self, '_planning_orders', self.report.get('orders', [])) if orders is None else orders
+        key = (id(orders), len(orders), e['tile_id'], e['good'],
+            getattr(self, '_market_quote_version', 0))
+        cache = getattr(self, '_customer_demand_groups_cache', {})
+        entry = cache.get(key)
+        if entry is not None and entry[0] is orders:
+            return entry[1]
+        grouped = {}
+        for order, freight in self._customer_quote_index(e['tile_id'], e['good'], orders):
+            if order['remaining'] <= EPS or order['status'] in ('cancelled', 'expired'):
+                continue
+            limit = order['price']-freight
+            group_key = (order['participant'], order['tile_id'], order['price'], limit)
+            row = grouped.setdefault(group_key, [order['participant'], order['tile_id'],
+                order['price'], limit, 0.0, 0.0])
+            row[4] += order['remaining']
+            row[5] += order['reserved']
+        result = tuple(tuple(row) for row in grouped.values())
+        cache[key] = (orders, result)
+        self._customer_demand_groups_cache = cache
+        return result
+
     def reachable_demand(self, e, sells):
         demand = 0.0
         # Конкуренты важны лишь для товара кандидата: копия всех книг рынка
         # создавалась тысячи раз при планировании выпуска.
         remaining = {sell['id']: sell['remaining'] for sell in sells.get(e['good'], [])}
-        for order, limit in self.customer_quotes(e):
+        for participant, tile_id, order_price, limit, order_remaining, order_reserved in self.customer_demand_groups(e):
+            if participant == e['id']:
+                continue
             if limit+EPS < e['price']:
                 continue
-            buyer = self.accounts[order['participant']]
-            landed = self.landed(e['tile_id'], order['tile_id'], e['good'], e['price'])[0]
-            volume = min(order['remaining'], order['reserved']/landed)
+            buyer = self.accounts[participant]
+            landed = self.landed(e['tile_id'], tile_id, e['good'], e['price'])[0]
+            volume = min(order_remaining, order_reserved/landed)
             for price, sell, _ in self.offers(buyer, e['good'], sells):
-                if sell['participant'] == e['id'] or price >= landed-EPS:
+                if sell['participant'] == e['id'] or price > order_price+EPS or price >= landed-EPS:
                     continue
                 covered = min(volume, remaining[sell['id']])
                 volume -= covered
