@@ -77,9 +77,10 @@ class Economy(EconomyServices):
         for key in ('_market_books', '_landed_cache', '_customer_order_index',
                     '_physical_stock_totals', '_match_observation_count',
                     '_customer_quotes_cache', '_customer_demand_groups_cache', '_quoted_cost_cache',
-                    '_reference_price_cache', '_unit_cost_cache'):
+                    '_reference_price_cache', '_unit_cost_cache', '_production_outlook_cache'):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
+        self._demand_revision = defaultdict(int)
         super().reset_report()
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
@@ -1571,6 +1572,8 @@ class Economy(EconomyServices):
         self.report['orders'].append(o)
         if side == 'sell':
             self.mark_market_quotes_dirty()
+        else:
+            self._demand_revision[good] += 1
         return o
 
     def mark_market_quotes_dirty(self):
@@ -1587,6 +1590,7 @@ class Economy(EconomyServices):
         if order['side'] == 'buy':
             a['reserved'] = max(0, a.get('reserved', 0)-order['reserved'])
             order['reserved'] = 0.0
+            self._demand_revision[order['good']] += 1
         else:
             a['stock_reserved'][order['good']] = max(0, a['stock_reserved'].get(order['good'], 0)-order['remaining'])
             self.mark_market_quotes_dirty()
@@ -1830,6 +1834,7 @@ class Economy(EconomyServices):
             buy['reserved'] += extra
             buy.setdefault('initial_input_limit', buy['price'])
             buy.update(price=price, backing=buy['reserved'])
+            self._demand_revision[buy['good']] += 1
 
     def purchase_quantity(self, buy, sells):
         """Обычный рынок не ограничивает количество сверх самой заявки."""
@@ -1853,6 +1858,7 @@ class Economy(EconomyServices):
                 buy['reserved'] += extra
                 buy.setdefault('initial_limit', buy['price'])
                 buy.update(price=price, backing=buy['reserved'])
+                self._demand_revision[buy['good']] += 1
         options = (self.offers(buyer, buy['good'], sells, local_only=True)
             if local_only else self.offers(buyer, buy['good'], sells))
         observation = self.observe_match(buy, sells, options)
@@ -1916,6 +1922,7 @@ class Economy(EconomyServices):
                     buyer_province=buy['province_id'], seller_province=sell['province_id'],
                     purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
                 sell['status'] = 'filled' if sell['remaining'] <= EPS else 'partial'
+                self._demand_revision[buy['good']] += 1
                 self.mark_market_quotes_dirty()
                 if buy['remaining'] <= EPS:
                     break
@@ -2202,8 +2209,22 @@ class Economy(EconomyServices):
         return result
 
     def production_outlook(self, e, sells=None):
-        e = dict(e)
         sells = sells or defaultdict(list)
+        cache = getattr(self, '_production_outlook_cache', {})
+        cacheable = self.enterprises.get(e.get('id')) is e
+        cache_key = None
+        if cacheable:
+            history = tuple((row.get('sold', 0), row.get('output', 0),
+                             bool(row.get('input_limited'))) for row in e.get('sales_history', [])[-3:])
+            cache_key = (id(sells), e['id'], e['tile_id'], e['good'], e['price'],
+                e.get('production_price'), e['capacity'], e.get('planned_output', 0),
+                self.accounts[e['id']]['stock'].get(e['good'], 0), history,
+                self._demand_revision[e['good']], getattr(self, '_market_quote_version', 0),
+                len(self.report['trades']))
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return cached
+        e = dict(e)
         cost = self.unit_cost(e, sells)
         # Рентабельную текущую цену (включая B2B без налога) повышать не требуется.
         price = e['price'] if self.net_price(e)+EPS >= cost else e.get('production_price', e['price'])
@@ -2237,9 +2258,13 @@ class Economy(EconomyServices):
             target, e['production_limit'] = 0, 'Отрицательная ожидаемая маржа'
         e['planned_output'] = target
         e['input_target_output'] = target
-        return {k: e[k] for k in ('sales_forecast', 'reachable_demand', 'expected_unit_cost',
+        result = {k: e[k] for k in ('sales_forecast', 'reachable_demand', 'expected_unit_cost',
             'expected_price', 'expected_margin', 'production_limit', 'planned_output', 'input_target_output',
             'planned_price', 'expected_fixed_cost', 'expected_fixed_unit')}
+        if cache_key is not None:
+            cache[cache_key] = result
+            self._production_outlook_cache = cache
+        return result
 
     def plan(self, e, history=None, sells=None):
         e.update(self.production_outlook(e, sells))
