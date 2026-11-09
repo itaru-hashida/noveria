@@ -22,8 +22,14 @@ def tuples(value):
     return tuple(tuples(v) for v in value) if isinstance(value, (list, tuple)) else value
 
 
+def _identity(value):
+    """Заглушка вместо deepcopy, когда владение состоянием уже передано."""
+    return value
+
+
 class EconomyServices:
-    def _initialize_state(self, snapshot, tiles, accounts=None, enterprises=None, meta=None):
+    def _initialize_state(self, snapshot, tiles, accounts=None, enterprises=None, meta=None,
+                          copy_state=True):
         self.entities = {e['id']: e for e in snapshot['entities']}
         self.owners = {r['target']: r['source'] for r in snapshot['links'] if r['kind'] == 'owns'}
         self.tiles = {t['id']: t for t in tiles}
@@ -34,9 +40,13 @@ class EconomyServices:
             for tile in self.tiles.values()))
         self._route_graph_shape = (self.graph.number_of_nodes(), self.graph.number_of_edges())
         self._route_shape_checked_month = None
-        self.accounts = {a['id']: copy.deepcopy(a) for a in accounts or []}
-        self.enterprises = {e['id']: copy.deepcopy(e) for e in enterprises or []}
-        self.meta = copy.deepcopy(meta) if meta else dict(
+        # Загрузка из БД получает свежие объекты (json.loads на каждую запись) и
+        # забирает их во владение: повторное deepcopy только удваивало время.
+        # Тесты и внешние вызовы, передающие собственные структуры, копируют.
+        clone = copy.deepcopy if copy_state else _identity
+        self.accounts = {a['id']: clone(a) for a in accounts or []}
+        self.enterprises = {e['id']: clone(e) for e in enterprises or []}
+        self.meta = clone(meta) if meta else dict(
             id='game', version=1, month=0, config=json.loads(CONFIG_PATH.read_text(encoding='utf-8')))
         self.cfg = self.meta['config']
         self.goods = self.cfg['goods']
@@ -45,8 +55,11 @@ class EconomyServices:
     @classmethod
     def _load_state(cls, db):
         metadata = db.economy_records('EconomyMeta')
+        # economy_records декодирует каждую запись заново, поэтому объекты уже
+        # никому не принадлежат: движок забирает их без повторного deepcopy.
         return cls(db.snapshot(), db.tiles(), db.economy_records('EconomyAccount'),
-                   db.economy_records('Enterprise'), metadata[0] if metadata else None)
+                   db.economy_records('Enterprise'), metadata[0] if metadata else None,
+                   copy_state=False)
 
     def reset_report(self):
         self.report = dict(id=str(self.meta['month']), month=self.meta['month'], orders=[], trades=[],
