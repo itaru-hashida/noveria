@@ -347,19 +347,20 @@ class Economy(EconomyServices):
                     price=offer.get('price'))
 
     def mark_investment_dirty(self, good=None):
-        dirty = set(self.meta.get('investment_dirty', []))
-        if good is None:
-            dirty.update(self.goods)
-        else:
-            parents = self.recipe_graph().get('parents', {})
-            pending = [good]
-            while pending:
-                current = pending.pop()
-                if current in dirty:
-                    continue
-                dirty.add(current)
-                pending.extend(parents.get(current, ()))
-        self.meta['investment_dirty'] = sorted(dirty)
+        """Пометить товар и его потребителей для точечного обзора инвестиций."""
+        dirty = getattr(self, '_investment_dirty_goods', None)
+        if dirty is None:
+            dirty = set(self.meta.get('investment_dirty', []))
+            self._investment_dirty_goods = dirty
+        dirty.update(self.goods if good is None else self.recipe_graph()['affected'][good])
+
+    def persist_investment_state(self):
+        """Сериализовать dirty один раз в конце месяца, а не при каждом товаре."""
+        dirty = sorted(getattr(self, '_investment_dirty_goods',
+                              set(self.meta.get('investment_dirty', []))))
+        self.meta['investment_dirty'] = dirty
+        self.meta['investment_state'] = dict(month=self.meta['month'],
+            dirty_goods=dirty, full_reconcile_month=self.meta.get('investment_full_reconcile_month'))
 
     def recipe_graph(self):
         graph = getattr(self, '_recipe_graph_cache', None)
@@ -369,7 +370,17 @@ class Economy(EconomyServices):
             for product, inputs in children.items():
                 for input_good in inputs:
                     parents.setdefault(input_good, set()).add(product)
-            graph = {'parents': parents, 'children': children}
+            affected = {}
+            for source in self.goods:
+                seen, pending = set(), [source]
+                while pending:
+                    current = pending.pop()
+                    if current in seen:
+                        continue
+                    seen.add(current)
+                    pending.extend(parents.get(current, ()))
+                affected[source] = frozenset(seen)
+            graph = {'parents': parents, 'children': children, 'affected': affected}
             self._recipe_graph_cache = graph
         return graph
 
@@ -766,7 +777,6 @@ class Economy(EconomyServices):
         result = super().add_stock(account, good, quantity, value)
         self._update_physical_stock_total(good, before,
             self.accounts[account]['stock'].get(good, 0))
-        self.mark_investment_dirty(good)
         return result
 
     def _update_physical_stock_total(self, good, before, after):
@@ -797,6 +807,11 @@ class Economy(EconomyServices):
     def open_enterprise(self, *args, **kwargs):
         e = super().open_enterprise(*args, **kwargs)
         e.update(cost_of_sales=0, tax=0, wages=0, unviable_months=0)
+        # ``initial`` допустим и позиционно: стартовый мир не должен сам
+        # создавать адресную проверку инвестиций при bootstrap.
+        initial = kwargs.get('initial', args[4] if len(args) > 4 else False)
+        if not initial:
+            self.mark_investment_dirty(e['good'])
         return e
 
     def activate_rules(self):
@@ -994,7 +1009,7 @@ class Economy(EconomyServices):
             prior = province_cache.get('food_stress', 0.0)
             stress = cfg['stress_decay']*prior+(1-cfg['stress_decay'])*effective_shortfall
             province_cache.update(food_stress=stress, last_month=self.meta['month'])
-            births = baseline_deaths = hunger_deaths = 0.0
+            births = baseline_deaths = hunger_deaths = rounding_adjustment = 0.0
             for household in households:
                 group = self.entities[household['group_id']]['properties']
                 count = group['population']
@@ -1002,16 +1017,22 @@ class Economy(EconomyServices):
                 baseline_deaths += count*cfg['base_death_rate']
                 hunger_deaths += count*stress*cfg['hunger_death_rate']
                 group_cache = groups.setdefault(household['group_id'], {})
-                change = (count*(cfg['birth_rate']-cfg['base_death_rate']-stress*cfg['hunger_death_rate'])
-                          + group_cache.get('rounding_carry', 0.0))
+                raw_change = count*(cfg['birth_rate']-cfg['base_death_rate']
+                                    -stress*cfg['hunger_death_rate'])
+                change = raw_change+group_cache.get('rounding_carry', 0.0)
                 delta = math.floor(change) if change >= 0 else math.ceil(change)
                 group_cache['rounding_carry'] = change-delta
                 group['population'] = max(0, count+delta)
+                # Это не потеря населения: население целочисленно, а темп
+                # рождения/смертности дробный. Поправка нужна инварианту,
+                # чтобы отличать округление от необъяснённой мутации.
+                rounding_adjustment += delta-raw_change
             row = dict(province_id=pid, population_before=population,
                 population_after=sum(self.population(a) for a in households), births=births,
                 deaths=baseline_deaths+hunger_deaths, baseline_deaths=baseline_deaths,
                 hunger_deaths=hunger_deaths, food_stress=stress, market_food_shortfall=market_shortfall,
-                protected_by_subsistence=protected, migration_in=0, migration_out=0)
+                protected_by_subsistence=protected, rounding_adjustment=rounding_adjustment,
+                migration_in=0, migration_out=0)
             self.report['demography'].append(row)
             by_province[pid] = row
         self.report['demography_by_province'] = by_province
@@ -1484,7 +1505,6 @@ class Economy(EconomyServices):
         result = super().use_stock(account, good, quantity)
         self._update_physical_stock_total(good, before,
             self.accounts[account]['stock'].get(good, 0))
-        self.mark_investment_dirty(good)
         return result
 
     def order(self, participant, good, quantity, side, price, purpose):
@@ -2371,7 +2391,7 @@ class Economy(EconomyServices):
         return residual
 
     def project_candidate(self, investor, sells, derived_demand=None, demand_region=None,
-                          parent_project_id=None, diagnostics=None):
+                          parent_project_id=None, diagnostics=None, allowed_goods=None):
         candidates = []
         history = self.meta.get('market_history', [])
         index = getattr(self, '_investment_index', None)
@@ -2391,6 +2411,8 @@ class Economy(EconomyServices):
                     markets.add((demand_region, good))
         expansion = self.enterprises.get(investor['id'])
         for pid, good in sorted(markets):
+            if allowed_goods is not None and good not in allowed_goods:
+                continue
             if expansion and (good != expansion['good'] or pid != expansion['province_id']):
                 continue
             loc = {k: expansion[k] for k in ('state_id', 'province_id', 'city_id', 'tile_id')} if expansion else self.location(pid)
@@ -2509,7 +2531,8 @@ class Economy(EconomyServices):
                 # Расширение происходит в провинции самого поставщика;
                 # доставка до верхнего проекта проверяется его маржой.
                 derived_demand={good: shortage}, demand_region=firm['province_id'],
-                parent_project_id=parent_project_id, diagnostics=diagnostics)
+                parent_project_id=parent_project_id, diagnostics=diagnostics,
+                allowed_goods={good})
             if project and project['good'] == good and project['expansion']:
                 candidates.append((account, project))
         result = max(candidates, key=lambda row: row[1]['capacity'], default=None)
@@ -2521,23 +2544,40 @@ class Economy(EconomyServices):
 
     def project_requests(self, sells):
         due = self.meta['month'] % self.cfg['investment_interval'] == 0
-        evaluate = due or bool(self.meta.get('investment_dirty'))
+        dirty_goods = set(getattr(self, '_investment_dirty_goods',
+            self.meta.get('investment_dirty', [])))
+        evaluate = due or bool(dirty_goods)
+        allowed_goods = None if due else dirty_goods
+        if evaluate:
+            # Всё, что возникнет во время этого обзора, относится уже к
+            # следующему месяцу, а не возвращает нас в полный цикл сейчас.
+            self._investment_dirty_goods = set()
+            if due:
+                self.meta['investment_full_reconcile_month'] = self.meta['month']
+        self.report['investment_review'] = dict(
+            mode='full' if due else 'targeted' if evaluate else 'skipped',
+            dirty_goods=sorted(dirty_goods),
+            month=self.meta['month'])
         investors = [a for a in self.accounts.values() if a['kind'] in ('private', 'merchant', 'treasury', 'municipal') or
             (a['kind'] == 'enterprise' and self.enterprises[a['id']]['status'] != 'closed' and self.enterprises[a['id']]['available_from'] <= self.meta['month'])]
-        # Последующие инвесторы учитывают уже объявленные проекты; торгов ещё нет.
-        self._investment_supply_cache = {}
-        self._investment_index = self.build_investment_index()
-        self._investment_demand_cache = {}
-        self._investment_demand_cache_hits = self._investment_demand_cache_misses = 0
-        self._investment_input_reserved = defaultdict(float)
-        self._upstream_candidate_cache = {}
+        # Дорогой срез строится лишь для полного либо адресного обзора. Очередь
+        # ниже может возобновиться и без него: она смотрит только на офферы.
+        if evaluate:
+            self._investment_supply_cache = {}
+            self._investment_index = self.build_investment_index()
+            self._investment_demand_cache = {}
+            self._investment_demand_cache_hits = self._investment_demand_cache_misses = 0
+            self._investment_input_reserved = defaultdict(float)
+            self._upstream_candidate_cache = {}
         diagnostic_demands = []
         flow_reserved = {}
         flow_balances = None
-        if evaluate:
+        if due:
             state_ids = sorted({a['state_id'] for a in self.accounts.values() if a.get('state_id')})
             flow_balances = {(state_id, good): self.investment_flow_balance(state_id, good)
                 for state_id in state_ids for good in self.goods}
+        elif evaluate:
+            flow_balances = {}
         queue = self.meta.setdefault('investment_queue', [])
         waiting = []
         for item in queue:
@@ -2558,7 +2598,8 @@ class Economy(EconomyServices):
                 waiting.append(item)
         queue[:] = waiting
         for a in self.shuffled(investors):
-            project = self.project_candidate(a, sells) if evaluate and 'project' not in a else None
+            project = (self.project_candidate(a, sells, allowed_goods=allowed_goods)
+                if evaluate and 'project' not in a else None)
             if project:
                 demand = dict(state_id=a['state_id'], good=project['good'],
                     quantity=project['capacity'], decision_id=project['project_id'],
@@ -2661,12 +2702,12 @@ class Economy(EconomyServices):
             self.report['investment_candidate_capacity_limits'] = \
                 self.investment_candidate_capacity_limits(self.report['investment_candidates'],
                     flow_balances)
-        self.__dict__.pop('_investment_supply_cache', None)
-        self.__dict__.pop('_investment_index', None)
-        self.__dict__.pop('_investment_demand_cache', None)
-        self.__dict__.pop('_upstream_candidate_cache', None)
-        self.__dict__.pop('_investment_input_reserved', None)
-        self.meta['investment_dirty'] = []
+        if evaluate:
+            self.__dict__.pop('_investment_supply_cache', None)
+            self.__dict__.pop('_investment_index', None)
+            self.__dict__.pop('_investment_demand_cache', None)
+            self.__dict__.pop('_upstream_candidate_cache', None)
+            self.__dict__.pop('_investment_input_reserved', None)
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:
@@ -2752,6 +2793,7 @@ class Economy(EconomyServices):
                 e = self.enterprises[a['id']]
                 e['capacity'] += p['capacity']
                 e['asset_value'] += asset
+                self.mark_investment_dirty(e['good'])
                 self.report['lifecycle'].append(dict(enterprise=e['id'], action='expanded', good=e['good'], capacity_added=p['capacity'], reason='Оплаченное выгодное расширение'))
             else:
                 loc = p['location']
@@ -2838,6 +2880,7 @@ class Economy(EconomyServices):
         self.accounts[e['id']].pop('project', None)
         e.update(status='closed', closed=self.meta['month'], closure_reason='Двенадцать месяцев подряд убыточной работы', reason='Прекращение нежизнеспособной деятельности')
         self.return_capital(e)
+        self.mark_investment_dirty(e['good'])
         self.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'], action='closed', reason=e['reason']))
 
     def settle(self, enterprises, households):
@@ -2888,6 +2931,18 @@ class Economy(EconomyServices):
             row['trade_gold'] += t['gold']
             row['freight'] += t['freight']
         self.meta['market_history'] = (self.meta.get('market_history', [])+[dict(month=self.meta['month'], markets=[dict(state_id=s, province_id=p, good=g, **r) for (s, p, g), r in sorted(rows.items(), key=lambda x: tuple(v or '' for v in x[0]))])])[-3:]
+        # Обычная сделка не запускает инвестиции. Устойчивый платёжеспособный
+        # дефицит помечает лишь товар и его потребителей для следующего месяца.
+        history = self.meta['market_history']
+        for (state_id, province_id, good), row in rows.items():
+            if row['unmet_solvent'] <= EPS:
+                continue
+            repeated = sum(1 for month in history
+                for market in month['markets']
+                if market['state_id'] == state_id and market['province_id'] == province_id
+                and market['good'] == good and market['unmet_solvent'] > EPS)
+            if repeated >= 2:
+                self.mark_investment_dirty(good)
         self.meta['public_orders'] = public
         # Ценовой сигнал отражает исходный бюджет, а не нулевую кассу после покупок.
         # Допокупка заменяет заявки, но не отменяет ещё неудовлетворённую потребность.
@@ -3035,6 +3090,7 @@ class Economy(EconomyServices):
         self.report['stocks'] = self.total_stock()
         self.report['active_enterprises'] = sum(e['status'] == 'active' for e in self.enterprises.values())
         self.report['open_enterprises'] = sum(e['status'] != 'closed' for e in self.enterprises.values())
+        self.persist_investment_state()
         self.meta['rng_state'] = self.rng.getstate()
         self.validate(before)
         if food_trace:
@@ -3067,10 +3123,9 @@ class Economy(EconomyServices):
             raise ValueError('Нарушен баланс переселения')
         for row in demography:
             actual = row['population_after']-row['population_before']
-            expected = row['births']-row['deaths']+row.get('migration_in', 0)-row.get('migration_out', 0)
-            households = sum(a['kind'] == 'household' and a['province_id'] == row['province_id']
-                             for a in self.accounts.values())
-            if abs(actual-expected) > households+EPS:
+            expected = (row['births']-row['deaths']+row.get('rounding_adjustment', 0)
+                        +row.get('migration_in', 0)-row.get('migration_out', 0))
+            if abs(actual-expected) > EPS:
                 raise ValueError('Изменение численности не объяснено')
         for row in migration:
             if (row['people'] <= 0 or self.owners[row['source_province']] != row['state_id']

@@ -44,6 +44,8 @@ def test_demography_smooths_food_stress_and_subsistence_protects_population(engi
     assert row['protected_by_subsistence'] == pytest.approx(25)
     assert row['food_stress'] == pytest.approx(.1125)
     assert engine.entities['h']['properties']['population'] < 100000
+    assert row['population_after']-row['population_before'] == pytest.approx(
+        row['births']-row['deaths']+row['rounding_adjustment'])
     engine.build_causal_events()
     event = next(e for e in engine.report['events'] if e['event_type'] == 'demography.population_change')
     assert event['cause'] == 'food_stress'
@@ -720,7 +722,7 @@ def test_project_requests_publish_candidate_expansion_intents(engine, monkeypatc
     captured = {}
 
     monkeypatch.setattr(engine, 'project_candidate',
-        lambda account, sells: copy.deepcopy(candidate) if account['id'] == investor['id'] else None)
+        lambda account, sells, **_kwargs: copy.deepcopy(candidate) if account['id'] == investor['id'] else None)
     def observe(demands, flow_balances=None):
         captured['demands'] = copy.deepcopy(demands)
         captured['balances'] = flow_balances
@@ -736,6 +738,48 @@ def test_project_requests_publish_candidate_expansion_intents(engine, monkeypatc
     assert ('s', 'flour') in captured['balances']
     assert engine.report['investment_candidates'][0]['project_id'] == 'candidate:bread'
     assert engine.report['expansion_intents'] == [dict(state_id='s', good='flour', required_flow=4)]
+
+
+def test_investment_review_respects_interval_when_nothing_structural_changed(engine, monkeypatch):
+    """Обычные движения склада не должны возвращать полный обзор каждый месяц."""
+    clear(engine)
+    engine.cfg['investment_interval'] = 3
+    engine.meta.update(month=1, investment_dirty=[])
+    engine._investment_dirty_goods = set()
+    calls = []
+    monkeypatch.setattr(engine, 'project_candidate',
+        lambda account, sells, **kwargs: calls.append((account['id'], kwargs)) or None)
+
+    enterprise = firm(engine)
+    engine.add_stock(enterprise['id'], 'bread', 1, 1)
+    engine.use_stock(enterprise['id'], 'bread', 1)
+    engine.project_requests(engine.sell_orders())
+
+    assert calls == []
+    assert engine.report['investment_review']['mode'] == 'skipped'
+
+    engine.meta['month'] = 3
+    engine.project_requests(engine.sell_orders())
+    assert calls
+    assert engine.report['investment_review']['mode'] == 'full'
+
+
+def test_investment_dirty_is_cached_in_memory_and_persisted_once(engine):
+    clear(engine)
+    engine.meta['investment_dirty'] = []
+    engine._investment_dirty_goods = set()
+    graph = engine.recipe_graph()
+
+    engine.mark_investment_dirty('grain')
+
+    assert engine.recipe_graph() is graph
+    assert engine.meta['investment_dirty'] == []
+    assert 'grain' in engine._investment_dirty_goods
+    assert 'flour' in engine._investment_dirty_goods
+
+    engine.persist_investment_state()
+    assert engine.meta['investment_dirty'] == sorted(engine._investment_dirty_goods)
+    assert engine.meta['investment_state']['dirty_goods'] == engine.meta['investment_dirty']
 
 
 def test_candidate_statuses_follow_aggregate_intent_diagnostics(engine):
