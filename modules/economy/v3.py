@@ -1307,14 +1307,21 @@ class Economy(EconomyServices):
         return max(0, a['balance']-a.get('reserved', 0)-hold)
 
     def pay_dividends(self, sells):
+        # Получатели дивидендов — домохозяйства государства фирмы. Раньше они
+        # каждый раз собирались полным перебором счетов: 240 фирм × 462 счёта.
+        # Порядок обхода счетов тот же, поэтому список получателей, а значит и
+        # порядок начисления, совпадает с прежним.
+        households_by_state = {}
+        for a in self.accounts.values():
+            if a['kind'] == 'household':
+                households_by_state.setdefault(a['state_id'], []).append(a)
         for e in self.enterprises.values():
             if e.get('dividend_month') == self.meta['month']:
                 continue
             e.update(dividends=0.0, dividend_month=self.meta['month'])
             if e['status'] == 'closed' or self.accounts[e['owner_id']]['kind'] not in OWNER_KINDS:
                 continue
-            recipients = [a for a in self.accounts.values() if a['kind'] == 'household'
-                and a['state_id'] == e['state_id']] if self.PROFIT_DISTRIBUTION_REVISION else []
+            recipients = households_by_state.get(e['state_id'], []) if self.PROFIT_DISTRIBUTION_REVISION else []
             if self.PROFIT_DISTRIBUTION_REVISION and not sum(self.population(a) for a in recipients):
                 continue
             working = self.working_cash_reserve(e, sells)
