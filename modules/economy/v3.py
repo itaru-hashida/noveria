@@ -2525,36 +2525,55 @@ class Economy(EconomyServices):
                 continue
             last, price = observations[-1], e['price']
             limits = [limit for o, limit in self.customer_quotes(e, self.meta.get('public_orders', [])) if limit > 0]
-            competitors = []
-            for other in self.enterprises.values():
-                if other['id'] == e['id'] or other['good'] != e['good'] or self.accounts[other['id']]['stock'].get(e['good'], 0) <= EPS:
-                    continue
-                quote = self.landed(other['tile_id'], e['tile_id'], e['good'], other['price'])
-                if quote:
-                    competitors.append(quote[0])
             if limits and last['sold'] > EPS and max(limits) > price+EPS:
                 price = min(price*(1+self.rules['price_step']), max(limits))
             elif limits and max(limits) < price-EPS:
                 price = max(price*(1-self.rules['price_step']), max(limits))
-            elif last['sold'] <= EPS and competitors and min(competitors) < price-EPS:
-                price = max(price*(1-self.rules['price_step']), min(competitors))
-            elif last['sold'] <= EPS and competitors and min(competitors) <= price+EPS:
-                a = self.accounts[e['id']]
-                signal = self.market_signal(self.meta.get('market_history', []), a['state_id'], a['province_id'], e['good'])
-                if signal['volume'] > EPS:
-                    price *= 1-self.rules['price_step']
             else:
-                budgets = []
-                for o in self.meta.get('price_feedback', []):
-                    if o['good'] != e['good'] or not o.get('unfunded_need'):
-                        continue
-                    quote = self.landed(e['tile_id'], o['tile_id'], e['good'], price)
-                    if quote:
-                        budgets.append(o['budget_price']-quote[1])
-                declining = len(observations) > 1 and last['sold']+EPS < observations[-2]['sold']
-                if budgets and max(budgets) > 0 and max(budgets) < price-EPS and (declining or last['sold'] <= EPS):
-                    price = max(price*(1-self.rules['price_step']), max(budgets))
+                handled = False
+                if last['sold'] <= EPS:
+                    # Обзор конкурентов нужен только этим двум ветвям. Раньше он
+                    # строился до выбора ветви, то есть и там, где не читался:
+                    # 1280 из 1926 обзоров за 6 месяцев были лишними.
+                    competitors = self._price_competitors(e)
+                    if competitors and min(competitors) < price-EPS:
+                        price = max(price*(1-self.rules['price_step']), min(competitors))
+                        handled = True
+                    elif competitors and min(competitors) <= price+EPS:
+                        # Ветвь выбрана, но цена меняется только при объёме рынка.
+                        handled = True
+                        a = self.accounts[e['id']]
+                        signal = self.market_signal(self.meta.get('market_history', []), a['state_id'], a['province_id'], e['good'])
+                        if signal['volume'] > EPS:
+                            price *= 1-self.rules['price_step']
+                if not handled:
+                    budgets = []
+                    for o in self.meta.get('price_feedback', []):
+                        if o['good'] != e['good'] or not o.get('unfunded_need'):
+                            continue
+                        quote = self.landed(e['tile_id'], o['tile_id'], e['good'], price)
+                        if quote:
+                            budgets.append(o['budget_price']-quote[1])
+                    declining = len(observations) > 1 and last['sold']+EPS < observations[-2]['sold']
+                    if budgets and max(budgets) > 0 and max(budgets) < price-EPS and (declining or last['sold'] <= EPS):
+                        price = max(price*(1-self.rules['price_step']), max(budgets))
             target[price_key] = min(self.rules['maximum_price'], max(self.rules['minimum_price'], price))
+
+    def _price_competitors(self, e):
+        """Доставленные цены конкурентов с положительным запасом того же товара.
+
+        Отдельный метод, чтобы вызов стоял внутри нужной ветви: цены
+        изменяются последовательно, и поздняя фирма должна видеть уже
+        обновлённую цену ранней, поэтому таблицу цен заранее не строим.
+        """
+        competitors = []
+        for other in self.enterprises.values():
+            if other['id'] == e['id'] or other['good'] != e['good'] or self.accounts[other['id']]['stock'].get(e['good'], 0) <= EPS:
+                continue
+            quote = self.landed(other['tile_id'], e['tile_id'], e['good'], other['price'])
+            if quote:
+                competitors.append(quote[0])
+        return competitors
 
     def household_requests(self, households, needs, purpose, sells):
         if self.BASIC_BUDGET_REVISION and purpose == 'Базовые нужды':
