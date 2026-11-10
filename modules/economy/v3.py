@@ -2712,6 +2712,15 @@ class Economy(EconomyServices):
                 cheap[sell['id']] -= covered
                 volume -= covered
             for supply in suppliers:
+                # Спрос этой заявки уже покрыт дешёвым предложением: покрывать
+                # нечего, covered = min(0, ...) = 0, и остатки мощностей не
+                # меняются. Дальше проверять доставку бессмысленно — это 88%
+                # вызовов landed в инвестиционной оценке.
+                if volume <= EPS:
+                    break
+                if supply[2] <= EPS:
+                    # Мощность исчерпана: covered = 0, доставку можно не считать.
+                    continue
                 quote = self.landed(supply[0]['tile_id'], tile_id, candidate['good'], supply[1])
                 if quote and quote[0] <= order_price+EPS:
                     covered = min(volume, supply[2])
