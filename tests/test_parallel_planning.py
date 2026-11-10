@@ -6,6 +6,21 @@ from modules.economy import Economy
 from shadow import agent_planner, agent_snapshot
 
 
+def with_offer(arrays, good, tile, price, quantity):
+    """Добавить один оффер в снимок, сохранив группировку по товарам."""
+    book = {key: value.copy() if isinstance(value, np.ndarray) else value
+            for key, value in arrays.items()}
+    index = int(book['offer_ptr'][good+1])
+    for key, value, dtype in (
+            ('offer_good', good, np.int32),
+            ('offer_tile', tile, np.int32),
+            ('offer_price', price, np.float64),
+            ('offer_remaining', quantity, np.float64)):
+        book[key] = np.insert(book[key], index, value).astype(dtype, copy=False)
+    book['offer_ptr'][good+1:] += 1
+    return book
+
+
 @pytest.fixture
 def market(service):
     service.initialize_economy()
@@ -16,7 +31,7 @@ def market(service):
     return engine, arrays, meta, parameters
 
 
-def test_history_survives_empty_order_book(market):
+def test_history_survives_empty_order_book_without_unsecured_buy(market):
     _, arrays, meta, parameters = market
     agent = meta['firm_good'].index('flour')
     arrays['agent_stock'][agent] = 0
@@ -29,7 +44,13 @@ def test_history_survives_empty_order_book(market):
     assert trace['observed'] == 0
     assert trace['forecast'] == pytest.approx(20)
     assert trace['target'] > 0
-    assert any(i[0] == 'buy' and i[2] > 0 for i in intents)
+    # При пустой книге прогноз не стирается, но планировщик не создаёт
+    # необеспеченную заявку: её всё равно нельзя было бы исполнить.
+    assert not any(i[0] == 'buy' and i[2] > 0 for i in intents)
+    assert trace['reasons'] == [dict(good=meta['good_index']['grain'],
+                                     needed=pytest.approx(33), available=0.0,
+                                     affordable=0.0, bought=0.0, bid=0.0,
+                                     reason='Нет предложения')]
     assert intents[0][5] == trace['target']
 
 
@@ -235,6 +256,45 @@ def test_plan_reports_purchase_reasons_and_respects_wallet(market):
     for row in trace['reasons']:
         assert row['bought'] <= row['needed']+1e-7
         assert row['bought'] <= row['available']+1e-7
+
+
+def test_plan_reports_no_money_when_offer_exists(market):
+    _, arrays, meta, parameters = market
+    agent = meta['firm_good'].index('flour')
+    grain = meta['good_index']['grain']
+    book = with_offer(arrays, grain, int(arrays['agent_tile'][agent]), 1.0, 1000.0)
+    book['agent_stock'][agent] = 0
+    book['agent_available_stock'][agent] = 0
+    book['agent_budget'][agent] = 3.0
+    book['agent_forecast'][agent] = 100
+    book['agent_history_count'][agent] = 1
+    book['agent_history'][agent, 0] = (100, 100, 0)
+    trace = {}
+    intents = agent_planner.plan(book, agent, *parameters, trace=trace)
+    assert not any(intent[0] == 'buy' for intent in intents)
+    assert trace['reasons'][0]['available'] == 1000.0
+    assert trace['reasons'][0]['bought'] == 0.0
+    assert trace['reasons'][0]['reason'] == 'Нет денег на сырьё'
+
+
+def test_plan_reports_partial_volume_without_changing_buy_intent(market):
+    _, arrays, meta, parameters = market
+    agent = meta['firm_good'].index('flour')
+    grain = meta['good_index']['grain']
+    book = with_offer(arrays, grain, int(arrays['agent_tile'][agent]), 1.0, 1.0)
+    book['agent_stock'][agent] = 0
+    book['agent_available_stock'][agent] = 0
+    book['agent_budget'][agent] = 10000.0
+    book['agent_forecast'][agent] = 100
+    book['agent_history_count'][agent] = 1
+    book['agent_history'][agent, 0] = (100, 100, 0)
+    trace = {}
+    intents = agent_planner.plan(book, agent, *parameters, trace=trace)
+    buys = [intent for intent in intents if intent[0] == 'buy']
+    assert buys and buys[0][2] == 1.0
+    assert trace['reasons'][0]['bought'] == 1.0
+    assert trace['reasons'][0]['bought'] < trace['reasons'][0]['needed']
+    assert trace['reasons'][0]['reason'] == 'Ограниченный объём'
 
 
 def test_reusing_market_books_preserves_snapshot_and_input_quotes(market):

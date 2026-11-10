@@ -293,9 +293,23 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
             quantity, bid, available, affordable = input_plan(
                 book, tile, g, wanted, ceilings[g], remaining_cash, rate,
                 rivals=book['input_buyers'][g] if 'input_buyers' in book else 1)
-            if quantity <= EPS or bid <= EPS:
-                continue
-            rows.append((g, quantity, bid, wanted, available, affordable))
+            # Диагностика обязана видеть и несостоявшуюся закупку. Сам intent
+            # ниже всё так же создаётся только для положительного объёма: это
+            # не меняет порядок FIFO и не обещает товар при пустой книге.
+            if quantity <= EPS:
+                if available <= EPS:
+                    purchase_reason = 'Нет предложения'
+                elif remaining_cash <= EPS:
+                    purchase_reason = 'Нет денег на сырьё'
+                elif affordable <= EPS:
+                    purchase_reason = 'Цена выше предела'
+                else:
+                    purchase_reason = 'Нет доступного объёма'
+            elif quantity+EPS < wanted:
+                purchase_reason = 'Ограниченный объём'
+            else:
+                purchase_reason = 'Покрыто'
+            rows.append((g, quantity, bid, wanted, available, affordable, purchase_reason))
             remaining_cash = max(0.0, remaining_cash-quantity*bid)
         return rows
 
@@ -338,8 +352,10 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
                      wage_reserve=target*wage_unit, overhead=overhead,
                      purchases=[(g, quantity, bid) for g, quantity, bid, *_ in purchases],
                      reasons=[dict(good=int(g), needed=needed, available=available,
-                                   affordable=affordable, bought=quantity, bid=bid)
-                              for g, quantity, bid, needed, available, affordable in purchases],
+                                   affordable=affordable, bought=quantity, bid=bid,
+                                   reason=purchase_reason)
+                              for g, quantity, bid, needed, available, affordable,
+                              purchase_reason in purchases],
                      reason=reason, price=sale_price, unit_cost=unit_cost,
                      purchase_cash=purchase_cash, budget=budget)
     return intents
