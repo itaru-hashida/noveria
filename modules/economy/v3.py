@@ -1761,7 +1761,9 @@ class Economy(EconomyServices):
     def _customer_quote_index(self, tile_id, good, orders):
         """Доставка от площадки к покупателям без цены производителя."""
         cache = getattr(self, '_customer_quotes_cache', {})
-        key = (id(orders), len(orders), tile_id, good, self.goods[good]['weight'], self.cfg['transport_rate'])
+        # Вес товара и тариф — константы контента (см. freight_factors) и в ключе
+        # не нужны: их изменение означает перезагрузку движка, а не новый месяц.
+        key = (id(orders), len(orders), tile_id, good)
         entry = cache.get(key)
         result = entry[1] if entry and entry[0] is orders else None
         if result is None:
