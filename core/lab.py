@@ -251,6 +251,31 @@ def compare_experiments(directories, dataset='overview', **filters):
     return rows
 
 
+def live_checkpoint(path):
+    """Найти checkpoint обычного мира или изолированного прогона Lab."""
+    from core.economy_state import default_checkpoint_path
+
+    class _Path:
+        def __init__(self, value):
+            self.path = str(value)
+
+    path = Path(path)
+    adjacent = default_checkpoint_path(_Path(path))
+    # Lab хранит карту как ``world.lbug``, а состояние — в ``economy`` рядом с
+    # ней, чтобы архив можно было переносить единым каталогом.
+    return adjacent if adjacent.exists() else path.parent/'economy'
+
+
+def live_state(path):
+    """Открыть сохранённое состояние экономики для read-only представлений."""
+    checkpoint = live_checkpoint(path)
+    if not checkpoint.exists():
+        return None
+    with WorldDB(path, read_only=True) as db:
+        graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
+    return EconomyState.load_checkpoint(checkpoint, graph, strict=False)
+
+
 def live_reports(path):
     """Месячные отчёты живого мира из его Parquet-checkpoint.
 
@@ -258,18 +283,8 @@ def live_reports(path):
     checkpoint по явному сохранению. Поэтому Live World читает их оттуда же,
     откуда их возьмёт новая сессия.
     """
-    from core.economy_state import default_checkpoint_path
-
-    class _Path:
-        def __init__(self, value):
-            self.path = str(value)
-
-    checkpoint = default_checkpoint_path(_Path(path))
-    if not checkpoint.exists():
-        return []
-    with WorldDB(path, read_only=True) as db:
-        graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
-    return EconomyState.load_checkpoint(checkpoint, graph, strict=False).reports
+    state = live_state(path)
+    return state.reports if state is not None else []
 
 
 def read_live(path, month=None):
@@ -279,11 +294,14 @@ def read_live(path, month=None):
         campaign = db.campaign()
         if not campaign or campaign.get('status') != 'ready':
             raise ValueError('Нет завершённого состояния кампании')
-        reports = live_reports(path)
+        state = live_state(path)
+        reports = state.reports if state is not None else []
         ids = [report['month'] for report in reports if report.get('month', 0) > 0]
         chosen = month if month in ids else ids[-1] if ids else None
         report = next((r for r in reports if r.get('month') == chosen), None) if chosen else None
         return dict(campaign=campaign, months=ids, report=report,
+            accounts=list(state.engine.accounts.values()) if state is not None else [],
+            enterprises=list(state.engine.enterprises.values()) if state is not None else [],
             snapshot=db.snapshot(), tiles=db.tiles(), reports=reports)
 
 

@@ -45,7 +45,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Колонки, которые вынесены в отдельные таблицы: в payload счёта их быть не должно,
 # иначе при восстановлении одно и то же поле пришло бы из двух источников.
@@ -228,20 +228,20 @@ class EconomyState:
             for key, value in identity.items():
                 if key not in payload:
                     payload[key] = value
-            for field in ('reserved', 'protected'):
-                if field not in payload:
-                    payload[field] = row[field] or 0.0
-            if 'stock_reserved' not in payload:
-                payload['stock_reserved'] = {}
-            payload.update(stock={}, values={})
+            # Разрезанные таблицы не должны менять форму исходного словаря:
+            # отсутствие пустого склада отличается от ``stock: {}`` для
+            # сравнения состояний и некоторых сценариев движка.
+            split_fields = payload.pop('_checkpoint_split_fields', ())
+            for field in split_fields:
+                payload[field] = {}
             accounts[row['id']] = payload
         for row in _read(path / 'stocks.parquet', 'stocks'):
             account = accounts.setdefault(row['account_id'], dict(
                 id=row['account_id'], stock={}, values={}))
             quantity, value = (_load(row['data']) if row['data']
                                else (row['quantity'], row['value'] or 0.0))
-            account['stock'][row['good']] = quantity
-            account['values'][row['good']] = value
+            account.setdefault('stock', {})[row['good']] = quantity
+            account.setdefault('values', {})[row['good']] = value
         for row in _read(path / 'reserves.parquet', 'reserves'):
             account = accounts[row['account_id']]
             account.setdefault('stock_reserved', {})[row['good']] = (
@@ -405,6 +405,11 @@ class EconomyState:
         rows, stocks, reserves = [], [], []
         for account in self.engine.accounts.values():
             payload = {key: value for key, value in account.items() if key not in ACCOUNT_SPLIT}
+            # Сами значения лежат в нормализованных таблицах ниже, но список
+            # полей нужен, чтобы восстановить и пустые словари без добавления
+            # ключей, которых в исходном состоянии не было.
+            payload['_checkpoint_split_fields'] = [key for key in ACCOUNT_SPLIT
+                                                  if key in account]
             rows.append(dict(id=account['id'], kind=account.get('kind'),
                              balance=_float(account.get('balance')),
                              state_id=account.get('state_id'), province_id=account.get('province_id'),

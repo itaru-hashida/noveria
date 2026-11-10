@@ -218,6 +218,37 @@ def test_replay_after_checkpoint_matches_continuous_run(tmp_path):
     assert replay == continuous
 
 
+def test_12_and_36_months_keep_one_state_and_replay_exactly(tmp_path):
+    """Приёмка миграции на длинном прогоне, а не только на игрушечном ходе."""
+    db, service = small_world(tmp_path)
+    try:
+        state = service.economy_state()
+        engine = state.engine
+        checkpoint = tmp_path / 'long-run'
+        for month in range(1, 37):
+            service.advance_turn(command_id=f'continuous-{month}', source='test')
+            assert all(state.last_report['invariants'].values())
+            assert service.economy_state() is state
+            assert state.engine is engine
+            if month == 12:
+                state.save_checkpoint(checkpoint)
+        continuous = fingerprint(state)
+        assert state.month == 36
+        assert not set(db.counts()) & set(DYNAMIC_TABLES)
+    finally:
+        db.close()
+
+    with WorldDB(tmp_path / 'world.lbug') as replay_db:
+        replay = WorldService(replay_db, EventBus())
+        restored = EconomyState.load_checkpoint(checkpoint, replay.world_graph())
+        replay.attach_economy(restored)
+        assert restored.month == 12
+        for month in range(13, 37):
+            replay.advance_turn(command_id=f'replay-{month}', source='test')
+            assert all(restored.last_report['invariants'].values())
+        assert fingerprint(restored) == continuous
+
+
 def test_checkpoint_rejects_foreign_world(tmp_path):
     db, service = small_world(tmp_path)
     try:
