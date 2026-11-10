@@ -1682,10 +1682,29 @@ class Economy(EconomyServices):
         if not filled:
             order.update(status='cancelled', reason=reason)
 
+    def freight_factors(self, good):
+        """Вес товара и тариф перевозки — пара для расчёта доставки.
+
+        Оба значения — авторские константы контента: игра их не меняет.
+        Запоминаем их парой, чтобы не ходить в два словаря на каждый из 105
+        тысяч вызовов landed. Произведение НЕ предвычисляется: выражение
+        было ``distance*weight*rate`` и считается слева направо, а
+        ``distance*(weight*rate)`` отличается в последнем бите и разводит
+        траекторию с первого месяца.
+        """
+        factors = self.__dict__.setdefault('_freight_factors', {})
+        pair = factors.get(good)
+        if pair is None:
+            pair = (self.goods[good]['weight'], self.cfg['transport_rate'])
+            factors[good] = pair
+        return pair
+
     def landed(self, seller_tile, buyer_tile, good, price):
         """Полная цена товара по неизменной в течение месяца сети."""
         cache = getattr(self, '_landed_cache', {})
-        key = (seller_tile, buyer_tile, good, self.goods[good]['weight'], self.cfg['transport_rate'])
+        # Ключ из трёх полей: вес и тариф вошли в посчитанную доставку и меняются
+        # только вместе с контентом, то есть с перезагрузкой движка.
+        key = (seller_tile, buyer_tile, good)
         quote = cache.get(key)
         if quote is None:
             distance, path = self.path(seller_tile, buyer_tile)
@@ -1693,7 +1712,8 @@ class Economy(EconomyServices):
                 cache[key] = False
                 self._landed_cache = cache
                 return None
-            quote = (distance*self.goods[good]['weight']*self.cfg['transport_rate'], distance, path)
+            weight, rate = self.freight_factors(good)
+            quote = (distance*weight*rate, distance, path)
             cache[key] = quote
             self._landed_cache = cache
         if quote is False:
