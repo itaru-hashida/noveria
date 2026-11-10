@@ -453,14 +453,19 @@ class WorldDB:
             self._query('UNWIND $rows AS r MATCH (n:Entity {id:r.id}) SET n.properties=r.data', dict(rows=rows))
 
     def update_social_groups(self, values):
-        """Сохраняет изменяемые свойства социальных групп (численность и welfare)."""
-        rows = []
-        for entity in self.snapshot()['entities']:
-            properties = values.get(entity['id'])
-            if entity['kind'] == 'SocialGroup' and properties is not None:
-                rows.append(dict(id=entity['id'], data=encode(properties)))
+        """Сохраняет изменяемые свойства социальных групп (численность и welfare).
+
+        Новые свойства уже лежат в `values`, поэтому полный `snapshot()` здесь
+        не нужен: он читал и декодировал все сущности и все связи мира ради
+        того, чтобы отобрать несколько групп. Запрос сам отбирает существующие
+        узлы нужного типа, поэтому поведение для отсутствующих ID и для других
+        типов прежнее — они молча пропускаются.
+        """
+        rows = [dict(id=entity_id, data=encode(properties))
+                for entity_id, properties in sorted(values.items()) if properties is not None]
         if rows:
-            self._query('UNWIND $rows AS r MATCH (n:Entity {id:r.id}) SET n.properties=r.data', dict(rows=rows))
+            self._query("UNWIND $rows AS r MATCH (n:Entity {id:r.id}) "
+                        "WHERE n.kind='SocialGroup' SET n.properties=r.data", dict(rows=rows))
 
     def fork_to(self, destination):
         """Логическая копия под блокировкой, без копирования открытого файла БД."""
