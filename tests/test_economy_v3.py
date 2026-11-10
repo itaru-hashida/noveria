@@ -21,6 +21,10 @@ def engine():
         resources=['зерно', 'лес', 'железо', 'рыба'], terrain='plain')
     cfg = json.loads(Path('tests/fixtures/economy.json').read_text(encoding='utf-8'))
     result = Economy(dict(entities=entities, links=links), [tile], meta=dict(id='game', version=1, month=0, config=cfg))
+    # Игра работает в none; юнит-тесты здесь проверяют в том числе диагностику
+    # (match_observation, причинные события), поэтому просят полный отчёт явно,
+    # а не полагаются на прежний дефолт движка.
+    result.meta['report_detail'] = 'deep'
     result.seed = 17
     result.rng.seed(17)
     result.bootstrap()

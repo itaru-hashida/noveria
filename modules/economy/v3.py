@@ -67,7 +67,11 @@ class Economy(EconomyServices):
     QUOTE_CACHE = True
 
     def report_detail(self):
-        detail = self.meta.get('report_detail', 'deep')
+        # Игра работает в none: deep добавляет снимок каждой книги и причинный
+        # слой, которые нужны только аудиту и лаборатории. Диагностика не должна
+        # быть платой за каждый ход; тест test_detailed_report_is_a_superset...
+        # подтверждает, что счета, предприятия и сделки в none те же.
+        detail = self.meta.get('report_detail', 'none')
         if detail not in ('none', 'standard', 'deep'):
             raise ValueError('Неизвестная детализация отчёта: '+str(detail))
         return detail

@@ -426,8 +426,10 @@ class EconomyServices:
                 reason='Изменение денег: зарплаты и доходы минус покупки и доставка; дефицит: остаток неисполненной корзины'))
 
     def save(self, db, include_month=None):
+        # Игра по умолчанию none и не пишет EconomyMonth: это тяжёлая запись
+        # полного отчёта месяца, нужная аудиту и лаборатории, а не ходу.
         if include_month is None:
-            include_month = self.meta.get('report_detail', 'deep') != 'none'
+            include_month = self.meta.get('report_detail', 'none') != 'none'
         for institution in getattr(self, 'pending_institutions', []):
             db.create_entity(institution['id'], 'Institution', institution['name'], institution['properties'])
             db.put_link(institution['id'], institution['properties']['state_id'], 'institution_of')
