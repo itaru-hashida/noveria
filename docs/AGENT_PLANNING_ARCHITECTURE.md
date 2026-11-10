@@ -238,20 +238,31 @@ executor.map(...)  →  список результатов в порядке В
 |---|---|---|
 | `executor.map` | `[1, 2, 3]` | порядок входа, FIFO потерян |
 | `as_completed` | `[3, 2, 1]` | порядок готовности |
-| `Queue` + `put` из worker-а | `[3, 2, 1]` | порядок готовности |
+| callback + очередь в родителе | `[3, 2, 1]` | порядок готовности |
 
-Нужен producer/callback, выполняющий атомарный `queue.put(intent)` **сразу**
-после завершения `plan()`:
+### Где стоит `put`
+
+**Worker только возвращает intent. В очередь его кладёт родитель — в callback,
+который срабатывает в момент завершения worker-а.**
 
 ```text
 ProcessPoolExecutor
-    ↓ worker завершился
-callback / result handler
-    ↓ немедленный queue.put()
-FIFO IntentQueue
+    ↓ worker завершился, вернул intent
+add_done_callback / result handler      (в родительском процессе)
+    ↓ немедленный intent_queue.put(intent)
+FIFO IntentQueue                        (живёт только в родителе)
     ↓
 MarketExecutor: intent = queue.get(); outcome = execute(intent)
 ```
+
+Очередь **не передаётся** в дочерние процессы: там нет ни `put`, ни общего
+состояния, и это принципиально — handoff требует не исполнять ledger из
+worker-ов. Родитель — единственный владелец порядка.
+
+Проверено (`tmp/mp_probe/fifo_callback.py`): вход `[1, 2, 3]`, задержки
+`0.30 / 0.15 / 0.01 s`. Порядок поступления `[3, 2, 1]`, первая заявка забрана
+в 0,146 s, последняя в 0,422 s — то есть клиринг исполнял первую, пока
+остальные ещё планировали. Это и есть streaming, а не `gather → sort → process`.
 
 Пока очередь пуста, executor ждёт новые заявки через long polling. Окно
 закрытия нужно **только** для перехода к следующей фазе, а не для
@@ -259,17 +270,18 @@ MarketExecutor: intent = queue.get(); outcome = execute(intent)
 закрытие; агенты, не успевшие подать намерение, фиксируются как `timeout` и в
 этом месяце не торгуют.
 
-### Грабли передачи очереди (Windows/spawn)
+### Требования к `plan()` под такую схему
 
-`multiprocessing.Queue` **нельзя** передать аргументом задачи:
-
-```text
-RuntimeError: Queue objects should only be shared between processes through inheritance
-```
-
-Очередь передаётся наследованием при создании процесса — то есть
-`initializer`/`initargs` пула. Проверено (`tmp/mp_probe/streaming_fifo.py`):
-порядок поступления `[3, 2, 1]`, время в очереди монотонно растёт.
+- `plan()` **чистая**: возвращает intent как обычное значение, ничего не пишет
+  в очередь и не трогает общее состояние;
+- никаких `multiprocessing.Queue` в аргументах задачи. Передача очереди в
+  дочерний процесс упирается в
+  `RuntimeError: Queue objects should only be shared between processes through inheritance`,
+  а передача через `initializer` хотя и возможна, но ставит `put` в worker,
+  то есть очередь начинает зависеть от чужого состояния — противно границе
+  handoff;
+- `ProcessPoolExecutor` сам создаёт `mp.Pipe` для wakeup, поэтому патч канала
+  из `docs/SANDBOX_MULTIPROCESSING.md` обязателен **до** создания пула.
 
 ### Что пишется в отчёт shadow-режима
 
