@@ -2423,7 +2423,8 @@ class Economy(EconomyServices):
         e = dict(e)
         cost = self.unit_cost(e, sells)
         # Рентабельную текущую цену (включая B2B без налога) повышать не требуется.
-        price = e['price'] if self.net_price(e)+EPS >= cost else e.get('production_price', e['price'])
+        base_net = self.net_price(e)
+        price = e['price'] if base_net+EPS >= cost else e.get('production_price', e['price'])
         quote = dict(e, price=price)
         observations = e.get('sales_history', [])[-3:]
         own = sum(h['sold'] for h in observations)/len(observations) if observations else e['sales_forecast']
@@ -2436,7 +2437,8 @@ class Economy(EconomyServices):
         expected_sales = self.expected_stock_sales(e, sells) if self.STOCK_PLANNING_REVISION else 0.0
         projected_stock = max(0, stock-expected_sales)
         e.update(sales_forecast=forecast, reachable_demand=demand,
-            expected_unit_cost=cost, expected_price=self.net_price(quote), planned_price=price)
+            expected_unit_cost=cost, expected_price=(base_net if price == e['price']
+                else self.net_price(quote)), planned_price=price)
         target = max(0, min(e['capacity'], forecast-projected_stock))
         previous = e.get('planned_output', 0)
         # При обычном падении спроса мощность сокращается постепенно. Если склад
