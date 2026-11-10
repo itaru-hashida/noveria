@@ -3252,7 +3252,6 @@ class Economy(EconomyServices):
             e['profit'] = e['revenue']-e['tax']-e['expenses']
             e['loss_months'] = e['loss_months']+1 if e['profit'] < -EPS else 0
             e['profitable_months'] = e['profitable_months']+1 if e['profit'] > EPS else 0
-            sold = sum(t['quantity'] for t in self.report['trades'] if t['seller'] == e['id'])
             if e['status'] == 'closed':
                 self.return_capital(e)
                 continue
@@ -3403,17 +3402,32 @@ class Economy(EconomyServices):
                 self.use_stock(a['id'], good, consumed)
                 need.update(consumed=consumed, deficit=need['needed']-consumed)
                 self.report['consumed'][good] = self.report['consumed'].get(good, 0)+consumed
+        # История продаж собирается одним проходом по книгам и сделкам. Раньше
+        # для каждой фирмы заново перебирались все заявки месяца, а для каждого
+        # слота склада — все сделки: 1,7 млн итераций за ход при 230 фирмах.
+        # Слагаемые по-прежнему складываются встроенным sum: в Python 3.12 он
+        # суммирует float с компенсацией погрешности, и простое накопление в
+        # словаре дало бы расхождение в последнем знаке, а оно меняет траекторию.
+        offers_by_firm = {}
+        for o in self.report['orders']:
+            if o['side'] != 'sell':
+                continue
+            offers_by_firm.setdefault((o['participant'], o['good']), []).append(o)
         for e in self.enterprises.values():
-            offers = [o for o in self.report['orders'] if o['side'] == 'sell' and o['participant'] == e['id'] and o['good'] == e['good']]
-            sold = sum(o['quantity']-o['remaining'] for o in offers)
-            e['sales_history'] = (e.get('sales_history', [])+[dict(month=self.meta['month'], sold=sold,
-                offered=sum(o['quantity'] for o in offers), output=e['output'], input_limited=e.get('input_limited', False),
+            offers = offers_by_firm.get((e['id'], e['good']), ())
+            e['sales_history'] = (e.get('sales_history', [])+[dict(month=self.meta['month'],
+                sold=sum(o['quantity']-o['remaining'] for o in offers),
+                offered=sum(o['quantity'] for o in offers), output=e['output'],
+                input_limited=e.get('input_limited', False),
                 additional_demand=e.get('reachable_demand', 0) > EPS)])[-3:]
+        trades_by_account = {}
+        for t in self.report['trades']:
+            trades_by_account.setdefault((t['seller'], t['good']), []).append(t['quantity'])
         for a in self.accounts.values():
             for good in a['stock']:
                 history = a.setdefault('stock_sales_history', {}).get(good, [])
-                sold = sum(t['quantity'] for t in self.report['trades'] if t['seller'] == a['id'] and t['good'] == good)
-                a['stock_sales_history'][good] = (history+[dict(sold=sold)])[-3:]
+                a['stock_sales_history'][good] = (history+[dict(sold=sum(
+                    trades_by_account.get((a['id'], good), ())))])[-3:]
             hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
             a['protected'] = min(a['balance'], hold)
         self.settle(list(self.enterprises.values()), households)
