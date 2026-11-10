@@ -82,6 +82,10 @@ class Economy(EconomyServices):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
         self._demand_revision = defaultdict(int)
+        # Месячные счётчики: версии книг по товару и число сделок по продавцу.
+        self._market_quote_versions = defaultdict(int)
+        self._market_quotes_epoch = 0
+        self._trades_by_seller = defaultdict(int)
         super().reset_report()
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
@@ -1386,7 +1390,7 @@ class Economy(EconomyServices):
             offer['backing'] -= take
             account['stock_reserved'][good] = max(0, account['stock_reserved'].get(good, 0)-take)
             release -= take
-            self.mark_market_quotes_dirty()
+            self.mark_market_quotes_dirty(good)
             if offer['remaining'] <= EPS:
                 self.cancel_order(offer, 'Материалы закреплены за городской стройкой')
         assign = min(wanted, self.free_stock(account['id'], good))
@@ -1572,14 +1576,26 @@ class Economy(EconomyServices):
             a.setdefault('stock_reserved', {})[good] = a.get('stock_reserved', {}).get(good, 0)+quantity
         self.report['orders'].append(o)
         if side == 'sell':
-            self.mark_market_quotes_dirty()
+            self.mark_market_quotes_dirty(good)
         else:
             self._demand_revision[good] += 1
         return o
 
-    def mark_market_quotes_dirty(self):
-        """Сбросить точные котировки после изменения доступного предложения."""
+    def mark_market_quotes_dirty(self, good=None):
+        """Сбросить точные котировки после изменения доступного предложения.
+
+        Версия ведётся и общая, и по товару. Общая нужна кэшам, которые
+        смотрят на книгу целиком; по товару — прогнозу выпуска, которому важны
+        только книги его входов и его собственного товара. Без этого сделка по
+        рыбе сбрасывала расчёт хлебопекарни, и кэш почти не попадал.
+        """
         self._market_quote_version = getattr(self, '_market_quote_version', 0)+1
+        versions = self.__dict__.setdefault('_market_quote_versions', defaultdict(int))
+        if good is None:
+            # Полная инвалидация: книгу пересобрали целиком, точечных версий мало.
+            self._market_quotes_epoch = getattr(self, '_market_quotes_epoch', 0)+1
+        else:
+            versions[good] += 1
         self.__dict__.pop('_quoted_cost_cache', None)
         self.__dict__.pop('_reference_price_cache', None)
 
@@ -1594,7 +1610,7 @@ class Economy(EconomyServices):
             self._demand_revision[order['good']] += 1
         else:
             a['stock_reserved'][order['good']] = max(0, a['stock_reserved'].get(order['good'], 0)-order['remaining'])
-            self.mark_market_quotes_dirty()
+            self.mark_market_quotes_dirty(order['good'])
         if not filled:
             order.update(status='cancelled', reason=reason)
 
@@ -1924,7 +1940,11 @@ class Economy(EconomyServices):
                     purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
                 sell['status'] = 'filled' if sell['remaining'] <= EPS else 'partial'
                 self._demand_revision[buy['good']] += 1
-                self.mark_market_quotes_dirty()
+                # Прогнозу выпуска нужны только свои сделки. Раньше ключ кэша
+                # содержал len(report['trades']), то есть зависел от сделки
+                # любой фирмы мира, и запись сбрасывалась почти на каждом шаге.
+                self._trades_by_seller[sell['participant']] += 1
+                self.mark_market_quotes_dirty(buy['good'])
                 if buy['remaining'] <= EPS:
                     break
             if buy['remaining'] <= EPS:
@@ -2209,6 +2229,25 @@ class Economy(EconomyServices):
         self._stock_sales_cache = cache
         return result
 
+    def _outlook_quote_versions(self, e):
+        """Версии книг только тех товаров, от которых зависит прогноз выпуска.
+
+        Предприятие покупает входы и продаёт один товар, поэтому сделка по
+        чужому товару не меняет ни себестоимость, ни достижимый спрос. Набор
+        товаров задан рецептом и не меняется внутри игры, поэтому его можно
+        запомнить: он не часть месячного состояния.
+        """
+        goods = self.__dict__.setdefault('_outlook_goods', {}).get(e['good'])
+        if goods is None:
+            recipe = self.goods[e['good']]
+            goods = tuple(sorted(set(recipe['inputs'])
+                                 | set(self.equipment_requirements(recipe, 1)) | {e['good']}))
+            self._outlook_goods[e['good']] = goods
+        versions = self.__dict__.get('_market_quote_versions')
+        epoch = getattr(self, '_market_quotes_epoch', 0)
+        # Полная пересборка книги поднимает epoch и сбрасывает точечные версии.
+        return (epoch, tuple(versions.get(good, 0) for good in goods) if versions else ())
+
     def production_outlook(self, e, sells=None):
         sells = sells or defaultdict(list)
         cache = getattr(self, '_production_outlook_cache', {})
@@ -2220,8 +2259,8 @@ class Economy(EconomyServices):
             cache_key = (id(sells), e['id'], e['tile_id'], e['good'], e['price'],
                 e.get('production_price'), e['capacity'], e.get('planned_output', 0),
                 self.accounts[e['id']]['stock'].get(e['good'], 0), history,
-                self._demand_revision[e['good']], getattr(self, '_market_quote_version', 0),
-                len(self.report['trades']))
+                self._demand_revision[e['good']], self._outlook_quote_versions(e),
+                self._trades_by_seller[e['id']])
             cached = cache.get(cache_key)
             if cached is not None:
                 return cached
@@ -2911,7 +2950,7 @@ class Economy(EconomyServices):
                     offer['backing'] -= take
                     a['stock_reserved'][g] = max(0, a['stock_reserved'].get(g, 0)-take)
                     release -= take
-                    self.mark_market_quotes_dirty()
+                    self.mark_market_quotes_dirty(g)
                     if offer['remaining'] <= EPS:
                         self.cancel_order(offer, 'Материалы закреплены за собственной стройкой')
                 assign = min(max(0, quantity-held), self.free_stock(a['id'], g))

@@ -50,8 +50,10 @@ def key_components(engine, e, sells):
                 planned_output=e.get('planned_output', 0),
                 stock=engine.accounts[e['id']]['stock'].get(e['good'], 0),
                 history=history, demand_revision=engine._demand_revision[e['good']],
-                quote_version=getattr(engine, '_market_quote_version', 0),
-                trades=len(engine.report['trades']))
+                # Версии книг только по товарам этого рецепта: сделка по чужому
+                # товару прогноз не меняет (см. _outlook_quote_versions).
+                quote_versions=engine._outlook_quote_versions(e),
+                own_trades=engine._trades_by_seller.get(e['id'], 0))
 
 
 def main():
