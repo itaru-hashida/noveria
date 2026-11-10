@@ -2159,13 +2159,13 @@ class Economy(EconomyServices):
             limit = order['price']-freight
             group_key = (order['participant'], order['tile_id'], order['price'], limit)
             row = grouped.setdefault(group_key, [order['participant'], order['tile_id'],
-                order['price'], limit, 0.0])
-            landed = self.landed(e['tile_id'], order['tile_id'], e['good'], e['price'])[0]
+                order['price'], limit, freight, 0.0])
+            landed = e['price']+freight
             # Solvency belongs to an individual order.  Summing quantity and
             # money separately can let one order's cash fund another order's
             # unfunded quantity: min(sum(q), sum(cash) / price) !=
             # sum(min(q, cash / price)).
-            row[4] += min(order['remaining'], order['reserved']/max(landed, EPS))
+            row[5] += min(order['remaining'], order['reserved']/max(landed, EPS))
         result = tuple(tuple(row) for row in grouped.values())
         cache[key] = (orders, result)
         self._customer_demand_groups_cache = cache
@@ -2176,13 +2176,13 @@ class Economy(EconomyServices):
         # Конкуренты важны лишь для товара кандидата: копия всех книг рынка
         # создавалась тысячи раз при планировании выпуска.
         remaining = {sell['id']: sell['remaining'] for sell in sells.get(e['good'], [])}
-        for participant, tile_id, order_price, limit, volume in self.customer_demand_groups(e):
+        for participant, tile_id, order_price, limit, freight, volume in self.customer_demand_groups(e):
             if participant == e['id']:
                 continue
             if limit+EPS < e['price']:
                 continue
             buyer = self.accounts[participant]
-            landed = self.landed(e['tile_id'], tile_id, e['good'], e['price'])[0]
+            landed = e['price']+freight
             for price, sell, _ in self.offers(buyer, e['good'], sells):
                 if sell['participant'] == e['id'] or price > order_price+EPS or price >= landed-EPS:
                     continue
@@ -2229,7 +2229,7 @@ class Economy(EconomyServices):
         for order, limit in self.customer_quotes(e):
             if limit+EPS < e['price']:
                 continue
-            landed = self.landed(e['tile_id'], order['tile_id'], e['good'], e['price'])[0]
+            landed = e['price']+(order['price']-limit)
             volume = min(order['remaining'], order['reserved']/max(landed, EPS))
             quantity += volume
             if order.get('final_consumption'):
@@ -2635,13 +2635,12 @@ class Economy(EconomyServices):
         residual = 0.0
         # Та же рабочая книга только для оцениваемого товара.
         cheap = {o['id']: o['remaining'] for o in sells.get(candidate['good'], [])}
-        for participant, tile_id, order_price, limit, volume in self.customer_demand_groups(candidate):
+        for participant, tile_id, order_price, limit, freight, volume in self.customer_demand_groups(candidate):
             if participant == candidate['id']:
                 continue
             if limit+EPS < candidate['price']:
                 continue
             buyer = self.accounts[participant]
-            landed = self.landed(candidate['tile_id'], tile_id, candidate['good'], candidate['price'])[0]
             for price, sell, _ in self.offers(buyer, candidate['good'], sells):
                 if price > order_price+EPS:
                     continue
