@@ -1,5 +1,6 @@
 """Экономика V3: обеспеченные заявки, реальные расходы и один выпуск за месяц."""
 import copy
+import heapq
 import math
 from collections import defaultdict
 
@@ -78,7 +79,7 @@ class Economy(EconomyServices):
                     '_physical_stock_totals', '_match_observation_count',
                     '_customer_quotes_cache', '_customer_demand_groups_cache', '_quoted_cost_cache',
                     '_reference_price_cache', '_unit_cost_cache', '_production_outlook_cache',
-                    '_market_signal_cache', '_route_order_components'):
+                    '_market_signal_cache', '_route_order_components', '_market_source_index'):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
         self._demand_revision = defaultdict(int)
@@ -1784,12 +1785,27 @@ class Economy(EconomyServices):
                 self._record_market_board(entry, buyer, good)
             return entry
 
-        options = []
-        for sell in self._orders_in_route_component(sell_list, self.market_tile(buyer)):
-            quote = self.landed(sell['tile_id'], self.market_tile(buyer), good, sell['price'])
-            if quote:
-                options.append((quote[0], sell, quote))
-        options.sort(key=lambda item: (item[0], item[1]['id']))
+        buyer_tile = self.market_tile(buyer)
+        if len(sell_list) < 1000:
+            options = []
+            for sell in self._orders_in_route_component(sell_list, buyer_tile):
+                quote = self.landed(sell['tile_id'], buyer_tile, good, sell['price'])
+                if quote:
+                    options.append((quote[0], sell, quote))
+            options.sort(key=lambda item: (item[0], item[1]['id']))
+        else:
+            streams = []
+            for source_tile, source_sells in self._market_source_groups(sell_list, buyer_tile):
+                freight = self.landed(source_tile, buyer_tile, good, 0)
+                if freight is None:
+                    continue
+                stream = []
+                for sell in source_sells:
+                    quote = (sell['price']+freight[1], freight[1], freight[2], freight[3])
+                    stream.append(((quote[0], sell['id']), quote[0], sell, quote))
+                streams.append(stream)
+            options = [(price, sell, quote)
+                       for _, price, sell, quote in heapq.merge(*streams, key=lambda item: item[0])]
         entry = dict(source=sell_list, options=options,
             quotes={sell['id']: quote for _, sell, quote in options},
             board_id=None, first_live=0)
@@ -1798,6 +1814,32 @@ class Economy(EconomyServices):
         if record:
             self._record_market_board(entry, buyer, good)
         return entry
+
+    def _market_source_groups(self, sell_list, destination_tile):
+        """Отсортированные потоки офферов по площадкам продавцов.
+
+        Цена внутри одной площадки уже отсортирована по цене продавца и ID.
+        Доставка добавляет площадке одну и ту же константу, поэтому потоки
+        можно сливать кучей, не сортируя общий список заново для каждого рынка.
+        """
+        cache = getattr(self, '_market_source_index', {})
+        key = (id(sell_list), len(sell_list))
+        entry = cache.get(key)
+        groups = entry[1] if entry is not None and entry[0] is sell_list else None
+        if groups is None:
+            by_tile = defaultdict(list)
+            for sell in sell_list:
+                by_tile[sell['tile_id']].append(sell)
+            by_component = defaultdict(list)
+            for source_tile, source_sells in by_tile.items():
+                component = self.route_component(source_tile)
+                by_component[component].append((source_tile, tuple(sorted(
+                    source_sells, key=lambda sell: (sell['price'], sell['id'])))))
+            groups = {component: tuple(source_rows)
+                      for component, source_rows in by_component.items()}
+            cache[key] = (sell_list, groups)
+            self._market_source_index = cache
+        return groups.get(self.route_component(destination_tile), ())
 
     def invalidate_market_books(self):
         """Явно сбросить книги после изменения цены, тайла или состава офферов.
