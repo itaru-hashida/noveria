@@ -559,6 +559,66 @@ class Economy(EconomyServices):
             state['flow_balances'][key] = result
         return result
 
+    def investment_flow_balances(self, state_ids):
+        """Построить все устойчивые потоки одним проходом по миру.
+
+        Полный инвестиционный обзор требует каждую пару ``государство ×
+        товар``. Вызывать для неё ``investment_flow_balance`` отдельно значит
+        повторно проходить все предприятия и проекты. Здесь сохраняется тот же
+        диагностический состав строк, но предприятия и проекты читаются по
+        одному разу.
+        """
+        state_ids = tuple(state_ids)
+        balances = {(state_id, good): dict(
+            state_id=state_id, good=good, supply=0.0, capacity_supply=0.0,
+            operating_demand=0.0, construction_demand=0.0, committed=0.0,
+            free=0.0, shortage=0.0, rampable_free=0.0,
+            suppliers=[], consumers=[], projects=[])
+            for state_id in state_ids for good in self.goods}
+
+        for firm in self.enterprises.values():
+            state_id = firm['state_id']
+            if state_id not in state_ids or firm['status'] == 'closed' or firm.get('suspended') \
+                    or firm['available_from'] > self.meta['month']:
+                continue
+            history = firm.get('sales_history', [])[-3:]
+            actual = max((row.get('output', 0) for row in history), default=0)
+            output = min(firm['capacity'], max(0, firm.get('planned_output', 0), actual))
+            own = balances[state_id, firm['good']]
+            own['supply'] += output
+            own['capacity_supply'] += firm['capacity']
+            own['suppliers'].append(dict(enterprise_id=firm['id'], output=output,
+                capacity=firm['capacity']))
+            for input_good, ratio in self.goods[firm['good']]['inputs'].items():
+                demand = output*ratio
+                row = balances[state_id, input_good]
+                row['operating_demand'] += demand
+                row['consumers'].append(dict(enterprise_id=firm['id'], output=output,
+                    ratio=ratio, demand=demand))
+
+        for account in self.accounts.values():
+            project = account.get('project')
+            state_id = account.get('state_id')
+            if not project or state_id not in state_ids:
+                continue
+            for input_good, ratio in self.goods[project['good']]['inputs'].items():
+                demand = project['capacity']*ratio
+                row = balances[state_id, input_good]
+                row['construction_demand'] += demand
+                row['projects'].append(dict(project_id=project.get('project_id'),
+                    investor=account['id'], good=project['good'], ratio=ratio,
+                    demand=demand))
+
+        for row in balances.values():
+            row['committed'] = row['operating_demand']+row['construction_demand']
+            row['free'] = max(0, row['supply']-row['committed'])
+            row['shortage'] = max(0, row['committed']-row['supply'])
+            row['rampable_free'] = max(0, row['capacity_supply']-row['committed'])
+        state = getattr(self, '_investment_state', None)
+        if state is not None:
+            state['flow_balances'].update(balances)
+        return balances
+
     def sustainable_flow_headroom(self, state_id, good, reserved=None, path=(),
                                   flow_balances=None):
         """Максимальный дополнительный выпуск существующей цепочки.
@@ -2796,9 +2856,7 @@ class Economy(EconomyServices):
         flow_balances = None
         if due:
             state_ids = sorted({a['state_id'] for a in self.accounts.values() if a.get('state_id')})
-            flow_balances = {(state_id, good): self.investment_flow_balance(state_id, good)
-                for state_id in state_ids for good in self.goods}
-            self._investment_state['flow_balances'].update(flow_balances)
+            flow_balances = self.investment_flow_balances(state_ids)
         elif evaluate:
             flow_balances = self._investment_state['flow_balances']
         queue = self.meta.setdefault('investment_queue', [])
