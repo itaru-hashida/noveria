@@ -205,6 +205,26 @@ def build(engine, budget, repeat=1):
                 # у кого он куплен, иначе покупка у казны создаёт товар из воздуха.
                 all_stock={account_id: dict(account['stock'])
                            for account_id, account in engine.accounts.items()},
+                # Труд и ресурсы: физические ограничения выпуска.
+                province_population={province: sum(
+                    engine.population(account) for account in engine.accounts.values()
+                    if account['kind'] == 'household'
+                    and engine.market_province(account) == province)
+                    for province in provinces},
+                households_by_province={
+                    province: [(account['id'], engine.population(account))
+                               for account in engine.accounts.values()
+                               if account['kind'] == 'household'
+                               and engine.market_province(account) == province]
+                    for province in provinces},
+                resource_limits=[(province, resource, quantity)
+                                 for (province, resource), quantity
+                                 in engine.resource_limits.items()
+                                 if province in province_index],
+                good_resource=[engine.goods[name].get('resource') or ''
+                               for name in goods],
+                agent_province_name=[provinces[agent_province[row]]
+                                     for row in range(n_agents)],
                 # обязан сходиться, иначе деньги теряются.
                 balances={account_id: account['balance']
                           for account_id, account in engine.accounts.items()},

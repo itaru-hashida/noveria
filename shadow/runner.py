@@ -1,10 +1,10 @@
-"""Shadow-прогон: агентная модель рядом с V3 на одном и том же мире.
+"""Shadow-РїСЂРѕРіРѕРЅ: Р°РіРµРЅС‚РЅР°СЏ РјРѕРґРµР»СЊ СЂСЏРґРѕРј СЃ V3 РЅР° РѕРґРЅРѕРј Рё С‚РѕРј Р¶Рµ РјРёСЂРµ.
 
-Ничего не пишет в БД и не меняет траекторию V3: читает живой мир, строит
-неизменяемый снимок, планирует предприятия параллельно, сводит заявки через
-FIFO и печатает отчёт.
+РќРёС‡РµРіРѕ РЅРµ РїРёС€РµС‚ РІ Р‘Р” Рё РЅРµ РјРµРЅСЏРµС‚ С‚СЂР°РµРєС‚РѕСЂРёСЋ V3: С‡РёС‚Р°РµС‚ Р¶РёРІРѕР№ РјРёСЂ, СЃС‚СЂРѕРёС‚
+РЅРµРёР·РјРµРЅСЏРµРјС‹Р№ СЃРЅРёРјРѕРє, РїР»Р°РЅРёСЂСѓРµС‚ РїСЂРµРґРїСЂРёСЏС‚РёСЏ РїР°СЂР°Р»Р»РµР»СЊРЅРѕ, СЃРІРѕРґРёС‚ Р·Р°СЏРІРєРё С‡РµСЂРµР·
+FIFO Рё РїРµС‡Р°С‚Р°РµС‚ РѕС‚С‡С‘С‚.
 
-Запуск:
+Р—Р°РїСѓСЃРє:
     python -m shadow.runner --seed 73129 --months 12 --workers 4
 """
 import argparse
@@ -23,51 +23,55 @@ sys.path.insert(0, str(ROOT / 'audit'))
 
 from shadow import sandbox_mp  # noqa: E402
 
-sandbox_mp.enable_multiprocessing()   # до любого пула и очереди
+sandbox_mp.enable_multiprocessing()   # РґРѕ Р»СЋР±РѕРіРѕ РїСѓР»Р° Рё РѕС‡РµСЂРµРґРё
 
 from modules.economy import Economy  # noqa: E402
 import scenario_runner as sr  # noqa: E402
 from shadow import agent_planner, agent_snapshot  # noqa: E402
-from shadow.market_executor import Ledger, MarketExecutor  # noqa: E402
+from shadow.market_executor import Ledger, MarketExecutor
+from shadow.producer import Producer  # noqa: E402
 from shadow.snapshot_store import SharedSnapshot, read_arrays  # noqa: E402
 
 
 def plan_batch(job):
-    """План пачки агентов: один round-trip пула на многих агентов.
+    """РџР»Р°РЅ РїР°С‡РєРё Р°РіРµРЅС‚РѕРІ: РѕРґРёРЅ round-trip РїСѓР»Р° РЅР° РјРЅРѕРіРёС… Р°РіРµРЅС‚РѕРІ.
 
-    Пачка нужна потому, что план агента стоит ~0,1 ms, а round-trip задачи
-    дороже: один агент на задачу даёт 1,06x на 4860 агентах, пачка по 32 — 4,98x.
+    РџР°С‡РєР° РЅСѓР¶РЅР° РїРѕС‚РѕРјСѓ, С‡С‚Рѕ РїР»Р°РЅ Р°РіРµРЅС‚Р° СЃС‚РѕРёС‚ ~0,1 ms, Р° round-trip Р·Р°РґР°С‡Рё
+    РґРѕСЂРѕР¶Рµ: РѕРґРёРЅ Р°РіРµРЅС‚ РЅР° Р·Р°РґР°С‡Сѓ РґР°С‘С‚ 1,06x РЅР° 4860 Р°РіРµРЅС‚Р°С…, РїР°С‡РєР° РїРѕ 32 вЂ” 4,98x.
     """
     name, layout, agents, parameters = job
+    # РЁРµСЃС‚РѕР№ СЌР»РµРјРµРЅС‚ (labor_share) РЅСѓР¶РµРЅ РїСЂРѕРёР·РІРѕРґСЃС‚РІСѓ, РїР»Р°РЅРёСЂРѕРІС‰РёРєСѓ РЅРµ РЅСѓР¶РµРЅ.
+    plan_parameters = parameters[:5]
     shm, arrays = read_arrays(name, layout)
     try:
-        return [(agent, agent_planner.plan(arrays, agent, *parameters)) for agent in agents]
+        return [(agent, agent_planner.plan(arrays, agent, *plan_parameters))
+                for agent in agents]
     finally:
         shm.close()
 
 
 def prepare_market(engine):
-    """Сформировать книгу месяца правилами V3, не двигая траекторию.
+    """РЎС„РѕСЂРјРёСЂРѕРІР°С‚СЊ РєРЅРёРіСѓ РјРµСЃСЏС†Р° РїСЂР°РІРёР»Р°РјРё V3, РЅРµ РґРІРёРіР°СЏ С‚СЂР°РµРєС‚РѕСЂРёСЋ.
 
-    Заявки домохозяйств, собственников и стройки рождаются внутри `step()`. Чтобы
-    агенты видели реальный рынок, те же фазы вызываются здесь на загруженном в
-    память движке. В БД ничего не пишется: `advance_turn` загрузит состояние
-    заново.
+    Р—Р°СЏРІРєРё РґРѕРјРѕС…РѕР·СЏР№СЃС‚РІ, СЃРѕР±СЃС‚РІРµРЅРЅРёРєРѕРІ Рё СЃС‚СЂРѕР№РєРё СЂРѕР¶РґР°СЋС‚СЃСЏ РІРЅСѓС‚СЂРё `step()`. Р§С‚РѕР±С‹
+    Р°РіРµРЅС‚С‹ РІРёРґРµР»Рё СЂРµР°Р»СЊРЅС‹Р№ СЂС‹РЅРѕРє, С‚Рµ Р¶Рµ С„Р°Р·С‹ РІС‹Р·С‹РІР°СЋС‚СЃСЏ Р·РґРµСЃСЊ РЅР° Р·Р°РіСЂСѓР¶РµРЅРЅРѕРј РІ
+    РїР°РјСЏС‚СЊ РґРІРёР¶РєРµ. Р’ Р‘Р” РЅРёС‡РµРіРѕ РЅРµ РїРёС€РµС‚СЃСЏ: `advance_turn` Р·Р°РіСЂСѓР·РёС‚ СЃРѕСЃС‚РѕСЏРЅРёРµ
+    Р·Р°РЅРѕРІРѕ.
     """
     engine.update_prices()
     engine.prepare_recovery_quotes()
     sells = engine.sell_orders()
     households = engine.shuffled(a for a in engine.accounts.values()
                                  if a['kind'] == 'household')
-    engine.household_requests(households, engine.cfg['basic_needs'], 'Базовые нужды', sells)
-    engine.household_requests(households, engine.cfg['extra_needs'], 'Дополнительные нужды', sells)
+    engine.household_requests(households, engine.cfg['basic_needs'], 'Р‘Р°Р·РѕРІС‹Рµ РЅСѓР¶РґС‹', sells)
+    engine.household_requests(households, engine.cfg['extra_needs'], 'Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ РЅСѓР¶РґС‹', sells)
     engine.owner_requests(sells)
     engine.public_project_requests(sells)
     return sells
 
 
 def budget_cap(engine):
-    """Внешний лимит: свободные деньги фирмы плюс доступное финансирование владельца."""
+    """Р’РЅРµС€РЅРёР№ Р»РёРјРёС‚: СЃРІРѕР±РѕРґРЅС‹Рµ РґРµРЅСЊРіРё С„РёСЂРјС‹ РїР»СЋСЃ РґРѕСЃС‚СѓРїРЅРѕРµ С„РёРЅР°РЅСЃРёСЂРѕРІР°РЅРёРµ РІР»Р°РґРµР»СЊС†Р°."""
     result = {}
     for firm in engine.enterprises.values():
         if firm['status'] == 'closed':
@@ -80,7 +84,7 @@ def budget_cap(engine):
 
 
 def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled'):
-    """Один месяц агентной модели на снимке живого движка."""
+    """РћРґРёРЅ РјРµСЃСЏС† Р°РіРµРЅС‚РЅРѕР№ РјРѕРґРµР»Рё РЅР° СЃРЅРёРјРєРµ Р¶РёРІРѕРіРѕ РґРІРёР¶РєР°."""
     budget = budget_cap(engine)
     arrays, meta = agent_snapshot.build(engine, budget)
     layout, size = agent_snapshot.describe(arrays)
@@ -101,9 +105,10 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
 
     failures = []
     enqueue_order = []
+    plans = {}
 
     def on_done(future):
-        """Момент готовности worker-а: сразу в FIFO, без сортировки."""
+        """РњРѕРјРµРЅС‚ РіРѕС‚РѕРІРЅРѕСЃС‚Рё worker-Р°: СЃСЂР°Р·Сѓ РІ FIFO, Р±РµР· СЃРѕСЂС‚РёСЂРѕРІРєРё."""
         try:
             planned = future.result()
         except Exception as exc:
@@ -111,14 +116,20 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
             return
         for agent, agent_intents in planned:
             enqueue_order.append(agent)
+            planned_output = 0.0
+            planned_reason = ''
             for item in agent_intents:
+                if item[0] == 'sell':
+                    planned_output = item[5]
+                    planned_reason = item[6]
                 intents.put((agent, item[0], item[1], item[2], item[3], item[4],
                              item[5], item[6]))
+            plans[agent] = (planned_output, planned_reason)
 
     agent_order = list(range(meta['n_agents']))
     if submit_order_mode == 'shuffled':
-        # Подача не по id: если порядок исполнения всё равно идёт по готовности,
-        # а не по номеру агента, FIFO действительно очередь.
+        # РџРѕРґР°С‡Р° РЅРµ РїРѕ id: РµСЃР»Рё РїРѕСЂСЏРґРѕРє РёСЃРїРѕР»РЅРµРЅРёСЏ РІСЃС‘ СЂР°РІРЅРѕ РёРґС‘С‚ РїРѕ РіРѕС‚РѕРІРЅРѕСЃС‚Рё,
+        # Р° РЅРµ РїРѕ РЅРѕРјРµСЂСѓ Р°РіРµРЅС‚Р°, FIFO РґРµР№СЃС‚РІРёС‚РµР»СЊРЅРѕ РѕС‡РµСЂРµРґСЊ.
         random.Random(73129).shuffle(agent_order)
     groups = [agent_order[index:index+batch]
               for index in range(0, len(agent_order), batch)]
@@ -137,6 +148,11 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
     executor.phase_done.set()
     executor.join(timeout=60)
 
+    # Р’С‹РїСѓСЃРє РїРѕСЃР»Рµ РєР»РёСЂРёРЅРіР°, РїРѕ С‚РѕРјСѓ, С‡С‚Рѕ СЂРµР°Р»СЊРЅРѕ РєСѓРїР»РµРЅРѕ. РџРѕСЂСЏРґРѕРє РєР°Рє РІ V3:
+    # СЃРЅР°С‡Р°Р»Р° С‚РѕСЂРіРё, РїРѕС‚РѕРј РїСЂРѕРёР·РІРѕРґСЃС‚РІРѕ.
+    producer = Producer(ledger, meta, arrays, parameters[1], parameters[5])
+    production_rows = producer.run(plans)
+
     drained = []
     while not outcomes.empty():
         drained.append(outcomes.get())
@@ -147,8 +163,8 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
     stock_start = sum(sum(stock.values()) for stock in meta['all_stock'].values())
     stock_end = sum(sum(stocks.values()) for stocks in ledger.stock.values())
 
-    # Товарный баланс по каждому товару. Сделка только двигает товар, поэтому
-    # мировой итог обязан сохраниться; выпуска в агентной модели пока нет.
+    # РўРѕРІР°СЂРЅС‹Р№ Р±Р°Р»Р°РЅСЃ РїРѕ РєР°Р¶РґРѕРјСѓ С‚РѕРІР°СЂСѓ. РЎРґРµР»РєР° С‚РѕР»СЊРєРѕ РґРІРёРіР°РµС‚ С‚РѕРІР°СЂ, РїРѕСЌС‚РѕРјСѓ
+    # РјРёСЂРѕРІРѕР№ РёС‚РѕРі РѕР±СЏР·Р°РЅ СЃРѕС…СЂР°РЅРёС‚СЊСЃСЏ; РІС‹РїСѓСЃРєР° РІ Р°РіРµРЅС‚РЅРѕР№ РјРѕРґРµР»Рё РїРѕРєР° РЅРµС‚.
     goods_start = {}
     for account_id, stocks in meta['all_stock'].items():
         for good, quantity in stocks.items():
@@ -160,17 +176,24 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
     balance_rows = []
     for good in sorted(set(goods_start) | set(goods_end)):
         start = goods_start.get(good, 0.0)
+        made = producer.produced.get(good, 0.0)
+        used = producer.consumed.get(good, 0.0)
         end = goods_end.get(good, 0.0)
-        # Выпуска нет, поэтому остаток обязан совпасть с началом.
-        if abs(end-start) > 1e-6:
-            balance_rows.append(dict(good=good, start=start, end=end,
-                                     delta=end-start))
+        expected = start+made-used
+        # РЎРґРµР»РєР° С‚РѕРІР°СЂ РЅРµ СЃРѕР·РґР°С‘С‚: РѕСЃС‚Р°С‚РѕРє = РЅР°С‡Р°Р»Рѕ + РІС‹РїСѓСЃРє - РїСЂРѕРёР·РІРѕРґСЃС‚РІРµРЅРЅРѕРµ
+        # РїРѕС‚СЂРµР±Р»РµРЅРёРµ. Р’СЃС‘ РѕСЃС‚Р°Р»СЊРЅРѕРµ вЂ” СѓС‚РµС‡РєР° РёР»Рё РґРІРѕР№РЅРѕР№ СѓС‡С‘С‚.
+        if abs(end-expected) > 1e-6*max(1.0, abs(expected)):
+            balance_rows.append(dict(good=good, start=start, produced=made,
+                                     inputs_used=used, end=end,
+                                     expected=expected, delta=end-expected))
 
     return dict(month=meta['month'], meta=meta, ledger=ledger, outcomes=drained,
                 failures=failures, snapshot_seconds=snapshot_seconds,
                 planning_seconds=planning_seconds, executor=executor,
                 snapshot_bytes=size, pool_seconds=pool_seconds,
                 money_start=money_start, money_end=money_end,
+                production_rows=production_rows,
+                produced=dict(producer.produced), consumed=dict(producer.consumed),
                 money_ok=abs(money_start-money_end) <= 1e-6*max(1.0, abs(money_start)),
                 stock_start=stock_start, stock_end=stock_end,
                 no_negative=all(value >= -1e-6 for value in ledger.cash.values()),
@@ -188,15 +211,15 @@ def main():
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--batch', type=int, default=32)
     parser.add_argument('--detail', default='none')
-    parser.add_argument('--report', type=Path, help='куда сохранить отчёт JSON')
+    parser.add_argument('--report', type=Path, help='РєСѓРґР° СЃРѕС…СЂР°РЅРёС‚СЊ РѕС‚С‡С‘С‚ JSON')
     args = parser.parse_args()
 
     work = ROOT / 'tmp' / ('shadow-%d' % args.seed)
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True, exist_ok=True)
     db, service = sr.build_world(args.seed, work, report_detail=args.detail)
-    # Пул живёт весь прогон: холодный старт spawn+импорт numpy стоит ~0,5 s и на
-    # месяце в 1 s съедал бы весь выигрыш, которого в игре нет.
+    # РџСѓР» Р¶РёРІС‘С‚ РІРµСЃСЊ РїСЂРѕРіРѕРЅ: С…РѕР»РѕРґРЅС‹Р№ СЃС‚Р°СЂС‚ spawn+РёРјРїРѕСЂС‚ numpy СЃС‚РѕРёС‚ ~0,5 s Рё РЅР°
+    # РјРµСЃСЏС†Рµ РІ 1 s СЃСЉРµРґР°Р» Р±С‹ РІРµСЃСЊ РІС‹РёРіСЂС‹С€, РєРѕС‚РѕСЂРѕРіРѕ РІ РёРіСЂРµ РЅРµС‚.
     runs = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         try:
@@ -208,7 +231,8 @@ def main():
                 prepare_market(engine)
                 parameters = (engine.cfg['transport_rate'], engine.cfg['wage'],
                               engine.cfg['consumption_tax'], engine.cfg['markup'],
-                              engine.cfg.get('enterprise_overhead_rate', 0.0))
+                              engine.cfg.get('enterprise_overhead_rate', 0.0),
+                              engine.cfg['labor_share'])
                 run = run_shadow(engine, parameters, pool, batch=args.batch)
                 runs.append(run)
                 print('month %2d: agents %d, intents %d, trades %d, plan %.3fs, '
@@ -242,8 +266,9 @@ def main():
     if last['goods_balance']:
         print('GOODS BALANCE BROKEN in %d goods:' % len(last['goods_balance']))
         for row in last['goods_balance'][:5]:
-            print('   %-10s start %.2f, actual %.2f (delta %+.6f)'
-                  % (row['good'], row['start'], row['end'], row['delta']))
+            print('   %-10s start %.2f + made %.2f - used %.2f = %.2f, actual %.2f (delta %+.6f)'
+                  % (row['good'], row['start'], row['produced'], row['inputs_used'],
+                     row['expected'], row['end'], row['delta']))
     else:
         print('GOODS BALANCE: reconciled for every good')
 
@@ -287,3 +312,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

@@ -82,7 +82,16 @@ def reachable_demand(book, tile, good, price, rate):
 
 
 def plan(book, agent, rate, wage, tax, markup, overhead_rate):
-    """Намерения агента: продать выпуск, купить входы. Без общего состояния."""
+    """Намерения агента: продать выпуск, купить входы. Без общего состояния.
+
+    Порядок как в V3: прогноз спроса и цена → план выпуска → потребность в
+    сырье, урезанная бюджетом → заявки с предельными ценами.
+
+    Предельная цена закупки (замена `adaptive_input_budget`): агент платит не
+    больше, чем оставляет маржа. Верхняя граница — цена, при которой
+    `sale_price*net - остальные издержки - fixed` обнуляется. Это защищает
+    зарплату и постоянные издержки: закупка не может съесть их.
+    """
     good = int(book['agent_good'][agent])
     tile = int(book['agent_tile'][agent])
     capacity = float(book['agent_capacity'][agent])
@@ -119,30 +128,41 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate):
         target, reason = 0.0, 'Отрицательная ожидаемая маржа'
 
     intents = []
-    # Склад продаётся независимо от плана: в V3 `sell_orders` выставляет остаток
-    # всегда, и агент со старым запасом не должен молчать, если новый выпуск
-    # невыгоден. Раньше заявка появлялась только вместе с планом, и 205 фирм из
-    # 230 оставались без продажи при полном складе.
     sell_quantity = own_stock+target if target > EPS else own_stock
     if sell_quantity > EPS:
         intents.append(('sell', good, sell_quantity, sale_price,
                         'Продажа запасов', target, reason))
-    if target > EPS:
-        purchases, needed = [], overhead
-        for input_good, ratio in inputs+equipment:
-            missing = max(0.0, target*ratio-float(stock[input_good]))
-            if missing <= EPS:
+    if target <= EPS:
+        return intents
+
+    # Предельная цена каждого входа: сколько остаётся на него после маржи и
+    # остальных издержек. Именно это защищает зарплату и оброк.
+    wage_unit = float(book['good_labor'][good])*wage
+    purchases, needed = [], overhead
+    for input_good, ratio in inputs+equipment:
+        missing = max(0.0, target*ratio-float(stock[input_good]))
+        if missing <= EPS:
+            continue
+        quote = reference_price(book, tile, input_good, rate)
+        other_cost = wage_unit+fixed_unit
+        for other_good, other_ratio in inputs+equipment:
+            if other_good == input_good:
                 continue
-            purchases.append((input_good, missing,
-                              reference_price(book, tile, input_good, rate)))
-            needed += missing*reference_price(book, tile, input_good, rate)
-        if needed > budget+EPS and needed > EPS:
-            scale = max(0.0, budget)/needed
-            target *= scale
-            purchases = [(g, quantity*scale, p) for g, quantity, p in purchases]
-            reason = 'Деньги на выпуск'
-        for input_good, quantity, in_price in purchases:
-            if quantity <= EPS:
-                continue
-            intents.append(('buy', input_good, quantity, in_price, 'Сырьё', target, reason))
+            other_cost += other_ratio*reference_price(book, tile, other_good, rate)
+        ceiling = max(0.0, (sale_price*net-other_cost)/max(ratio, EPS))
+        # Не переплачиваем рынку: цена заявки — минимум из котировки и предела.
+        bid = min(quote, ceiling) if ceiling > EPS else quote
+        purchases.append((input_good, missing, bid, quote))
+        needed += missing*quote
+    if needed > budget+EPS and needed > EPS:
+        # Бюджет режет объём, а не цену: предельная цена уже защищает маржу.
+        scale = max(0.0, budget)/needed
+        target *= scale
+        purchases = [(g, quantity*scale, bid, quote)
+                     for g, quantity, bid, quote in purchases]
+        reason = 'Деньги на выпуск'
+    for input_good, quantity, bid, quote in purchases:
+        if quantity <= EPS:
+            continue
+        intents.append(('buy', input_good, quantity, bid, 'Сырьё', target, reason))
     return intents
