@@ -2722,8 +2722,10 @@ class Economy(EconomyServices):
             recipe = self.goods[firm['good']]
             capacity = min(firm['capacity'], labor/recipe['labor'])
             if recipe['resource']:
-                resource = sum(self.cfg['extraction_per_tile'] for t in self.tiles.values()
-                    if t['province_id'] == firm['province_id'] and recipe['resource'] in t['resources'])
+                # Предел добычи по провинции не меняется за месяц: он считается
+                # один раз при загрузке, а не перебором всех клеток для каждой
+                # ресурсной фирмы.
+                resource = self.resource_limits.get((firm['province_id'], recipe['resource']), 0)
                 capacity = min(capacity, resource)
             suppliers.append([firm, price, capacity])
         if cached is not None:

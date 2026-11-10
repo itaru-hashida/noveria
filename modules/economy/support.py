@@ -52,6 +52,21 @@ class EconomyServices:
             id='game', version=1, month=0, config=json.loads(CONFIG_PATH.read_text(encoding='utf-8')))
         self.cfg = self.meta['config']
         self.goods = self.cfg['goods']
+        # Предел добычи зависит только от карты: (провинция, ресурс) — сумма
+        # extraction_per_tile по клеткам. Раньше каждый ресурсный поставщик
+        # перебирал все клетки мира (564 000 просмотров за 6 месяцев), хотя
+        # ответ на весь месяц один. Слагаемые собираются в списки и суммируются
+        # встроенным sum в порядке tiles.values(): накопление через += дало бы
+        # другой последний разряд, потому что sum() в Python 3.12 использует
+        # компенсированное сложение (Неумайер).
+        limit_values = defaultdict(list)
+        for tile in self.tiles.values():
+            province = tile['province_id']
+            # dict.fromkeys убирает повторы ресурса внутри клетки: исходная
+            # проверка `resource in tile['resources']` добавляла вклад один раз.
+            for resource in dict.fromkeys(tile['resources']):
+                limit_values[province, resource].append(self.cfg['extraction_per_tile'])
+        self.resource_limits = {key: sum(values) for key, values in limit_values.items()}
         self.reset_report()
 
     @classmethod
