@@ -302,27 +302,111 @@ outcome              исполнено / частично / отказ + при
 ## Порядок фаз месяца
 
 ```text
-1. snapshot(N)        сборка снимка, запись в shared_memory      (main)
-2. budget(N)          budget_cap по правилам V3 до пула          (main, последовательно)
-3. plan(N)            пул: plan() на неизменяемом снимке         (workers, параллельно)
-4. streaming          worker завершился → queue.put(intent)       (workers, по готовности)
-5. execute            MarketExecutor: get → reserve → execute     (main, последовательно)
-6. observe            агенты получают Outcome                     (main)
-7. produce/consume/settle/pay_dividends — фазы V3 без изменений   (main)
+1. snapshot(N)        сборка снимка → multiprocessing.shared_memory   (parent)
+2. budget(N)          budget_cap по правилам V3, до пула              (parent)
+3. submit             plan() по агентам → ProcessPoolExecutor         (parent → workers)
+4. callback           готов Intent → intent_queue.put()               (parent)
+5. execute            MarketExecutor thread: get → reserve → Outcome  (parent)
+6. close phase        все futures готовы И очередь пуста                (parent)
+7. produce/consume/settle/pay_dividends — фазы V3 без изменений        (parent)
 8. snapshot(N+1)
 ```
 
-Шаги 3–5 идут **одновременно**: клиринг не ждёт, пока спланируют все, — он
-забирает заявки по мере поступления. Шаги 3–5 заменяют
-`recover_enterprises + input_requests + update_prices`.
+Шаги 3–5 идут **одновременно**: клиринг не ждёт, пока спланируют все. Шаги
+3–5 заменяют `recover_enterprises + input_requests + update_prices`.
 `project_requests` подключается отдельным шагом, когда заработает базовый
 цикл: это 23,8% месяца и самая дорогая часть.
 
-Следствие streaming-клиринга, которое надо держать в голове: исполнитель
-исполняет заявку, когда книга ещё не полна. Заявка, поданная раньше, может
-получить товар, который позже поданный конкурент уже не увидит. Это не дефект,
-а суть выбранной модели; в отчёте каждый такой случай виден по
-`enqueue_sequence` и остаткам книги на момент исполнения.
+Фаза закрывается при **«все submitted futures завершены и очередь пуста»** —
+не по таймауту и не по числу. Никакого `gather(all) → sort → execute`.
+
+Следствие streaming-клиринга: исполнитель исполняет заявку, когда книга ещё не
+полна. Ранняя заявка может получить товар, которого поздний конкурент уже не
+увидит. Это не дефект, а суть выбранной модели; в отчёте каждый такой случай
+виден по `enqueue_sequence` и остаткам книги на момент исполнения.
+
+## Снимок в shared_memory
+
+**Первая версия — `multiprocessing.shared_memory` с NumPy-массивами поверх,
+не mmap-файл.**
+
+Родитель один раз создаёт плоские массивы: `prices`, `stocks`, `capacities`,
+`recipes`, `market quotes`, `agent offsets`. Раскладка — одна область, срезы
+по смещениям; `agent offsets` дают границы личных данных агента.
+
+```text
+parent:
+  snapshot → shared_memory
+                   ↓
+worker(agent_id, offsets)
+                   ↓
+             Intent (Future result)
+```
+
+Worker получает только `agent_id`, диапазон индексов и имя области. Он
+подключается read-only, считает `plan()` и возвращает компактный `Intent`.
+Dict-снимок между процессами не передаётся.
+
+Требования:
+
+- все массивы read-only в worker-е (`flags.writeable = False`), снимок не
+  мутируется;
+- `shared_memory` освобождается (`close()` + `unlink()`) после завершения пула
+  **и** executor-а;
+- в ключах кэшей нет `id()`; вместо него `revision` снимка.
+
+## MarketExecutor
+
+Живёт в **родительском процессе** и является единственным владельцем mutable
+ledger, резервов и порядка исполнения. На первом этапе — отдельный поток
+родителя, чтобы orchestration одновременно подавал задачи, принимал callback и
+обрабатывал FIFO:
+
+```text
+parent process
+  ├── ProcessPoolExecutor     только расчёт plan()
+  ├── callbacks → IntentQueue
+  └── MarketExecutor thread → ledger
+```
+
+Очередь **не передаётся** worker-ам: worker возвращает результат обычным
+`Future`, callback в родителе немедленно делает `queue.put(intent)`.
+
+Long polling — `queue.get(timeout=short_interval)`; executor обрабатывает заявку
+сразу после появления.
+
+Отдельный процесс для `MarketExecutor` пока не нужен: он потребует IPC на
+каждый резерв и сделку и усложнит владение состоянием.
+
+### Проверено на железе
+
+`tmp/mp_probe/topology.py` — вся топология сразу, на игрушечных данных:
+снимок в `shared_memory`, четыре агента, задержки `0.30 / 0.15 / 0.01 / 0.05 s`,
+вход задач не совпадает с готовностью.
+
+| что проверялось | результат |
+|---|---|
+| порядок исполнения | `[2, 0, 1, 3]` — точное совпадение с готовностью |
+| read-only в worker-е | запись отклонена `ValueError` |
+| клиринг параллельно пулу | executor завершился по `phase_done + empty` |
+| упавший `plan()` | не роняет фазу, попадает в `failures` |
+| `shared_memory` | `close()` + `unlink()` прошли |
+
+## Отчёт shadow-режима
+
+```text
+agent_id
+enqueue_sequence     № постановки в очередь
+enqueue_time         perf_counter_ns в worker-е
+dequeue_sequence     № взятия исполнителем
+outcome              исполнено / частично / отказ + причина
+```
+
+`enqueue_time` — только диагностика. Сравнивать часы между процессами нельзя,
+на порядок они не влияют: порядок задаёт сам `put()`, а `enqueue_sequence` и
+`dequeue_sequence` пишутся из одной точки и потому согласованы. Равенство
+`enqueue_sequence == dequeue_sequence` и есть проверка, что FIFO не нарушен
+внутри месяца.
 
 ## Лаг цепочки: как он выглядит
 
