@@ -6,6 +6,7 @@ write-restricted, поэтому канал, созданный с дефолт�
 доступ». Импортировать и вызывать ДО создания пула и очередей: и Pool, и
 ProcessPoolExecutor создают mp.Pipe для wakeup.
 """
+import sys
 import ctypes
 from ctypes import wintypes
 
@@ -17,12 +18,13 @@ class _SecurityAttributes(ctypes.Structure):
                 ('bInheritHandle', wintypes.BOOL)]
 
 
-_kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-_advapi32 = ctypes.WinDLL('advapi32', use_last_error=True)
-_kernel32.CreateNamedPipeW.restype = wintypes.HANDLE
-_kernel32.CreateNamedPipeW.argtypes = [
-    wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
-    wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID]
+if sys.platform == "win32":
+    _kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    _advapi32 = ctypes.WinDLL('advapi32', use_last_error=True)
+    _kernel32.CreateNamedPipeW.restype = wintypes.HANDLE
+    _kernel32.CreateNamedPipeW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
+        wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID]
 
 # Структуры обязаны жить всё время работы процесса: _winapi держит сырой адрес,
 # и без ссылки сборщик освободит память, которую WinAPI ещё читает.
@@ -69,6 +71,8 @@ def _pipe(duplex=True):
 
 def enable_multiprocessing():
     """Подменить Pipe. Повторный вызов безопасен."""
+    if sys.platform != "win32":
+        return _connection.Pipe
     if not getattr(_connection.Pipe, '_noveria_patched', False):
         _pipe._noveria_patched = True
         _connection.Pipe = _pipe

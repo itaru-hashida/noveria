@@ -13,6 +13,7 @@
 ~41 000 плиток на целевом мире, где матрица по плиткам не влезает в память.
 """
 import numpy as np
+from collections import defaultdict
 from dataclasses import dataclass
 
 from modules.economy.support import EPS
@@ -69,7 +70,7 @@ def build(engine, budget, repeat=1):
                 clone['id'] = '%s~%d' % (firm['id'], copy) if copy else firm['id']
                 firms.append(clone)
     accounts = [engine.accounts[firm['id'].split('~')[0]] for firm in firms]
-    tiles = sorted({market_tile(account) for account in accounts})
+    tiles = sorted({market_tile(account) for account in engine.accounts.values()})
     tile_index = {tile: index for index, tile in enumerate(tiles)}
     provinces = sorted({engine.market_province(account) for account in accounts})
     province_index = {province: index for index, province in enumerate(provinces)}
@@ -84,13 +85,36 @@ def build(engine, budget, repeat=1):
     agent_balance = np.array([a['balance'] for a in accounts], dtype=np.float64)
     agent_budget = np.array([budget.get(f['id'], 0.0) for f in firms], dtype=np.float64)
     agent_stock = np.zeros((n_agents, n_goods), dtype=np.float64)
+    agent_available_stock = np.zeros_like(agent_stock)
     agent_history = np.zeros((n_agents, 3, 3), dtype=np.float64)
     for row, (firm, account) in enumerate(zip(firms, accounts)):
         for name, quantity in account['stock'].items():
             agent_stock[row, good_index[name]] = quantity
+            agent_available_stock[row, good_index[name]] = engine.free_stock(account['id'], name)
         for offset, item in enumerate(firm.get('sales_history', [])[-3:]):
             agent_history[row, offset] = (item.get('sold', 0.0), item.get('output', 0.0),
                                           float(bool(item.get('input_limited', False))))
+
+    agent_forecast = np.array([f.get('agent_sales_forecast', f.get('sales_forecast', 0.0))
+                               for f in firms], dtype=np.float64)
+    agent_history_count = np.array([min(3, len(f.get('sales_history', [])))
+                                    for f in firms], dtype=np.int32)
+    # Сигнал — среднее за месяцы, а не сумма переносимых остатков заявок.
+    history = engine.meta.get('market_history', [])[-3:]
+    public_demand = np.zeros(n_goods, dtype=np.float64)
+    public_value = np.zeros(n_goods, dtype=np.float64)
+    public_volume = np.zeros(n_goods, dtype=np.float64)
+    for month in history:
+        for item in month['markets']:
+            g = good_index[item['good']]
+            public_demand[g] += item['volume']+item['unmet_solvent']
+            public_volume[g] += item['volume']
+            public_value[g] += item['trade_gold']+item.get('freight', 0.0)
+    public_demand /= max(1, len(history))
+    counts = np.bincount(agent_good, minlength=n_goods)
+    public_share = public_demand/np.maximum(1, counts)
+    public_price = np.divide(public_value, public_volume,
+                             out=np.zeros(n_goods), where=public_volume > EPS)
 
     good_inputs = np.zeros((n_goods, n_goods), dtype=np.float64)
     good_equip = np.zeros((n_goods, n_goods), dtype=np.float64)
@@ -164,13 +188,27 @@ def build(engine, budget, repeat=1):
             else:
                 distance[seller_row, buyer_row] = quote[2]
 
+    # Котировки включают опубликованные склады фирм. Исключение этих офферов
+    # из книги исполнителя не должно заменять их цены ценами из контента.
+    public_sells = defaultdict(list)
+    for order in engine.report['orders']:
+        if order['side'] == 'sell':
+            public_sells[order['good']].append(order)
+    representatives = {market_tile(a): a for a in engine.accounts.values()}
+    market_price = np.array([[engine.reference_price(representatives[tile], g, public_sells)
+                              for g in goods] for tile in tiles], dtype=np.float64)
+
     arrays = {
         'agent_good': agent_good, 'agent_tile': agent_tile,
         'agent_province': agent_province, 'agent_capacity': agent_capacity,
         'agent_price': agent_price, 'agent_balance': agent_balance,
         'agent_budget': agent_budget, 'agent_stock': agent_stock,
-        'agent_history': agent_history,
+        'agent_available_stock': agent_available_stock, 'market_price': market_price,
+        'agent_history': agent_history, 'agent_history_count': agent_history_count,
+        'agent_forecast': agent_forecast, 'public_share': public_share,
+        'public_price': public_price,
         'good_inputs': good_inputs, 'good_equip': good_equip, 'good_labor': good_labor,
+        'good_wear': np.array([engine.goods[g].get('durable', {}).get('wear_rate', 0.0) for g in goods]),
         'good_price': good_price, 'good_weight': good_weight, 'good_taxed': good_taxed,
         'offer_good': offer_good, 'offer_tile': offer_tile, 'offer_price': offer_price,
         'offer_remaining': offer_remaining,

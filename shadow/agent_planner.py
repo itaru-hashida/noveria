@@ -14,7 +14,10 @@ from modules.economy.support import EPS
 
 # Сколько офферов товара просматривать при оценке конкурентов. Книга
 # отсортирована по доставленной цене, дальше идти незачем.
-OFFER_SCAN = 64
+FORECAST_ALPHA = 0.35
+OUTPUT_BUFFER = 0.25
+INPUT_BUFFER = 0.1
+INITIAL_SALES_FRACTION = 0.5
 
 
 def _landed(distance_row, offer_tile, offer_price, weight, rate):
@@ -23,6 +26,8 @@ def _landed(distance_row, offer_tile, offer_price, weight, rate):
 
 def reference_price(book, tile, good, rate):
     """Лучшая доставленная цена предложения, иначе базовая цена контента."""
+    if 'market_price' in book:
+        return float(book['market_price'][tile, good])
     weight = book['good_weight'][good]
     distance_row = book['distance'][tile]
     ptr = book['offer_ptr']
@@ -38,8 +43,9 @@ def reference_price(book, tile, good, rate):
         if best is None or landed < best:
             best = landed
     if best is not None:
-        return best
-    return float(book['good_price'][good])
+        return float(best)
+    historical = float(book.get('public_price', book['good_price'])[good])
+    return historical if historical > EPS else float(book['good_price'][good])
 
 
 def reachable_demand(book, tile, good, price, rate):
@@ -50,7 +56,7 @@ def reachable_demand(book, tile, good, price, rate):
     total = 0.0
     for ask_index in range(int(ask_ptr[good]), int(ask_ptr[good+1])):
         ask_tile = book['ask_tile'][ask_index]
-        if ask_tile == tile:
+        if not book['reachable'][tile, ask_tile]:
             continue
         if book['ask_remaining'][ask_index] <= EPS:
             continue
@@ -78,91 +84,102 @@ def reachable_demand(book, tile, good, price, rate):
                 break
         if covered < affordable:
             total += affordable-covered
-    return total
+    return float(total)
 
 
-def plan(book, agent, rate, wage, tax, markup, overhead_rate):
-    """Намерения агента: продать выпуск, купить входы. Без общего состояния.
+def expectations(book, agent, observed):
+    """Отсутствие текущего покупателя не стирает историю продаж."""
+    count = int(book['agent_history_count'][agent])
+    good = int(book['agent_good'][agent])
+    prior = float(book['agent_forecast'][agent])
+    public = float(book['public_share'][good])
+    if count:
+        history = book['agent_history'][agent, :count]
+        own = float(np.mean(history[:, 0]))
+        # Недовыпуск из-за входов не является наблюдением исчезнувшего спроса.
+        if history[-1, 2]:
+            own = max(own, prior)
+        signal = max(own, public, observed)
+    else:
+        signal = max(public, observed)
+        if signal <= EPS:
+            signal = float(book['agent_capacity'][agent])*INITIAL_SALES_FRACTION
+        prior = signal
+    return max(observed, (1-FORECAST_ALPHA)*prior+FORECAST_ALPHA*signal)
 
-    Порядок как в V3: прогноз спроса и цена → план выпуска → потребность в
-    сырье, урезанная бюджетом → заявки с предельными ценами.
 
-    Предельная цена закупки (замена `adaptive_input_budget`): агент платит не
-    больше, чем оставляет маржа. Верхняя граница — цена, при которой
-    `sale_price*net - остальные издержки - fixed` обнуляется. Это защищает
-    зарплату и постоянные издержки: закупка не может съесть их.
-    """
+def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
+    """Ожидания → выпуск → обеспеченные закупки; реальные продажи не обещаны."""
     good = int(book['agent_good'][agent])
     tile = int(book['agent_tile'][agent])
     capacity = float(book['agent_capacity'][agent])
     price = float(book['agent_price'][agent])
-    stock = book['agent_stock'][agent]
+    stock = book.get('agent_available_stock', book['agent_stock'])[agent]
     budget = float(book['agent_budget'][agent])
-    consumer = float(book['good_taxed'][good])
-
-    inputs = [(int(column), float(book['good_inputs'][good, column]))
-              for column in np.nonzero(book['good_inputs'][good])[0]]
-    equipment = [(int(column), float(book['good_equip'][good, column]))
-                 for column in np.nonzero(book['good_equip'][good])[0]]
-
-    unit_cost = float(book['good_labor'][good])*wage
-    for input_good, ratio in inputs:
-        unit_cost += ratio*reference_price(book, tile, input_good, rate)
-    for input_good, ratio in equipment:
-        unit_cost += ratio*reference_price(book, tile, input_good, rate)
-
-    net = 1.0-tax*consumer
-    sale_price = price if price*net+EPS >= unit_cost else unit_cost*(1+markup)/max(net, EPS)
-
-    demand = reachable_demand(book, tile, good, sale_price, rate)
-    own_stock = float(stock[good])
-    # Склад продаётся в этом месяце, новый выпуск — со следующего.
-    target = max(0.0, min(capacity, demand-own_stock))
-    overhead = capacity*float(book['good_labor'][good])*wage*overhead_rate
-    fixed_unit = overhead/target if target > EPS else 0.0
-    margin = sale_price*net-unit_cost-fixed_unit
-    reason = 'План'
-    if target <= EPS:
-        reason = 'Нет обеспеченного спроса'
-    elif margin < -EPS:
-        target, reason = 0.0, 'Отрицательная ожидаемая маржа'
-
-    intents = []
-    sell_quantity = own_stock+target if target > EPS else own_stock
-    if sell_quantity > EPS:
-        intents.append(('sell', good, sell_quantity, sale_price,
-                        'Продажа запасов', target, reason))
-    if target <= EPS:
-        return intents
-
-    # Предельная цена каждого входа: сколько остаётся на него после маржи и
-    # остальных издержек. Именно это защищает зарплату и оброк.
+    inputs = [(int(g), float(book['good_inputs'][good, g]))
+              for g in np.nonzero(book['good_inputs'][good])[0]]
+    equipment = [(int(g), float(book['good_equip'][good, g]))
+                 for g in np.nonzero(book['good_equip'][good])[0]]
+    quotes = {g: reference_price(book, tile, g, rate) for g, _ in inputs+equipment}
     wage_unit = float(book['good_labor'][good])*wage
-    purchases, needed = [], overhead
-    for input_good, ratio in inputs+equipment:
-        missing = max(0.0, target*ratio-float(stock[input_good]))
-        if missing <= EPS:
-            continue
-        quote = reference_price(book, tile, input_good, rate)
-        other_cost = wage_unit+fixed_unit
-        for other_good, other_ratio in inputs+equipment:
-            if other_good == input_good:
-                continue
-            other_cost += other_ratio*reference_price(book, tile, other_good, rate)
-        ceiling = max(0.0, (sale_price*net-other_cost)/max(ratio, EPS))
-        # Не переплачиваем рынку: цена заявки — минимум из котировки и предела.
-        bid = min(quote, ceiling) if ceiling > EPS else quote
-        purchases.append((input_good, missing, bid, quote))
-        needed += missing*quote
-    if needed > budget+EPS and needed > EPS:
-        # Бюджет режет объём, а не цену: предельная цена уже защищает маржу.
-        scale = max(0.0, budget)/needed
-        target *= scale
-        purchases = [(g, quantity*scale, bid, quote)
-                     for g, quantity, bid, quote in purchases]
-        reason = 'Деньги на выпуск'
-    for input_good, quantity, bid, quote in purchases:
-        if quantity <= EPS:
-            continue
-        intents.append(('buy', input_good, quantity, bid, 'Сырьё', target, reason))
+    costs = dict(inputs)
+    for g, ratio in equipment:
+        costs[g] = costs.get(g, 0.0)+ratio*float(book['good_wear'][g])
+    unit_cost = wage_unit+sum(r*quotes[g] for g, r in costs.items())
+    net = 1.0-tax*float(book['good_taxed'][good])
+    sale_price = price if price*net+EPS >= unit_cost else unit_cost*(1+markup)/max(net, EPS)
+    observed = reachable_demand(book, tile, good, sale_price, rate)
+    forecast = expectations(book, agent, observed)
+    own_stock = float(book['agent_stock'][agent, good])
+    projected_stock = max(0.0, own_stock-min(own_stock, forecast))
+    desired = max(0.0, min(capacity, forecast*(1+OUTPUT_BUFFER)-projected_stock))
+    overhead = capacity*wage_unit*overhead_rate
+    fixed_unit = overhead/desired if desired > EPS else 0.0
+    reason = 'План'
+    if desired <= EPS:
+        reason = 'Готовые запасы' if forecast > EPS else 'Нет ожидаемого спроса'
+    elif sale_price*net-unit_cost-fixed_unit < -EPS:
+        desired, reason = 0.0, 'Отрицательная ожидаемая маржа'
+
+    # Оборудование требуется целиком, но в себестоимость входит лишь износ.
+    requirements = dict(inputs)
+    for g, ratio in equipment:
+        requirements[g] = requirements.get(g, 0.0)+ratio
+    bids = {}
+    for g, ratio in requirements.items():
+        other_cost = unit_cost-costs.get(g, 0.0)*quotes[g]+fixed_unit
+        marginal_ratio = costs.get(g, ratio)
+        ceiling = max(0.0, (sale_price*net-other_cost)/max(marginal_ratio, EPS))
+        bids[g] = min(quotes[g], ceiling)
+
+    def purchases_for(output):
+        if output <= EPS:
+            return []
+        return [(g, max(0.0, output*r*(1+INPUT_BUFFER)-float(stock[g])), bids[g])
+                for g, r in requirements.items() if bids[g] > EPS]
+
+    def cash_needed(output):
+        return overhead+output*wage_unit+sum(q*p for _, q, p in purchases_for(output))
+
+    target = desired
+    if target > EPS and cash_needed(target) > budget+EPS:
+        low, high = 0.0, target
+        for _ in range(40):
+            middle = (low+high)/2
+            if cash_needed(middle) <= budget:
+                low = middle
+            else:
+                high = middle
+        target, reason = low, 'Деньги на выпуск'
+    # План публикуется после бюджетного ограничения даже при пустом складе.
+    intents = [('sell', good, own_stock, sale_price, 'Продажа запасов', target, reason)]
+    purchases = purchases_for(target)
+    intents.extend(('buy', g, q, bid, 'Сырьё', target, reason)
+                   for g, q, bid in purchases if q > EPS)
+    if trace is not None:
+        trace.update(observed=observed, forecast=forecast, stock=own_stock,
+                     projected_stock=projected_stock, desired=desired, target=target,
+                     wage_reserve=target*wage_unit, overhead=overhead,
+                     purchases=purchases, reason=reason, price=sale_price,
+                     unit_cost=unit_cost)
     return intents

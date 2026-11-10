@@ -22,7 +22,7 @@ sandbox_mp.enable_multiprocessing()
 from modules.economy import Economy  # noqa: E402
 import scenario_runner as sr  # noqa: E402
 from shadow import agent_snapshot  # noqa: E402
-from shadow.runner import _worker, budget_cap, prepare_market  # noqa: E402
+from shadow.runner import plan_batch, budget_cap, prepare_market  # noqa: E402
 from shadow.snapshot_store import SharedSnapshot  # noqa: E402
 
 
@@ -35,10 +35,10 @@ def measure(engine, repeat, workers, parameters):
     started = time.perf_counter()
     count = 0
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_worker, (snapshot.name, layout, agent, parameters))
+        futures = [pool.submit(plan_batch, (snapshot.name, layout, [agent], parameters))
                    for agent in range(meta['n_agents'])]
         for future in futures:
-            count += len(future.result(timeout=600))
+            count += sum(len(intents) for _, intents in future.result(timeout=600))
     elapsed = time.perf_counter()-started
     snapshot.release()
     return meta['n_agents'], count, elapsed, size
