@@ -116,6 +116,13 @@ def build(engine, budget, repeat=1, sells=None):
     public_demand /= max(1, len(history))
     counts = np.bincount(agent_good, minlength=n_goods)
     public_share = public_demand/np.maximum(1, counts)
+    # Число продавцов, которые реально конкурируют за спрос: выставили оффер
+    # в этом месяце. Делить на всех действующих фирм нельзя — фирма без
+    # товара на складе спрос не отнимает, и доля выходит заниженной
+    # (проверено: спрос падал до 0,04 от реального).
+    offering = np.bincount(agent_good[agent_available_stock[:, :].sum(axis=1) > EPS],
+                           minlength=n_goods)
+    good_sellers = np.maximum(1, np.maximum(offering, 1)).astype(np.int32)
     public_price = np.divide(public_value, public_volume,
                              out=np.zeros(n_goods), where=public_volume > EPS)
 
@@ -216,6 +223,7 @@ def build(engine, budget, repeat=1, sells=None):
         'agent_available_stock': agent_available_stock, 'agent_input_price': agent_input_price,
         'agent_history': agent_history, 'agent_history_count': agent_history_count,
         'agent_initialized': agent_initialized, 'agent_forecast': agent_forecast, 'public_share': public_share,
+        'good_sellers': good_sellers,
         'public_price': public_price,
         'good_inputs': good_inputs, 'good_equip': good_equip, 'good_labor': good_labor,
         'good_wear': np.array([engine.goods[g].get('durable', {}).get('wear_rate', 0.0) for g in goods]),
