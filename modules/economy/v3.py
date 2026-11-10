@@ -2404,8 +2404,13 @@ class Economy(EconomyServices):
                 a['operating_protected'] = hold
                 a['protected'] += hold
 
-    def expected_stock_sales(self, e, sells):
-        """Продажа старого склада до поступления планируемого нового выпуска."""
+    def expected_stock_sales(self, e, sells, reachable=None):
+        """Продажа старого склада до поступления планируемого нового выпуска.
+
+        `reachable` передаётся вызывающим, если он уже посчитал достижимый
+        спрос по той же цене: внутри прогноза выпуска это второй такой расчёт
+        подряд, и он был 38% всех вызовов reachable_demand.
+        """
         offered = sum(o['remaining'] for o in sells.get(e['good'], [])
             if o['participant'] == e['id'] and o['status'] not in ('cancelled', 'expired'))
         if offered <= EPS:
@@ -2414,7 +2419,8 @@ class Economy(EconomyServices):
         cached = cache.get(e['id'])
         if cached is not None:
             return cached
-        reachable = self.reachable_demand(e, sells)
+        if reachable is None:
+            reachable = self.reachable_demand(e, sells)
         history = e.get('sales_history', [])[-3:]
         average_sold = (sum(h.get('sold', 0.0) for h in history) / len(history)
                         if history else 0.0)
@@ -2473,7 +2479,11 @@ class Economy(EconomyServices):
         stock = self.accounts[e['id']]['stock'].get(e['good'], 0)
         # Начальный склад сначала участвует в торгах этого месяца; новый выпуск
         # продаётся в следующем. Восполняем прогнозируемый остаток после торгов.
-        expected_sales = self.expected_stock_sales(e, sells) if self.STOCK_PLANNING_REVISION else 0.0
+        # Спрос уже посчитан выше по цене quote; если цена не менялась, это тот
+        # же расчёт, и второй раз его делать незачем.
+        expected_sales = (self.expected_stock_sales(e, sells,
+            demand if price == e['price'] else None)
+            if self.STOCK_PLANNING_REVISION else 0.0)
         projected_stock = max(0, stock-expected_sales)
         e.update(sales_forecast=forecast, reachable_demand=demand,
             expected_unit_cost=cost, expected_price=(base_net if price == e['price']
