@@ -1,15 +1,13 @@
 import copy
 from pathlib import Path
-
 import pytest
-from streamlit.testing.v1 import AppTest
 
 from core.db import WorldDB
 from core.economy_state import EconomyState
 from core.events import EventBus
+from core.labels import territory_labels
 from core.world_service import WorldService
 from modules.economy import Economy
-from ui.game import territory_labels
 
 
 def small_market(service):
@@ -201,31 +199,3 @@ def test_territory_labels(service):
     assert 'Новерская Республика' in labels['city-0-0']
     assert 'провинция Лунария' in labels['city-0-0']
     assert 'провинция' in labels['province-0']
-
-
-def test_economy_ui_sections(tmp_path,monkeypatch):
-    monkeypatch.setenv('NOWERIA_DB',str(tmp_path/'economy-ui.lbug'))
-    from ui.app import application
-    application.clear()
-    app=AppTest.from_file(Path(__file__).resolve().parents[1]/'main.py',default_timeout=60).run()
-    try:
-        app.sidebar.radio[0].set_value('Экономика и торговля').run()
-        assert not app.exception
-        next(b for b in app.button if b.label=='Инициализировать экономику').click().run()
-        assert not app.exception
-        application().advance_turn(command_id='ui-economy')
-        app.run()
-        for section in ['Торговля','Предприятия','Провинции','Диагностика','Обзор']:
-            next(s for s in app.selectbox if s.label=='Раздел').set_value(section).run()
-            assert not app.exception,section
-        next(s for s in app.selectbox if s.label=='Государство').set_value('noweria').run()
-        next(s for s in app.selectbox if s.label=='Товар').set_value('bread').run()
-        assert not app.exception
-        next(b for b in app.button if b.label=='Запустить тестовую симуляцию').click().run(timeout=60)
-        assert not app.exception
-        next(r for r in app.radio if r.label=='Источник анализа').set_value('Последний тестовый прогон').run()
-        assert not app.exception
-        assert application().db.meta()['turn']==2
-    finally:
-        application().db.close()
-        application.clear()

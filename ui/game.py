@@ -3,27 +3,10 @@ from uuid import uuid4
 from modules.population import aggregate
 from modules.geography import route
 from core.integrity import validate_world
+from core.labels import territory_labels
 from ui.map_view import map_figure, LABELS
 
 MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
-
-
-def territory_labels(snapshot):
-    index = {e['id']: e for e in snapshot['entities']}
-    owners = {r['target']: r['source'] for r in snapshot['links'] if r['kind']=='owns'}
-    kinds = {'State':'государство', 'Province':'провинция', 'City':'город'}
-    labels = {}
-    for identity, e in index.items():
-        if e['kind'] not in kinds:
-            continue
-        parts = [e['name'], kinds[e['kind']]]
-        if identity in owners:
-            parts.append(index[owners[identity]]['name'])
-        pid = e['properties'].get('province_id')
-        if e['kind']=='City' and pid in index:
-            parts.append('провинция '+index[pid]['name'])
-        labels[identity] = ' · '.join(parts)
-    return labels
 
 
 def card(service,identity,snapshot=None):

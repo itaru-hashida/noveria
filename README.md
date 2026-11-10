@@ -16,9 +16,9 @@
 Из корня проекта:
 
 ```powershell
-.\run.ps1
-.\run.ps1 -Lab
 .\run.ps1 -Test
+.\run.ps1 -Ui
+.\run.ps1 -LabUi
 ```
 
 Используется Python из `.venv312`. Если окружения нет:
@@ -29,6 +29,11 @@ python -m venv .venv312
 .\run.ps1 -Seed
 ```
 
+`requirements.txt` содержит только ядро и тесты. Streamlit-панели оставлены
+исключительно для ручного отладочного просмотра до подключения Godot; для них
+отдельно установите `-r requirements-ui.txt`, затем используйте `-Ui` или
+`-LabUi`.
+
 `Seed` не сбрасывает существующее сохранение. Другой мир:
 
 ```powershell
@@ -37,7 +42,8 @@ python -m venv .venv312
 
 ## Основные файлы
 
-- `main.py`, `ui/` — интерфейс игры; `lab.py` — лаборатория.
+- `main.py`, `ui/`, `lab.py` — необязательный Streamlit-просмотр; ядро его не
+  требует.
 - `modules/economy/v3.py` — торговля, планы, производство, стройки и расчёты.
 - `modules/economy/support.py` — состояние, стартовый мир, общие операции и проверки.
 - `core/db.py` — доступ к LadybugDB; `core/world_service.py` — атомарные действия.

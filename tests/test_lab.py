@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-from streamlit.testing.v1 import AppTest
 
 from core.db import WorldDB
 from core.economy_state import EconomyState
@@ -201,24 +200,3 @@ def test_import_external_reports(tmp_path):
                 assert not store.query('orders')
     with pytest.raises(ValueError, match='Неизвестный CSV'):
         import_csv(b'x,y\n1,2\n', 'unknown.csv', tmp_path)
-
-
-def test_independent_lab_ui_and_navigation(pair, monkeypatch):
-    monkeypatch.setenv('NOVERIA_LAB_RUNS', str(pair[0].parent))
-    monkeypatch.setenv('NOWERIA_DB', str(pair[0]/'world.lbug'))
-    app = AppTest.from_file(ROOT/'lab.py', default_timeout=60).run()
-    assert not app.exception
-    for section in ['Production', 'Enterprises', 'Market Board', 'Geography', 'Diagnostics', 'Overview']:
-        next(s for s in app.selectbox if s.label == 'Раздел').set_value(section).run()
-        assert not app.exception, section
-    app.sidebar.radio[0].set_value('Сравнение').run()
-    app.multiselect[0].set_value([p.name for p in pair]).run()
-    assert not app.exception
-    app.sidebar.radio[0].set_value('Live World').run()
-    assert not app.exception
-    for section in SECTIONS_FOR_TEST:
-        next(s for s in app.selectbox if s.label == 'Раздел Live World').set_value(section).run()
-        assert not app.exception, section
-
-
-SECTIONS_FOR_TEST = ['Production', 'Enterprises', 'Market Board', 'Geography', 'Diagnostics', 'Overview']

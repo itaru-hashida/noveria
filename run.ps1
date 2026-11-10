@@ -1,4 +1,4 @@
-param([switch]$Seed, [switch]$Test, [switch]$Lab)
+param([switch]$Seed, [switch]$Test, [switch]$Ui, [switch]$LabUi)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 $projectPython = Join-Path $PSScriptRoot '.venv312/Scripts/python.exe'
@@ -7,6 +7,7 @@ if (-not (Test-Path -LiteralPath $projectPython)) {
 }
 if ($Seed) { & $projectPython scripts/seed_world.py }
 elseif ($Test) { & $projectPython -m pytest -q }
-elseif ($Lab) { & $projectPython -m streamlit run lab.py }
-else { & $projectPython -m streamlit run main.py }
+elseif ($Ui) { & $projectPython -m streamlit run main.py }
+elseif ($LabUi) { & $projectPython -m streamlit run lab.py }
+else { Write-Host 'Используйте -Seed, -Test, -Ui или -LabUi.' }
 exit $LASTEXITCODE

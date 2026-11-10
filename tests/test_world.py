@@ -10,7 +10,6 @@ from modules.social import change_loyalty
 from modules.demo import run_demo
 from modules.diplomacy import set_relation
 from modules.world import transfer_territory, appoint_ruler
-from ui.graph import graph_figure
 
 
 def test_schema_persistence_and_missing(tmp_path):
@@ -52,7 +51,6 @@ def test_territory_ruler_graph_and_context(service):
     graph = service.db.graph(focus='city-0-0',depth=1)
     assert any(e['source']=='velaria' and e['target']=='city-0-0' for e in graph['edges'])
     assert not any(e['source']=='noweria' and e['kind']=='owns' for e in graph['edges'])
-    assert graph_figure(graph).data
     context = ContextBuilder(service.db).build('city-0-0',event_limit=1)
     assert any(r['source']=='velaria' and r['kind']=='owns' for r in context['current_relations'])
     assert len(context['recent_history'])+len(context['important_facts']) <= 1

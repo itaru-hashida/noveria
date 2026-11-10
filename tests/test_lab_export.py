@@ -12,7 +12,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from streamlit.testing.v1 import AppTest
 
 from core.lab_export import (ARCHIVE_NAME, SCHEMAS, AnalysisExporter, ExportValidationError,
                              auto_export, export_analysis)
@@ -238,18 +237,13 @@ def test_streaming_does_not_use_lab_query_or_fetchall(source, monkeypatch):
     export_analysis(source, full=True)
 
 
-def test_cli_and_interface_export_existing_data(source, monkeypatch):
+def test_cli_export_existing_data(source):
     before = file_hash(source/'analytics.sqlite')
     result = subprocess.run([sys.executable, str(ROOT/'scripts/export_lab.py'), str(source), '--full'],
                             capture_output=True, timeout=30)
     assert result.returncode == 0, result.stderr
-    monkeypatch.setenv('NOVERIA_LAB_RUNS', str(source.parent))
-    app = AppTest.from_file(ROOT/'lab.py', default_timeout=30).run()
-    assert not app.exception
-    next(b for b in app.button if b.label == 'Создать NOVERIA_ANALYSIS.zip').click().run()
-    assert not app.exception
     with zipfile.ZipFile(source/ARCHIVE_NAME) as archive:
-        assert json.loads(archive.read('manifest.json'))['mode'] == 'standard'
+        assert json.loads(archive.read('manifest.json'))['mode'] == 'full'
     assert file_hash(source/'analytics.sqlite') == before
 
 
