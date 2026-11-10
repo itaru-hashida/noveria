@@ -19,6 +19,10 @@ from shadow.turn import AgentTurn
 from shadow import sandbox_mp
 
 
+def worker_ready(ready):
+    ready.put(os.getpid())
+
+
 def warm_worker(_):
     time.sleep(0.02)
     return os.getpid()
@@ -151,12 +155,17 @@ def main():
     for mode in modes:
         if mode == 'pool':
             start = time.perf_counter()
-            with ProcessPoolExecutor(max_workers=args.workers,
-                                     mp_context=multiprocessing.get_context('spawn')) as pool:
-                pids = set(pool.map(warm_worker, range(args.workers*4)))
+            context = multiprocessing.get_context('spawn')
+            ready = context.Queue()
+            with ProcessPoolExecutor(max_workers=args.workers, mp_context=context,
+                                     initializer=worker_ready, initargs=(ready,)) as pool:
+                list(pool.map(warm_worker, range(args.workers*4)))
+                pids = {ready.get(timeout=60) for _ in range(args.workers)}
                 result['cold_pool_seconds'] = time.perf_counter()-start
                 result['warm_worker_pids'] = sorted(pids)
                 result['runs'][mode] = run_mode(args, mode, pool)
+            ready.close()
+            ready.join_thread()
         else:
             result['runs'][mode] = run_mode(args, mode, None)
     args.report.parent.mkdir(parents=True, exist_ok=True)
