@@ -2650,14 +2650,21 @@ class Economy(EconomyServices):
                         minimum=self.cfg['minimum_capacity']))
                 continue
             capacity = min(demand, derived_demand[good]) if derived_demand and good in derived_demand else demand
-            labor = sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
-                if a['kind'] == 'household' and a['state_id'] == loc['state_id'] and a['province_id'] == pid)
             state = getattr(self, '_investment_state', None)
+            labor = (index['labor'].get((loc['state_id'], pid), 0.0)
+                     if index is not None else
+                     sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
+                         if a['kind'] == 'household' and a['state_id'] == loc['state_id']
+                         and a['province_id'] == pid))
             if state is not None:
                 labor -= state['labor_reserved'][loc['state_id'], pid]
             capacity = min(capacity, labor/recipe['labor'])
             if recipe['resource']:
-                used = sum(e['capacity'] for e in self.enterprises.values() if e['status'] != 'closed' and e['province_id'] == pid and self.goods[e['good']]['resource'] == recipe['resource'])
+                used = (index['resource_used'].get((pid, recipe['resource']), 0.0)
+                        if index is not None else
+                        sum(e['capacity'] for e in self.enterprises.values()
+                            if e['status'] != 'closed' and e['province_id'] == pid
+                            and self.goods[e['good']]['resource'] == recipe['resource']))
                 if state is not None:
                     used += state['resource_reserved'][pid, recipe['resource']]
                 capacity = min(capacity, max(0, len(tiles)*self.cfg['extraction_per_tile']-used))
