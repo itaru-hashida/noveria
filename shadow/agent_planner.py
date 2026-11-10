@@ -26,8 +26,6 @@ def _landed(distance_row, offer_tile, offer_price, weight, rate):
 
 def reference_price(book, tile, good, rate):
     """Лучшая доставленная цена предложения, иначе базовая цена контента."""
-    if 'market_price' in book:
-        return float(book['market_price'][tile, good])
     weight = book['good_weight'][good]
     distance_row = book['distance'][tile]
     ptr = book['offer_ptr']
@@ -100,6 +98,8 @@ def expectations(book, agent, observed):
         if history[-1, 2]:
             own = max(own, prior)
         signal = max(own, public, observed)
+    elif book['agent_initialized'][agent]:
+        signal = max(public, observed)
     else:
         signal = max(public, observed)
         if signal <= EPS:
@@ -120,7 +120,8 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
               for g in np.nonzero(book['good_inputs'][good])[0]]
     equipment = [(int(g), float(book['good_equip'][good, g]))
                  for g in np.nonzero(book['good_equip'][good])[0]]
-    quotes = {g: reference_price(book, tile, g, rate) for g, _ in inputs+equipment}
+    quotes = {g: float(book['agent_input_price'][agent, g])
+              for g, _ in inputs+equipment}
     wage_unit = float(book['good_labor'][good])*wage
     costs = dict(inputs)
     for g, ratio in equipment:
@@ -178,6 +179,9 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
                    for g, q, bid in purchases if q > EPS)
     if trace is not None:
         trace.update(observed=observed, forecast=forecast, stock=own_stock,
+                     history_count=int(book['agent_history_count'][agent]),
+                     prior=float(book['agent_forecast'][agent]),
+                     public=float(book['public_share'][good]),
                      projected_stock=projected_stock, desired=desired, target=target,
                      wage_reserve=target*wage_unit, overhead=overhead,
                      purchases=purchases, reason=reason, price=sale_price,

@@ -72,3 +72,85 @@ def test_new_firm_uses_public_history(market):
     agent_planner.plan(arrays, agent, *parameters, trace=trace)
     assert trace['forecast'] == 10
     assert trace['target'] > 0
+
+
+@pytest.mark.parametrize("workers", [0, 2])
+def test_full_month_replays_recorded_fifo_and_persists(service, workers):
+    from shadow.turn import AgentTurn
+    service.initialize_economy()
+    left = Economy.load(service.db)
+    right = Economy.load(service.db)
+    from concurrent.futures import ProcessPoolExecutor
+    import multiprocessing
+    from contextlib import ExitStack
+    from shadow import sandbox_mp
+    sandbox_mp.enable_multiprocessing()
+    with ExitStack() as stack:
+        pool = stack.enter_context(ProcessPoolExecutor(max_workers=workers,
+            mp_context=multiprocessing.get_context('spawn'))) if workers else None
+        planner = AgentTurn(pool)
+        left.step(enterprise_planner=planner)
+    replay = AgentTurn(None, replay=planner.log)
+    right.step(enterprise_planner=replay)
+    assert left.accounts == right.accounts
+    assert left.enterprises == right.enterprises
+    assert left.meta == right.meta
+    assert left.report == right.report
+    assert all(left.report['invariants'].values())
+    with service.db.transaction():
+        left.save(service.db)
+    loaded = Economy.load(service.db)
+    assert loaded.meta['month'] == left.meta['month']
+    assert loaded.accounts == left.accounts
+    assert loaded.enterprises == left.enterprises
+    assert any('agent_sales_forecast' in f for f in loaded.enterprises.values())
+
+
+def test_chain_restores_after_supply_halt(service):
+    from shadow.turn import AgentTurn
+    service.initialize_economy()
+    engine = Economy.load(service.db)
+    original_sync = engine.sync_locations
+
+    def sync_with_halt():
+        original_sync()
+        for firm in engine.enterprises.values():
+            if firm['good'] == 'grain':
+                firm['suspended'] = 3 <= engine.meta['month'] <= 5
+    engine.sync_locations = sync_with_halt
+    made = []
+    for month in range(12):
+        report = engine.step(enterprise_planner=AgentTurn(None))
+        assert all(report['invariants'].values())
+        made.append(dict(report['production']))
+    assert all(row.get('grain', 0) == 0 for row in made[2:5])
+    assert any(row.get('grain', 0) > 0 for row in made[5:])
+    assert any(row.get('flour', 0) > 0 for row in made[6:])
+    assert any(row.get('bread', 0) > 0 for row in made[7:])
+
+
+def test_initial_probe_is_not_repeated_without_sales(market):
+    _, arrays, meta, _ = market
+    agent = meta['firm_good'].index('flour')
+    arrays['agent_history_count'][agent] = 0
+    arrays['public_share'][int(arrays['agent_good'][agent])] = 0
+    arrays['agent_initialized'][agent] = 1
+    arrays['agent_forecast'][agent] = 20
+    assert agent_planner.expectations(arrays, agent, 0) == pytest.approx(13)
+
+
+def test_reusing_market_books_preserves_snapshot_and_input_quotes(market):
+    from shadow.runner import prepare_market
+    engine, _, _, _ = market
+    sells = prepare_market(engine)
+    budget = {firm: engine.free_cash(firm) for firm in engine.enterprises}
+    original, meta = agent_snapshot.build(engine, budget)
+    reused, _ = agent_snapshot.build(engine, budget, sells=sells)
+    for name in original:
+        np.testing.assert_array_equal(original[name], reused[name])
+    for i, fid in enumerate(meta['firms']):
+        firm = engine.enterprises[fid]
+        recipe = engine.goods[firm['good']]
+        for good in recipe['inputs'].keys() | recipe.get('equipment', {}).keys():
+            assert reused['agent_input_price'][i, meta['good_index'][good]] == engine.reference_price(
+                engine.accounts[fid], good, sells)

@@ -46,7 +46,7 @@ def _group_index(values, n_groups):
     return np.cumsum(counts).astype(np.int32)
 
 
-def build(engine, budget, repeat=1):
+def build(engine, budget, repeat=1, sells=None):
     """Собрать массивы. `repeat` — синтетическое размножение агентов для замера роста.
 
     Размножение нужно только для масштабного теста: реальных миров на 5000 фирм
@@ -87,18 +87,21 @@ def build(engine, budget, repeat=1):
     agent_stock = np.zeros((n_agents, n_goods), dtype=np.float64)
     agent_available_stock = np.zeros_like(agent_stock)
     agent_history = np.zeros((n_agents, 3, 3), dtype=np.float64)
+    histories = [[h for h in f.get('sales_history', [])[-3:]
+                  if h.get('offered', 0) > EPS or h.get('sold', 0) > EPS
+                  or h.get('output', 0) > EPS or h.get('input_limited')] for f in firms]
     for row, (firm, account) in enumerate(zip(firms, accounts)):
         for name, quantity in account['stock'].items():
             agent_stock[row, good_index[name]] = quantity
             agent_available_stock[row, good_index[name]] = engine.free_stock(account['id'], name)
-        for offset, item in enumerate(firm.get('sales_history', [])[-3:]):
+        for offset, item in enumerate(histories[row]):
             agent_history[row, offset] = (item.get('sold', 0.0), item.get('output', 0.0),
                                           float(bool(item.get('input_limited', False))))
 
     agent_forecast = np.array([f.get('agent_sales_forecast', f.get('sales_forecast', 0.0))
                                for f in firms], dtype=np.float64)
-    agent_history_count = np.array([min(3, len(f.get('sales_history', [])))
-                                    for f in firms], dtype=np.int32)
+    agent_history_count = np.array([len(h) for h in histories], dtype=np.int32)
+    agent_initialized = np.array(['agent_sales_forecast' in f for f in firms], dtype=np.uint8)
     # Сигнал — среднее за месяцы, а не сумма переносимых остатков заявок.
     history = engine.meta.get('market_history', [])[-3:]
     public_demand = np.zeros(n_goods, dtype=np.float64)
@@ -190,22 +193,26 @@ def build(engine, budget, repeat=1):
 
     # Котировки включают опубликованные склады фирм. Исключение этих офферов
     # из книги исполнителя не должно заменять их цены ценами из контента.
-    public_sells = defaultdict(list)
-    for order in engine.report['orders']:
-        if order['side'] == 'sell':
-            public_sells[order['good']].append(order)
-    representatives = {market_tile(a): a for a in engine.accounts.values()}
-    market_price = np.array([[engine.reference_price(representatives[tile], g, public_sells)
-                              for g in goods] for tile in tiles], dtype=np.float64)
+    public_sells = sells
+    if public_sells is None:
+        public_sells = defaultdict(list)
+        for order in engine.report['orders']:
+            if order['side'] == 'sell':
+                public_sells[order['good']].append(order)
+    agent_input_price = np.zeros((n_agents, n_goods), dtype=np.float64)
+    for row, (firm, account) in enumerate(zip(firms, accounts)):
+        recipe = engine.goods[firm['good']]
+        for g in recipe['inputs'].keys() | recipe.get('equipment', {}).keys():
+            agent_input_price[row, good_index[g]] = engine.reference_price(account, g, public_sells)
 
     arrays = {
         'agent_good': agent_good, 'agent_tile': agent_tile,
         'agent_province': agent_province, 'agent_capacity': agent_capacity,
         'agent_price': agent_price, 'agent_balance': agent_balance,
         'agent_budget': agent_budget, 'agent_stock': agent_stock,
-        'agent_available_stock': agent_available_stock, 'market_price': market_price,
+        'agent_available_stock': agent_available_stock, 'agent_input_price': agent_input_price,
         'agent_history': agent_history, 'agent_history_count': agent_history_count,
-        'agent_forecast': agent_forecast, 'public_share': public_share,
+        'agent_initialized': agent_initialized, 'agent_forecast': agent_forecast, 'public_share': public_share,
         'public_price': public_price,
         'good_inputs': good_inputs, 'good_equip': good_equip, 'good_labor': good_labor,
         'good_wear': np.array([engine.goods[g].get('durable', {}).get('wear_rate', 0.0) for g in goods]),

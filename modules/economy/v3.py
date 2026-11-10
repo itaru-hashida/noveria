@@ -2,6 +2,7 @@
 import copy
 import heapq
 import math
+import time
 from collections import defaultdict
 
 from .support import EPS, EconomyServices
@@ -3389,7 +3390,20 @@ class Economy(EconomyServices):
             feedback.setdefault((o['participant'], o['good']), copy.deepcopy(o))
         self.meta['price_feedback'] = list(feedback.values())
 
-    def step(self):
+    def plan_enterprises(self, existing, sells):
+        # Один проход от конечных товаров ко входам, без рекурсивного перепланирования.
+        for e in sorted(self.shuffled(existing), key=lambda e: -self.depth(e['good'])):
+            a = self.accounts[e['id']]
+            if e['status'] == 'closed' or (self.free_cash(e['id']) <= EPS
+                    and a.get('operating_protected', 0) <= EPS):
+                # Спрос на входы появляется после планирования следующего звена цепочки.
+                self.recover_enterprises(sells, [e])
+            if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
+                self.input_requests(e, sells)
+
+    def step(self, enterprise_planner=None):
+        started = time.perf_counter()
+        timings = {}
         self.__dict__.pop('_planning_orders', None)
         self.__dict__.pop('_recovery_quotes', None)
         self.__dict__.pop('_stock_sales_cache', None)
@@ -3428,15 +3442,14 @@ class Economy(EconomyServices):
         self.public_project_requests(sells)
         # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
         self.project_requests(sells)
-        # Один проход от конечных товаров ко входам, без рекурсивного перепланирования.
-        for e in sorted(self.shuffled(existing), key=lambda e: -self.depth(e['good'])):
-            a = self.accounts[e['id']]
-            if e['status'] == 'closed' or (self.free_cash(e['id']) <= EPS
-                    and a.get('operating_protected', 0) <= EPS):
-                # Спрос на входы появляется после планирования следующего звена цепочки.
-                self.recover_enterprises(sells, [e])
-            if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
-                self.input_requests(e, sells)
+        timings['preparation'] = time.perf_counter()-started
+        phase_started = time.perf_counter()
+        if enterprise_planner is None:
+            self.plan_enterprises(existing, sells)
+        else:
+            enterprise_planner(self, existing, sells)
+        timings['planning_execution'] = time.perf_counter()-phase_started
+        phase_started = time.perf_counter()
         buys = [o for o in self.report['orders'] if o['side'] == 'buy']
         # Местная базовая потребность получает первый доступ к местному офферу.
         # Второй общий проход сохраняет импорт, экспорт и обычную конкуренцию
@@ -3464,6 +3477,8 @@ class Economy(EconomyServices):
                 o['status'] = 'expired'
                 o['execution_status'] = execution_status
                 o['reason'] = execution_reason or 'Окончание торгов месяца'
+        timings['market_tail'] = time.perf_counter()-phase_started
+        phase_started = time.perf_counter()
         self.reserve_expedited_construction_labor()
         self.produce(existing, planning_sells)
         self.advance_public_projects()
@@ -3513,6 +3528,8 @@ class Economy(EconomyServices):
         if detail != 'none':
             self.report['diagnostics'].extend(dict(kind='owner_consumption', **copy.deepcopy(row))
                 for row in self.report['owner_consumption'])
+        timings['production_settlement'] = time.perf_counter()-phase_started
+        phase_started = time.perf_counter()
         self.summarize(prior_cash)
         self.report['account_flows'] = []
         sectors = defaultdict(float)
@@ -3551,6 +3568,9 @@ class Economy(EconomyServices):
             self.report['events'] = []
             for order in self.report['orders']:
                 order.pop('match_observation', None)
+        timings['report'] = time.perf_counter()-phase_started
+        timings['wall'] = time.perf_counter()-started
+        self.phase_timings = timings
         return self.report
 
     def validate(self, before=None):

@@ -72,15 +72,8 @@ def prepare_market(engine):
 
 def budget_cap(engine):
     """Р’РЅРµС€РЅРёР№ Р»РёРјРёС‚: СЃРІРѕР±РѕРґРЅС‹Рµ РґРµРЅСЊРіРё С„РёСЂРјС‹ РїР»СЋСЃ РґРѕСЃС‚СѓРїРЅРѕРµ С„РёРЅР°РЅСЃРёСЂРѕРІР°РЅРёРµ РІР»Р°РґРµР»СЊС†Р°."""
-    result = {}
-    for firm in engine.enterprises.values():
-        if firm['status'] == 'closed':
-            continue
-        limit = engine.free_cash(firm['id'])
-        if engine.accounts.get(firm['owner_id']) is not None:
-            limit += max(0.0, engine.cash_after_commitments(firm['owner_id'], 0.0))
-        result[firm['id']] = limit
-    return result
+    return {firm['id']: engine.free_cash(firm['id'])
+            for firm in engine.enterprises.values() if firm['status'] != 'closed'}
 
 
 def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled'):
@@ -204,6 +197,8 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
 
 
 def main():
+    print('STATIC SHADOW AUDIT: ledger is discarded; for full persistent turns use '
+          'python -m shadow.compare_v3')
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=73129)
     parser.add_argument('--months', type=int, default=6)

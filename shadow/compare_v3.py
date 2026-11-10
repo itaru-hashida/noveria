@@ -1,144 +1,170 @@
-"""Полный новый ход против V3: скорость и экономическое поведение.
+"""Воспроизводимый полный ход V3 / агентов на независимых сохранениях.
 
-ПАРАМЕТРЫ: seed=73129 months=12 detail=none, карта 40x30.
-Оба прогона начинаются с одного мира; V3 крутится в своей БД, агентная модель
-читает тот же мир и не пишет в него.
+python -m shadow.compare_v3 --seed 73129 --months 12 --warmup 2 --workers 4
 """
 import argparse
-import shutil
-import sys
-import time
-from concurrent.futures import ProcessPoolExecutor
+import json
+import multiprocessing
+import os
 from pathlib import Path
+import subprocess
+import tempfile
+import time
+from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / 'audit'))
+from audit.scenario_runner import build_world
+from modules.economy import Economy
+from shadow.turn import AgentTurn
+from shadow import sandbox_mp
 
-from shadow import sandbox_mp  # noqa: E402
 
-sandbox_mp.enable_multiprocessing()
-
-from modules.economy import Economy  # noqa: E402
-import scenario_runner as sr  # noqa: E402
-from shadow.runner import prepare_market, run_shadow  # noqa: E402
+def warm_worker(_):
+    time.sleep(0.02)
+    return os.getpid()
 
 
 def economy_state(engine):
-    """Показатели поведения, которые требует задача 3."""
-    total_demand = 0.0
-    met_demand = 0.0
-    deficits = 0.0
-    for account in engine.accounts.values():
-        if account['kind'] != 'household':
-            continue
-        for need in account.get('needs', {}).values():
-            total_demand += need.get('needed', 0.0)
-            met_demand += need.get('consumed', 0.0)
-            deficits += need.get('deficit', 0.0)
-    active = sum(1 for e in engine.enterprises.values() if e['status'] == 'active')
-    idle = sum(1 for e in engine.enterprises.values() if e['status'] == 'idle')
-    closed = sum(1 for e in engine.enterprises.values() if e['status'] == 'closed')
-    output = sum(e.get('output', 0.0) for e in engine.enterprises.values())
+    report = engine.report
+    trades = report['trades']
     prices = {}
-    for entry in engine.report.get('prices', {}).items():
-        prices[entry[0]] = entry[1]
-    return dict(households_needed=total_demand, households_consumed=met_demand,
-                households_deficit=deficits,
-                fulfilment=met_demand/total_demand if total_demand else 0.0,
-                active=active, idle=idle, closed=closed, output=output,
-                firms=len(engine.enterprises), gold=engine.gold())
+    for good in engine.goods:
+        rows = [t for t in trades if t['good'] == good]
+        volume = sum(t['quantity'] for t in rows)
+        prices[good] = sum(t['gold']+t['freight'] for t in rows)/volume if volume else None
+    return dict(month=engine.meta['month'], production=report['production'],
+                consumed=report['consumed'], stocks=engine.total_stock(), prices=prices,
+                profit={g: sum(e['profit'] for e in engine.enterprises.values() if e['good'] == g)
+                        for g in engine.goods},
+                active=report['active_enterprises'],
+                opened=[r['enterprise'] for r in report['lifecycle'] if r['action'] == 'opened'],
+                idle=dict(Counter(e.get('reason', '') for e in engine.enterprises.values()
+                                  if e['status'] == 'idle')),
+                orders=len(report['orders']), trades=len(trades),
+                invariants=report['invariants'], gold=engine.gold())
+
+
+def run_mode(args, mode, pool):
+    rows = []
+    with tempfile.TemporaryDirectory(prefix='noveria-compare-') as directory:
+        db, service = build_world(args.seed, Path(directory), report_detail=args.detail)
+        try:
+            for month in range(args.warmup):
+                service.advance_turn(command_id=f'warm-{month}', source='audit')
+            captured = {}
+
+            def economy_phase(ctx):
+                start = time.perf_counter()
+                engine = Economy.load(db)
+                load = time.perf_counter()-start
+                planner = AgentTurn(pool if mode == 'pool' else None, batch=args.batch) if mode != 'v3' else None
+                # Остановка добычи без удаления денег/товаров, затем обычное снятие.
+                if args.scenario == 'halt':
+                    original_sync = engine.sync_locations
+
+                    def sync_with_halt():
+                        original_sync()
+                        for firm in engine.enterprises.values():
+                            if firm['good'] == 'grain':
+                                firm['suspended'] = args.warmup+3 <= engine.meta['month'] <= args.warmup+5
+                    engine.sync_locations = sync_with_halt
+                report = engine.step(enterprise_planner=planner)
+                save_start = time.perf_counter()
+                engine.save(db)
+                save = time.perf_counter()-save_start
+                event_start = time.perf_counter()
+                event = db.record_event(service.event('economy_month',
+                    dict(month=report['month'], invariants=report['invariants'],
+                         trades=len(report['trades']), rules_version=3), [], source='economy',
+                    action_id=ctx['command_id'], summary='Экспериментальный месяц экономики'))
+                ctx['events'].append(event)
+                ctx['changes'].append(f'Экономика: {report["active_enterprises"]} предприятий')
+                event_seconds = time.perf_counter()-event_start
+                phase = engine.phase_timings
+                stream = planner.metrics if planner else {}
+                snapshot = stream.get('snapshot', 0.0)
+                report_start = time.perf_counter()
+                state = economy_state(engine)
+                report_seconds = time.perf_counter()-report_start
+                captured.update(state, trace=planner.traces if planner else {},
+                    stream=stream, exclusive=dict(
+                        load_preparation=load+phase['preparation']+snapshot,
+                        planning_delivery=phase['planning_execution']-snapshot-stream.get('executor_processing', 0.0),
+                        market_execution=phase['market_tail']+stream.get('executor_processing', 0.0),
+                        production_settlement=phase['production_settlement'],
+                        report_save=phase['report']+save+report_seconds, economy_event=event_seconds))
+                count = len(engine.enterprises)
+                teardown_started = time.perf_counter()
+                if args.scenario == 'halt':
+                    engine.sync_locations = original_sync
+                    del sync_with_halt, original_sync
+                del engine
+                captured['exclusive']['report_save'] += time.perf_counter()-teardown_started
+                return count
+
+            service.turns.phases = [(name, economy_phase if name == 'economy' else handler)
+                                    for name, handler in service.turns.phases]
+            for month in range(args.months):
+                start = time.perf_counter()
+                report = service.advance_turn(command_id=f'{mode}-{month}', source='audit')
+                wall = time.perf_counter()-start
+                row = dict(captured)
+                timings = service.turns.last_timings
+                economy_duration = next(p['duration'] for p in report['phases'] if p['name'] == 'economy')
+                row['adapter_overhead'] = economy_duration-sum(row['exclusive'].values())
+                row['exclusive']['report_save'] += row['adapter_overhead']
+                row['exclusive']['load_preparation'] += wall-timings['wall']
+                other_phases = sum(p['duration'] for p in report['phases'] if p['name'] != 'economy')
+                row['exclusive'] = dict(row['exclusive'], commit_events_framework=
+                    timings['commit']+timings['notifications']+timings['orchestration']+other_phases
+                    +row['exclusive'].pop('economy_event'))
+                row.update(wall=wall, commit=timings['commit'], notifications=timings['notifications'])
+                row['unattributed'] = wall-sum(row['exclusive'].values())
+                rows.append(row)
+                print(mode, row['month'], 'wall', round(wall, 4), 'active', row['active'],
+                      'production', {g: round(q, 1) for g, q in row['production'].items()}, flush=True)
+        finally:
+            db.close()
+    return rows
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=73129)
     parser.add_argument('--months', type=int, default=12)
-    parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--warmup', type=int, default=2)
+    parser.add_argument('--workers', type=int, default=4)
+    parser.add_argument('--batch', type=int, default=32)
+    parser.add_argument('--detail', choices=['none', 'standard', 'deep'], default='none')
+    parser.add_argument('--scenario', choices=['baseline', 'halt'], default='baseline')
+    parser.add_argument('--modes', default='v3,inline,pool')
+    parser.add_argument('--report', type=Path, default=Path('tmp/full-turn.json'))
     args = parser.parse_args()
-
-    work = ROOT / 'tmp' / ('compare-%d' % args.seed)
-    shutil.rmtree(work, ignore_errors=True)
-    work.mkdir(parents=True, exist_ok=True)
-    db, service = sr.build_world(args.seed, work, report_detail='none')
-    try:
-        for month in range(args.warmup):
-            service.advance_turn(command_id='cmp-warm-%d' % month, source='audit')
-
-        print('PARAMS: seed=%d months=%d warmup=%d detail=none workers=%d'
-              % (args.seed, args.months, args.warmup, args.workers))
-
-        # --- V3 -----------------------------------------------------------
-        v3_states = []
-        v3_started = time.perf_counter()
-        for month in range(args.months):
-            service.advance_turn(command_id='cmp-v3-%d' % month, source='audit')
-            engine = Economy.load(db)
-            v3_states.append(economy_state(engine))
-        v3_seconds = time.perf_counter()-v3_started
-
-        # --- агентная модель на свежем мире --------------------------------
-        shutil.rmtree(work, ignore_errors=True)
-        work.mkdir(parents=True, exist_ok=True)
-        db.close()
-        db, service = sr.build_world(args.seed, work, report_detail='none')
-        for month in range(args.warmup):
-            service.advance_turn(command_id='cmp-warm2-%d' % month, source='audit')
-
-        shadow_states = []
-        balance_broken = 0
-        with ProcessPoolExecutor(max_workers=args.workers) as pool:
-            shadow_started = time.perf_counter()
-            for month in range(args.months):
-                engine = Economy.load(db)
-                prepare_market(engine)
-                parameters = (engine.cfg['transport_rate'], engine.cfg['wage'],
-                              engine.cfg['consumption_tax'], engine.cfg['markup'],
-                              engine.cfg.get('enterprise_overhead_rate', 0.0),
-                              engine.cfg['labor_share'])
-                run = run_shadow(engine, parameters, pool, batch=32)
-                if run['goods_balance']:
-                    balance_broken += 1
-                shadow_states.append(dict(
-                    output=sum(r['output'] for r in run['production_rows']),
-                    active=sum(1 for r in run['production_rows'] if r['output'] > 0),
-                    idle=sum(1 for r in run['production_rows'] if r['output'] <= 0),
-                    intents=len(run['outcomes']),
-                    filled=sum(1 for row in run['outcomes'] if row['filled'] > 0),
-                    gold=run['money_end']))
-                # Месяц V3 вперёд, чтобы мир жил: агенты читают следующий мир.
-                service.advance_turn(command_id='cmp-shadow-%d' % month, source='audit')
-            shadow_seconds = time.perf_counter()-shadow_started
-
-        print()
-        print('3) ПОЛНЫЙ ХОД: агентная модель против V3')
-        print('   V3:      %.2fs за %d месяцев (%.3f s/ход)'
-              % (v3_seconds, args.months, v3_seconds/args.months))
-        print('   агенты:  %.2fs за %d месяцев (%.3f s/ход, только план+клиринг+выпуск)'
-              % (shadow_seconds, args.months, shadow_seconds/args.months))
-        print()
-        print('   поведение (последний месяц)      V3        агенты')
-        v3_last, sh_last = v3_states[-1], shadow_states[-1]
-        print('   выпуск фирм                   %10.2f  %10.2f'
-              % (v3_last['output'], sh_last['output']))
-        print('   активных / простаивающих      %4d/%-5d %4d/%-5d'
-              % (v3_last['active'], v3_last['idle'], sh_last['active'], sh_last['idle']))
-        print('   выполнено заявок               %10s  %10d из %d'
-              % ('-', sh_last['filled'], sh_last['intents']))
-        print('   удовлетворение потребления     %9.1f%%  %9s'
-              % (100*v3_last['fulfilment'], '-'))
-        print('   золото в мире                 %10.2f  %10.2f'
-              % (v3_last['gold'], sh_last['gold']))
-        print()
-        print('   месяцев с нарушенным балансом товара: %d' % balance_broken)
-        print('   выпуск по месяцам (агенты): %s'
-              % ', '.join('%.1f' % s['output'] for s in shadow_states))
-        print('   выпуск по месяцам (V3):     %s'
-              % ', '.join('%.1f' % s['output'] for s in v3_states))
-    finally:
-        db.close()
-        shutil.rmtree(work, ignore_errors=True)
+    if args.months < 1 or args.workers < 1 or args.batch < 1 or args.warmup < 0:
+        parser.error('months, workers, batch > 0; warmup >= 0')
+    sandbox_mp.enable_multiprocessing()
+    modes = args.modes.split(',')
+    if set(modes)-{'v3', 'inline', 'pool'}:
+        parser.error('modes: v3,inline,pool')
+    result = dict(commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+                  parameters={k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}, runs={})
+    for mode in modes:
+        if mode == 'pool':
+            start = time.perf_counter()
+            with ProcessPoolExecutor(max_workers=args.workers,
+                                     mp_context=multiprocessing.get_context('spawn')) as pool:
+                pids = set(pool.map(warm_worker, range(args.workers*4)))
+                result['cold_pool_seconds'] = time.perf_counter()-start
+                result['warm_worker_pids'] = sorted(pids)
+                result['runs'][mode] = run_mode(args, mode, pool)
+        else:
+            result['runs'][mode] = run_mode(args, mode, None)
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+    for mode, rows in result['runs'].items():
+        print(mode, 'mean wall', sum(r['wall'] for r in rows)/len(rows),
+              'max unattributed', max(abs(r['unattributed']) for r in rows))
+    print('report:', args.report)
 
 
 if __name__ == '__main__':

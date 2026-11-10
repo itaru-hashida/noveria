@@ -75,5 +75,12 @@ class TurnService:
             event=self.service.event('turn_advanced',dict(old=old,new=old+1,report=report),[],source=source,
                                      action_id=command_id,summary=report['summary'])
             ctx['events'].append(self.db.record_event(event)); self.db.save_turn_result(command_id,report)
+            commit_started=time.perf_counter()
+        commit_seconds=time.perf_counter()-commit_started
+        notify_started=time.perf_counter()
         for event in ctx['events']: self.service.notify(event)
+        wall=time.perf_counter()-start
+        notifications=time.perf_counter()-notify_started
+        self.last_timings=dict(wall=wall,commit=commit_seconds,notifications=notifications,
+            orchestration=wall-sum(p['duration'] for p in ctx['phases'])-commit_seconds-notifications)
         return report
