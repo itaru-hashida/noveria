@@ -116,47 +116,112 @@ def expectations(book, agent, observed):
 
 
 def volume_quote(book, tile, good, quantity, rate):
-    """Предельная (а не средняя) цена покрытия объёма по книге.
+    """Предельная цена покрытия объёма по книге — оставлено для совместимости.
 
-    Заявка с пределом по средней цене не может докупить следующий лот: средняя
-    по 40,8 ед. по 1,0479 и 8,4 ед. по 1,0508 равна 1,0484, а следующий лот
-    стоит 1,0508 и не проходит. Поэтому предел должен равняться доставленной
-    цене последней нужной единицы — это и есть предельная цена спроса.
-    Ограничение по марже накладывается отдельно.
-
-    Не хватило книги — остаток оценивается по ориентиру следующего выпуска.
+    `plan()` больше не использует: он идёт по `offer_curve` и берёт цену
+    последней реально взятой единицы через `input_plan`. Функция оставлена,
+    потому что на неё ссылаются старые пробы замера.
     """
-    if quantity <= EPS:
+    curve = offer_curve(book, tile, good, rate)
+    if not curve:
         return reference_price(book, tile, good, rate)
-    weight = book['good_weight'][good]
-    distance_row = book['distance'][tile]
-    ptr = book['offer_ptr']
-    # Офферы одного товара упорядочены по площадкам, а не по landed-цене:
-    # для предельной цены нужно отсортировать по доставленной цене этот товар.
-    rows = []
-    for index in range(int(ptr[good]), int(ptr[good+1])):
-        if book['offer_remaining'][index] <= EPS:
-            continue
-        if not book['reachable'][book['offer_tile'][index], tile]:
-            continue
-        landed = _landed(distance_row, book['offer_tile'][index],
-                         book['offer_price'][index], weight, rate)
-        rows.append((landed, float(book['offer_remaining'][index])))
-    if not rows:
-        return reference_price(book, tile, good, rate)
-    rows.sort()
     left, marginal = quantity, None
-    for landed, remaining in rows:
-        take = min(left, remaining)
+    for landed, available in curve:
+        take = min(left, available)
         if take > EPS:
             marginal = landed
         left -= take
         if left <= EPS:
             break
     if left > EPS:
-        # Книги не хватило: последняя докупаемая единица — по ориентиру выпуска.
         marginal = max(marginal or 0.0, reference_price(book, tile, good, rate))
     return marginal if marginal is not None else reference_price(book, tile, good, rate)
+
+
+def offer_curve(book, tile, good, rate):
+    """Достижимые офферы товара для площадки: [(landed, available)] по возрастанию.
+
+    Это и есть «кривая предложения», о которой говорит задача: каждое звено —
+    одна доставленная цена и сколько товара по ней реально доступно. Раньше
+    функции брали минимум или предельную цену по несортированному списку и
+    теряли количество, поэтому нельзя было сказать, покрывает ли книга объём.
+
+    Уровни с одинаковой landed-ценой сливаются: заявка всё равно их не
+    различает, а суммарное количество — различает.
+    """
+    weight = book['good_weight'][good]
+    distance_row = book['distance'][tile]
+    ptr = book['offer_ptr']
+    rows = []
+    for index in range(int(ptr[good]), int(ptr[good+1])):
+        remaining = float(book['offer_remaining'][index])
+        if remaining <= EPS:
+            continue
+        offer_tile = int(book['offer_tile'][index])
+        if not book['reachable'][offer_tile, tile]:
+            continue
+        landed = _landed(distance_row, offer_tile, book['offer_price'][index], weight, rate)
+        rows.append((landed, remaining))
+    rows.sort()
+    merged = []
+    for landed, quantity in rows:
+        if merged and abs(merged[-1][0]-landed) <= EPS:
+            merged[-1] = (merged[-1][0], merged[-1][1]+quantity)
+        else:
+            merged.append((landed, quantity))
+    return merged
+
+
+def input_plan(book, tile, good, wanted, ceiling, cash, rate, rivals=1):
+    """Сколько закупить и по какой предельной цене.
+
+    Идёт по кривой офферов и берёт единицы, пока они дешевле `ceiling`
+    (маржа), пока хватает `cash` (бюджет, зарплата, обязательства) и пока не
+    набран `wanted` объём. Предел заявки — landed-цена **последней взятой**
+    единицы, а не лучшая цена и не средняя: иначе заявка не дотянется до
+    второго уровня после выкупа первого.
+
+    `rivals` — сколько ещё покупателей товара претендуют на те же офферы. Один
+    уровень книги делится между ними, поэтому на себя рассчитывается
+    `available/rivals` единиц. Без этого заявка ставила предел по первому
+    уровню (641 единица по 1,7733), которого ей не достанется: её выкупали
+    соседи, а сама она оставалась с ценой ниже следующего уровня и получала
+    landed_price_above_limit. Замер: 27 отклонённых заявок на муку при 2313
+    муки на складах и 1483 недополученного спроса.
+
+    Если книга не покрывает объём, возвращается доступное количество: спрос
+    необеспеченный не создаётся. Возвращает (quantity, bid, available_total,
+    affordable_total) — для трассировки видно, что именно ограничило.
+    """
+    curve = offer_curve(book, tile, good, rate)
+    if not curve:
+        return 0.0, 0.0, 0.0, 0.0
+    rivals = max(1, int(rivals))
+    available_total = sum(quantity for _, quantity in curve)
+    affordable_total = sum(quantity for price, quantity in curve if price <= ceiling+EPS)
+    if wanted <= EPS or cash <= EPS:
+        return 0.0, 0.0, available_total, affordable_total
+    left, covered, spent, bid = wanted, 0.0, 0.0, 0.0
+    for landed, quantity in curve:
+        if landed > ceiling+EPS:
+            break
+        if spent >= cash-EPS:
+            break
+        # Своя часть уровня: остальное достанется другим покупателям.
+        share = quantity/rivals
+        take = share if share < left else left
+        if landed > EPS:
+            take = min(take, (cash-spent)/landed)
+        if take <= EPS:
+            # Уровень целиком уйдёт соседям — двигаемся к следующему.
+            continue
+        left -= take
+        covered += take
+        spent += take*landed
+        bid = landed
+        if left <= EPS:
+            break
+    return covered, bid, available_total, affordable_total
 
 
 def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
@@ -201,29 +266,50 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
     requirements = dict(inputs)
     for g, ratio in equipment:
         requirements[g] = requirements.get(g, 0.0)+ratio
-    # Предел заявки — цена, при которой маржа ещё не отрицательна, но не выше
-    # средней цены покрытия нужного объёма. Первое защищает маржу, второе
-    # позволяет докупить второй оффер, когда первый выкуплен.
-    bids = {}
+    # Предел по марже: цена, при которой маржа ещё не отрицательна.
+    ceilings = {}
     for g, ratio in requirements.items():
         other_cost = unit_cost-costs.get(g, 0.0)*quotes[g]+fixed_unit
         marginal_ratio = costs.get(g, ratio)
-        ceiling = max(0.0, (sale_price*net-other_cost)/max(marginal_ratio, EPS))
-        if desired > EPS:
-            needed = max(0.0, desired*ratio*(1+INPUT_BUFFER)-float(stock[g]))
-            market = volume_quote(book, tile, g, needed, rate) if needed > EPS else quotes[g]
-        else:
-            market = quotes[g]
-        bids[g] = min(max(quotes[g], market), ceiling) if ceiling > EPS else quotes[g]
+        ceilings[g] = max(0.0, (sale_price*net-other_cost)/max(marginal_ratio, EPS))
 
-    def purchases_for(output):
+    def wanted_for(output, g, ratio):
+        # Буфер запаса расширяет запрос, но предел цены берётся по тому
+        # объёму, который реально нужен производству. Иначе последняя единица
+        # буфера тянет предел вверх на чужой уровень цены, а следующая заявка
+        # соседа остаётся с пределом чуть ниже landed и отклоняется.
+        return max(0.0, output*ratio*(1+INPUT_BUFFER)-float(stock[g]))
+
+    def purchases_for(output, cash):
+        """Закупки по кривой офферов: объём и предел цены из доступного."""
         if output <= EPS:
             return []
-        return [(g, max(0.0, output*r*(1+INPUT_BUFFER)-float(stock[g])), bids[g])
-                for g, r in requirements.items() if bids[g] > EPS]
+        rows = []
+        remaining_cash = cash
+        for g, ratio in requirements.items():
+            wanted = wanted_for(output, g, ratio)
+            if wanted <= EPS:
+                continue
+            quantity, bid, available, affordable = input_plan(
+                book, tile, g, wanted, ceilings[g], remaining_cash, rate,
+                rivals=book['input_buyers'][g] if 'input_buyers' in book else 1)
+            if quantity <= EPS or bid <= EPS:
+                continue
+            rows.append((g, quantity, bid, wanted, available, affordable))
+            remaining_cash = max(0.0, remaining_cash-quantity*bid)
+        return rows
 
     def cash_needed(output):
-        return overhead+output*wage_unit+sum(q*p for _, q, p in purchases_for(output))
+        """Полная потребность с учётом зарплатного резерва и оброка.
+
+        Закупка не может тратить деньги, зарезервированные под зарплату и
+        оброк, поэтому кривая офферов ограничена остатком, а не всем бюджетом.
+        Раньше здесь стоял полный бюджет, и бисекция принимала план, который
+        потом нечем было оплатить: заявки уходили в отказ.
+        """
+        purchase_cash = max(0.0, budget-overhead-output*wage_unit)
+        rows = purchases_for(output, cash=purchase_cash)
+        return overhead+output*wage_unit+sum(q*p for _, q, p, *_ in rows)
 
     target = desired
     if target > EPS and cash_needed(target) > budget+EPS:
@@ -235,11 +321,14 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
             else:
                 high = middle
         target, reason = low, 'Деньги на выпуск'
+    # Деньги на закупку: бюджет минус оброк и зарплата принятого плана.
+    # Зарплатный резерв и оброк защищены до закупок, как в V3.
+    purchase_cash = max(0.0, budget-overhead-target*wage_unit)
     # План публикуется после бюджетного ограничения даже при пустом складе.
     intents = [('sell', good, own_stock, sale_price, 'Продажа запасов', target, reason)]
-    purchases = purchases_for(target)
-    intents.extend(('buy', g, q, bid, 'Сырьё', target, reason)
-                   for g, q, bid in purchases if q > EPS)
+    purchases = purchases_for(target, cash=purchase_cash)
+    intents.extend(('buy', g, quantity, bid, 'Сырьё', target, reason)
+                   for g, quantity, bid, *_ in purchases if quantity > EPS)
     if trace is not None:
         trace.update(observed=observed, forecast=forecast, stock=own_stock,
                      history_count=int(book['agent_history_count'][agent]),
@@ -247,6 +336,10 @@ def plan(book, agent, rate, wage, tax, markup, overhead_rate, trace=None):
                      public=float(book['public_share'][good]),
                      projected_stock=projected_stock, desired=desired, target=target,
                      wage_reserve=target*wage_unit, overhead=overhead,
-                     purchases=purchases, reason=reason, price=sale_price,
-                     unit_cost=unit_cost)
+                     purchases=[(g, quantity, bid) for g, quantity, bid, *_ in purchases],
+                     reasons=[dict(good=int(g), needed=needed, available=available,
+                                   affordable=affordable, bought=quantity, bid=bid)
+                              for g, quantity, bid, needed, available, affordable in purchases],
+                     reason=reason, price=sale_price, unit_cost=unit_cost,
+                     purchase_cash=purchase_cash, budget=budget)
     return intents

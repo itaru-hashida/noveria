@@ -28,6 +28,43 @@ def warm_worker(_):
     return os.getpid()
 
 
+def rejected_orders(engine, limit=6):
+    """Заявки, отклонённые по цене доставки: кто, сколько и насколько ниже.
+
+    Без этого «landed_price_above_limit» остаётся счётчиком без причины: не
+    видно, чья заявка, какой товар и насколько предел отстал от рынка. Для
+    каждого случая считается лучшая достижимая landed-цена на момент разбора.
+    """
+    rejected = [o for o in engine.report['orders']
+                if o['side'] == 'buy' and o.get('reason') == 'landed_price_above_limit'
+                and o['remaining'] > 1e-9]
+    if not rejected:
+        return []
+    by_good = Counter()
+    for order in rejected:
+        by_good[order['good']] += order['remaining']
+    rows = []
+    for order in sorted(rejected, key=lambda o: -o['remaining'])[:limit]:
+        account = engine.accounts[order['participant']]
+        tile = engine.market_tile(account)
+        best = None
+        for sell in engine.report['orders']:
+            if sell['side'] != 'sell' or sell['good'] != order['good']:
+                continue
+            if sell['status'] in ('cancelled', 'expired') or sell['remaining'] <= 1e-9:
+                continue
+            quote = engine.landed(sell['tile_id'], tile, order['good'], sell['price'])
+            if quote and (best is None or quote[0] < best):
+                best = quote[0]
+        firm = engine.enterprises.get(order['participant'])
+        rows.append(dict(month=engine.meta['month'], buyer=order['participant'],
+                         buyer_good=firm['good'] if firm else 'account',
+                         good=order['good'], remaining=order['remaining'],
+                         bid=order['price'], best_landed=best,
+                         gap=(order['price']-best) if best is not None else None))
+    return rows
+
+
 def economy_state(engine):
     report = engine.report
     trades = report['trades']
@@ -45,7 +82,11 @@ def economy_state(engine):
                 idle=dict(Counter(e.get('reason', '') for e in engine.enterprises.values()
                                   if e['status'] == 'idle')),
                 orders=len(report['orders']), trades=len(trades),
-                invariants=report['invariants'], gold=engine.gold())
+                invariants=report['invariants'], gold=engine.gold(),
+                rejected=rejected_orders(engine),
+                rejected_total=sum(o['remaining'] for o in report['orders']
+                                   if o['side'] == 'buy'
+                                   and o.get('reason') == 'landed_price_above_limit'))
 
 
 def run_mode(args, mode, pool):

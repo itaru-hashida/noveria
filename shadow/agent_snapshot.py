@@ -123,6 +123,11 @@ def build(engine, budget, repeat=1, sells=None):
     offering = np.bincount(agent_good[agent_available_stock[:, :].sum(axis=1) > EPS],
                            minlength=n_goods)
     good_sellers = np.maximum(1, np.maximum(offering, 1)).astype(np.int32)
+    # Сколько фирм закупают каждый товар как вход: на столько делится уровень
+    # книги при расчёте предела заявки. Без этого агент считает, что весь
+    # дешёвый уровень достанется ему одному, ставит заниженный предел и
+    # получает отказ по цене доставки.
+    input_buyers = np.ones(n_goods, dtype=np.int32)
     public_price = np.divide(public_value, public_volume,
                              out=np.zeros(n_goods), where=public_volume > EPS)
 
@@ -133,6 +138,7 @@ def build(engine, budget, repeat=1, sells=None):
     good_weight = np.zeros(n_goods, dtype=np.float64)
     good_taxed = np.zeros(n_goods, dtype=np.uint8)
     consumer = engine.cfg['basic_needs'] | engine.cfg['extra_needs']
+    buyer_counts = np.zeros(n_goods, dtype=np.int32)
     for name, recipe in engine.goods.items():
         column = good_index[name]
         good_labor[column] = recipe['labor']
@@ -141,8 +147,11 @@ def build(engine, budget, repeat=1, sells=None):
         good_taxed[column] = int(name in consumer)
         for input_name, ratio in recipe.get('inputs', {}).items():
             good_inputs[column, good_index[input_name]] = ratio
+            buyer_counts[good_index[input_name]] += 1
         for input_name, ratio in recipe.get('equipment', {}).items():
             good_equip[column, good_index[input_name]] = ratio
+            buyer_counts[good_index[input_name]] += 1
+    input_buyers = np.maximum(1, buyer_counts).astype(np.int32)
 
     # Публичное предложение — ВСЁ, что видно в книге, включая офферы фирм.
     # Раньше офферы фирм исключались как «дубль своих намерений», и снимок
@@ -223,7 +232,7 @@ def build(engine, budget, repeat=1, sells=None):
         'agent_available_stock': agent_available_stock, 'agent_input_price': agent_input_price,
         'agent_history': agent_history, 'agent_history_count': agent_history_count,
         'agent_initialized': agent_initialized, 'agent_forecast': agent_forecast, 'public_share': public_share,
-        'good_sellers': good_sellers,
+        'good_sellers': good_sellers, 'input_buyers': input_buyers,
         'public_price': public_price,
         'good_inputs': good_inputs, 'good_equip': good_equip, 'good_labor': good_labor,
         'good_wear': np.array([engine.goods[g].get('durable', {}).get('wear_rate', 0.0) for g in goods]),

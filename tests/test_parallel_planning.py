@@ -139,6 +139,98 @@ def test_initial_probe_is_not_repeated_without_sales(market):
     assert agent_planner.expectations(arrays, agent, 0) == pytest.approx(13)
 
 
+def _curve_book(levels):
+    """Книга из уровней [(landed, quantity)] на двух площадках.
+
+    Площадка покупателя — 0. Первая площадка продаёт по цене, дающей landed
+    ровно `landed`; доставка нулевая, чтобы тест не зависел от карты.
+    """
+    n_goods = 3
+    prices = np.array([price for price, _ in levels]+[1.0], dtype=np.float64)
+    remaining = np.array([quantity for _, quantity in levels]+[0.0], dtype=np.float64)
+    tiles = np.zeros(len(levels)+1, dtype=np.int32)
+    goods = np.full(len(levels)+1, 0, dtype=np.int32)
+    book = {
+        'good_weight': np.zeros(n_goods), 'distance': np.zeros((2, 2)),
+        'offer_ptr': np.array([0, len(levels)+1, len(levels)+1, len(levels)+1]),
+        'offer_price': prices, 'offer_remaining': remaining,
+        'offer_tile': tiles, 'offer_good': goods,
+        'reachable': np.ones((2, 2), dtype=np.uint8),
+        'good_price': np.ones(n_goods), 'public_price': np.ones(n_goods),
+    }
+    return book
+
+
+def test_offer_curve_sorts_by_landed_and_merges_levels():
+    book = _curve_book([(1.5, 100.0), (1.2, 50.0), (1.5, 25.0)])
+    curve = agent_planner.offer_curve(book, 0, 0, 0.0)
+    assert [price for price, _ in curve] == pytest.approx([1.2, 1.5])
+    assert [quantity for _, quantity in curve] == pytest.approx([50.0, 125.0])
+
+
+def test_bid_covers_second_level_after_cheap_one_is_taken():
+    """Предел заявки — priced последней нужной единицы, не лучшей цены."""
+    book = _curve_book([(1.2, 50.0), (1.5, 100.0)])
+    quantity, bid, available, affordable = agent_planner.input_plan(
+        book, 0, 0, wanted=120.0, ceiling=9.0, cash=1000.0, rate=0.0)
+    assert quantity == pytest.approx(120.0)
+    assert available == pytest.approx(150.0)
+    assert bid == pytest.approx(1.5)
+
+
+def test_bid_is_capped_by_margin_ceiling():
+    book = _curve_book([(1.2, 50.0), (1.5, 100.0)])
+    quantity, bid, _, affordable = agent_planner.input_plan(
+        book, 0, 0, wanted=120.0, ceiling=1.3, cash=1000.0, rate=0.0)
+    assert quantity == pytest.approx(50.0)
+    assert bid == pytest.approx(1.2)
+    assert affordable == pytest.approx(50.0)
+
+
+def test_bid_is_capped_by_cash_and_returns_bought_quantity():
+    book = _curve_book([(1.0, 100.0), (2.0, 100.0)])
+    quantity, bid, _, _ = agent_planner.input_plan(
+        book, 0, 0, wanted=150.0, ceiling=9.0, cash=150.0, rate=0.0)
+    # 100 по 1.0 плюс 25 по 2.0 = 150 денег; предел — цена последней единицы.
+    assert quantity == pytest.approx(125.0)
+    assert bid == pytest.approx(2.0)
+
+
+def test_bid_splits_level_between_rivals():
+    """Один уровень делят несколько покупателей: иначе предел занижен."""
+    book = _curve_book([(1.2, 50.0), (1.5, 100.0)])
+    alone = agent_planner.input_plan(book, 0, 0, wanted=60.0, ceiling=9.0,
+                                     cash=1000.0, rate=0.0, rivals=1)
+    shared = agent_planner.input_plan(book, 0, 0, wanted=60.0, ceiling=9.0,
+                                      cash=1000.0, rate=0.0, rivals=10)
+    # Без конкурентов агент берёт весь объём с двух уровней.
+    assert alone[0] == pytest.approx(60.0)
+    assert alone[1] == pytest.approx(1.5)
+    # При десяти конкурентах на дешёвый уровень приходится 5 единиц, остальное
+    # берётся со второго уровня, поэтому предел тоже 1.5, но объём меньше.
+    assert shared[0] < alone[0]
+    assert shared[1] == pytest.approx(1.5)
+
+
+def test_plan_reports_purchase_reasons_and_respects_wallet(market):
+    _, arrays, meta, parameters = market
+    agent = meta['firm_good'].index('flour')
+    arrays['agent_stock'][agent] = 0
+    arrays['agent_available_stock'][agent] = 0
+    arrays['agent_budget'][agent] = 3.0
+    arrays['agent_forecast'][agent] = 100
+    arrays['agent_history_count'][agent] = 1
+    arrays['agent_history'][agent, 0] = (100, 100, 0)
+    trace = {}
+    intents = agent_planner.plan(arrays, agent, *parameters, trace=trace)
+    spend = sum(i[2]*i[3] for i in intents if i[0] == 'buy')
+    assert spend+trace['wage_reserve']+trace['overhead'] <= 3.0+1e-7
+    assert trace['reasons'], 'закупки без разбора: не видно, что ограничило'
+    for row in trace['reasons']:
+        assert row['bought'] <= row['needed']+1e-7
+        assert row['bought'] <= row['available']+1e-7
+
+
 def test_reusing_market_books_preserves_snapshot_and_input_quotes(market):
     from shadow.runner import prepare_market
     engine, _, _, _ = market
