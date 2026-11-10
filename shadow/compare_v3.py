@@ -1,4 +1,4 @@
-"""Воспроизводимый полный ход V3 / агентов на независимых сохранениях.
+"""Р’РѕСЃРїСЂРѕРёР·РІРѕРґРёРјС‹Р№ РїРѕР»РЅС‹Р№ С…РѕРґ V3 / Р°РіРµРЅС‚РѕРІ РЅР° РЅРµР·Р°РІРёСЃРёРјС‹С… СЃРѕС…СЂР°РЅРµРЅРёСЏС….
 
 python -m shadow.compare_v3 --seed 73129 --months 12 --warmup 2 --workers 4
 """
@@ -7,8 +7,8 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import shutil
 import subprocess
-import tempfile
 import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
@@ -50,9 +50,13 @@ def economy_state(engine):
 
 def run_mode(args, mode, pool):
     rows = []
-    with tempfile.TemporaryDirectory(prefix='noveria-compare-') as directory:
-        db, service = build_world(args.seed, Path(directory), report_detail=args.detail)
-        try:
+    # Path в проекте, а не tempfile: под песочницей TemporaryDirectory создаёт
+    # каталог с режимом 0o700, из которого нельзя ни писать, ни удалять.
+    directory = Path(args.workdir)/('%s-%s' % (mode, args.seed))
+    shutil.rmtree(directory, ignore_errors=True)
+    directory.mkdir(parents=True, exist_ok=True)
+    db, service = build_world(args.seed, Path(directory), report_detail=args.detail)
+    try:
             for month in range(args.warmup):
                 service.advance_turn(command_id=f'warm-{month}', source='audit')
             captured = {}
@@ -62,7 +66,7 @@ def run_mode(args, mode, pool):
                 engine = Economy.load(db)
                 load = time.perf_counter()-start
                 planner = AgentTurn(pool if mode == 'pool' else None, batch=args.batch) if mode != 'v3' else None
-                # Остановка добычи без удаления денег/товаров, затем обычное снятие.
+                # РћСЃС‚Р°РЅРѕРІРєР° РґРѕР±С‹С‡Рё Р±РµР· СѓРґР°Р»РµРЅРёСЏ РґРµРЅРµРі/С‚РѕРІР°СЂРѕРІ, Р·Р°С‚РµРј РѕР±С‹С‡РЅРѕРµ СЃРЅСЏС‚РёРµ.
                 if args.scenario == 'halt':
                     original_sync = engine.sync_locations
 
@@ -80,9 +84,9 @@ def run_mode(args, mode, pool):
                 event = db.record_event(service.event('economy_month',
                     dict(month=report['month'], invariants=report['invariants'],
                          trades=len(report['trades']), rules_version=3), [], source='economy',
-                    action_id=ctx['command_id'], summary='Экспериментальный месяц экономики'))
+                    action_id=ctx['command_id'], summary='Р­РєСЃРїРµСЂРёРјРµРЅС‚Р°Р»СЊРЅС‹Р№ РјРµСЃСЏС† СЌРєРѕРЅРѕРјРёРєРё'))
                 ctx['events'].append(event)
-                ctx['changes'].append(f'Экономика: {report["active_enterprises"]} предприятий')
+                ctx['changes'].append(f'Р­РєРѕРЅРѕРјРёРєР°: {report["active_enterprises"]} РїСЂРµРґРїСЂРёСЏС‚РёР№')
                 event_seconds = time.perf_counter()-event_start
                 phase = engine.phase_timings
                 stream = planner.metrics if planner else {}
@@ -127,8 +131,9 @@ def run_mode(args, mode, pool):
                 rows.append(row)
                 print(mode, row['month'], 'wall', round(wall, 4), 'active', row['active'],
                       'production', {g: round(q, 1) for g, q in row['production'].items()}, flush=True)
-        finally:
-            db.close()
+    finally:
+        db.close()
+        shutil.rmtree(directory, ignore_errors=True)
     return rows
 
 
@@ -143,6 +148,8 @@ def main():
     parser.add_argument('--scenario', choices=['baseline', 'halt'], default='baseline')
     parser.add_argument('--modes', default='v3,inline,pool')
     parser.add_argument('--report', type=Path, default=Path('tmp/full-turn.json'))
+    parser.add_argument('--workdir', default='tmp/compare')
+    parser.add_argument('--repeats', type=int, default=1)
     args = parser.parse_args()
     if args.months < 1 or args.workers < 1 or args.batch < 1 or args.warmup < 0:
         parser.error('months, workers, batch > 0; warmup >= 0')
@@ -178,3 +185,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+

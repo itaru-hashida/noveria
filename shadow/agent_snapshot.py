@@ -137,15 +137,18 @@ def build(engine, budget, repeat=1, sells=None):
         for input_name, ratio in recipe.get('equipment', {}).items():
             good_equip[column, good_index[input_name]] = ratio
 
-    # Публичное предложение: всё, что не принадлежит агентам-фирмам. Фирмы
-    # подают намерения сами, дубль завысил бы предложение.
+    # Публичное предложение — ВСЁ, что видно в книге, включая офферы фирм.
+    # Раньше офферы фирм исключались как «дубль своих намерений», и снимок
+    # оставался пустым: все 19 офферов зерна принадлежали фирмам. Планировщик
+    # брал котировку из истории рынка, а исполнитель — из живой книги, из-за
+    # чего предел цены расходился с реальной доставленной ценой и заявка
+    # отклонялась как landed_price_above_limit. Продавцы известны и нужны:
+    # это публичная книга месяца, а не чужие внутренние планы.
     offers = []
     for order in engine.report['orders']:
         if order['side'] != 'sell' or order['remaining'] <= EPS:
             continue
         if order['status'] in ('cancelled', 'expired'):
-            continue
-        if order['participant'] in engine.enterprises:
             continue
         if order['tile_id'] not in tile_index:
             continue
