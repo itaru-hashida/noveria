@@ -27,10 +27,16 @@ class Ledger:
     def __init__(self, meta, arrays):
         self.meta = meta
         self.cash = dict(meta['balances'])
-        self.stock = {firm: {meta['goods'][column]: float(arrays['agent_stock'][row, column])
-                             for column in range(meta['n_goods'])
-                             if arrays['agent_stock'][row, column] > EPS}
-                      for row, firm in enumerate(meta['firms'])}
+        # Склад ведётся по ВСЕМ счетам, а не только по фирмам: агент покупает и
+        # у казны, и у муниципалитета, и у перевозчика. Если их склады не вести,
+        # товар приходит покупателю, но не убывает у продавца — товар создаётся.
+        self.stock = {account_id: {good: float(quantity) for good, quantity in stocks.items()
+                                   if quantity > EPS}
+                      for account_id, stocks in meta['all_stock'].items()}
+        for row, firm in enumerate(meta['firms']):
+            self.stock[firm] = {meta['goods'][column]: float(arrays['agent_stock'][row, column])
+                                for column in range(meta['n_goods'])
+                                if arrays['agent_stock'][row, column] > EPS}
         self.reserved_cash = {firm: 0.0 for firm in meta['firms']}
         self.reserved_stock = {firm: {} for firm in meta['firms']}
         self.flows = []
@@ -40,19 +46,22 @@ class Ledger:
         return max(0.0, self.cash[firm]-self.reserved_cash.get(firm, 0.0))
 
     def free_stock(self, firm, good):
-        return max(0.0, self.stock[firm].get(good, 0.0)-self.reserved_stock[firm].get(good, 0.0))
+        return max(0.0, self.stock.get(firm, {}).get(good, 0.0)
+                   - self.reserved_stock.get(firm, {}).get(good, 0.0))
 
     def reserve_cash(self, firm, amount):
-        self.reserved_cash[firm] += amount
+        self.reserved_cash[firm] = self.reserved_cash.get(firm, 0.0)+amount
 
     def release_cash(self, firm, amount):
-        self.reserved_cash[firm] = max(0.0, self.reserved_cash[firm]-amount)
+        self.reserved_cash[firm] = max(0.0, self.reserved_cash.get(firm, 0.0)-amount)
 
     def reserve_stock(self, firm, good, quantity):
-        self.reserved_stock[firm][good] = self.reserved_stock[firm].get(good, 0.0)+quantity
+        self.reserved_stock.setdefault(firm, {})[good] = \
+            self.reserved_stock.setdefault(firm, {}).get(good, 0.0)+quantity
 
     def release_stock(self, firm, good, quantity):
-        self.reserved_stock[firm][good] = max(0.0, self.reserved_stock[firm].get(good, 0.0)-quantity)
+        self.reserved_stock.setdefault(firm, {})[good] = max(
+            0.0, self.reserved_stock.setdefault(firm, {}).get(good, 0.0)-quantity)
 
     def pay(self, sender, recipient, amount, reason):
         if amount <= EPS:
@@ -64,14 +73,15 @@ class Ledger:
         return amount
 
     def add_stock(self, firm, good, quantity):
-        self.stock[firm][good] = self.stock[firm].get(good, 0.0)+quantity
+        self.stock.setdefault(firm, {})[good] = self.stock.setdefault(firm, {}).get(good, 0.0)+quantity
 
     def take_stock(self, firm, good, quantity):
-        available = self.stock[firm].get(good, 0.0)
+        stocks = self.stock.setdefault(firm, {})
+        available = stocks.get(good, 0.0)
         taken = min(available, quantity)
-        self.stock[firm][good] = available-taken
-        if self.stock[firm][good] <= EPS:
-            self.stock[firm].pop(good, None)
+        stocks[good] = available-taken
+        if stocks[good] <= EPS:
+            stocks.pop(good, None)
         return taken
 
 
@@ -161,6 +171,9 @@ class MarketExecutor(threading.Thread):
             self.ledger.release_stock(firm, good, take)
             self.ledger.take_stock(firm, good, take)
             buyer = ask['buyer']
+            # Покупатель обязан получить товар на свой склад. Раньше он только
+            # платил, а товар исчезал: это дало ложную убыль 3 493 хлеба.
+            self.ledger.add_stock(buyer, good, take)
             self.ledger.pay(buyer, firm, cost, 'Продажа агента')
             self.ledger.trades.append(dict(buyer=buyer, seller=firm, good=good,
                                            quantity=take, price=landed,
@@ -208,9 +221,12 @@ class MarketExecutor(threading.Thread):
             filled += take
             spent += cost
             if offer.get('seller_kind') == 'account':
-                # Публичный склад мира: золото уходит счёту, товар уже списан.
-                self.ledger.pay(firm, offer['seller'], cost, 'Покупка сырья')
-                self.ledger.trades.append(dict(buyer=firm, seller=offer['seller'],
+                # Публичный склад мира: товар обязан УБЫТЬ у продавца, иначе он
+                # создаётся. Первый прогон дал +0,216 tools именно из-за этого.
+                seller = offer['seller']
+                self.ledger.take_stock(seller, good, take)
+                self.ledger.pay(firm, seller, cost, 'Покупка сырья')
+                self.ledger.trades.append(dict(buyer=firm, seller=seller,
                                                good=good, quantity=take,
                                                price=offer['price'],
                                                sequence=self.sequence))

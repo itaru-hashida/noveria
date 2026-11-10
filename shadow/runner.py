@@ -144,8 +144,27 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
 
     money_start = sum(meta['balances'].values())
     money_end = sum(ledger.cash.values())
-    stock_start = sum(sum(stock.values()) for stock in meta['start_stock'].values())
-    stock_end = sum(sum(stock.values()) for stock in ledger.stock.values())
+    stock_start = sum(sum(stock.values()) for stock in meta['all_stock'].values())
+    stock_end = sum(sum(stocks.values()) for stocks in ledger.stock.values())
+
+    # Товарный баланс по каждому товару. Сделка только двигает товар, поэтому
+    # мировой итог обязан сохраниться; выпуска в агентной модели пока нет.
+    goods_start = {}
+    for account_id, stocks in meta['all_stock'].items():
+        for good, quantity in stocks.items():
+            goods_start[good] = goods_start.get(good, 0.0)+quantity
+    goods_end = {}
+    for account_id, stocks in ledger.stock.items():
+        for good, quantity in stocks.items():
+            goods_end[good] = goods_end.get(good, 0.0)+quantity
+    balance_rows = []
+    for good in sorted(set(goods_start) | set(goods_end)):
+        start = goods_start.get(good, 0.0)
+        end = goods_end.get(good, 0.0)
+        # Выпуска нет, поэтому остаток обязан совпасть с началом.
+        if abs(end-start) > 1e-6:
+            balance_rows.append(dict(good=good, start=start, end=end,
+                                     delta=end-start))
 
     return dict(month=meta['month'], meta=meta, ledger=ledger, outcomes=drained,
                 failures=failures, snapshot_seconds=snapshot_seconds,
@@ -157,6 +176,7 @@ def run_shadow(engine, parameters, pool, batch=32, submit_order_mode='shuffled')
                 no_negative=all(value >= -1e-6 for value in ledger.cash.values()),
                 invalid_trades=sum(1 for row in ledger.trades
                                    if row['quantity'] <= 0 or row['price'] <= 0),
+                goods_balance=balance_rows,
                 enqueue_order=enqueue_order)
 
 
@@ -191,9 +211,11 @@ def main():
                               engine.cfg.get('enterprise_overhead_rate', 0.0))
                 run = run_shadow(engine, parameters, pool, batch=args.batch)
                 runs.append(run)
-                print('month %2d: agents %d, intents %d, trades %d, plan %.3fs'
+                print('month %2d: agents %d, intents %d, trades %d, plan %.3fs, '
+                      'goods balance %s'
                       % (run['month'], run['meta']['n_agents'], len(run['outcomes']),
-                         len(run['ledger'].trades), run['planning_seconds']))
+                         len(run['ledger'].trades), run['planning_seconds'],
+                         'ok' if not run['goods_balance'] else 'BROKEN'))
                 service.advance_turn(command_id='shadow-%d-%d' % (args.seed, month),
                                      source='audit')
         finally:
@@ -213,10 +235,17 @@ def main():
           % (len(last['outcomes']), len(last['ledger'].trades), len(last['failures'])))
     print('MONEY: start %.2f -> end %.2f (balanced %s)'
           % (last['money_start'], last['money_end'], last['money_ok']))
-    print('GOODS (firm stock): start %.2f -> end %.2f'
+    print('GOODS (all accounts): start %.2f -> end %.2f'
           % (last['stock_start'], last['stock_end']))
     print('negative accounts: %s, invalid trades: %d'
           % ('no' if last['no_negative'] else 'YES', last['invalid_trades']))
+    if last['goods_balance']:
+        print('GOODS BALANCE BROKEN in %d goods:' % len(last['goods_balance']))
+        for row in last['goods_balance'][:5]:
+            print('   %-10s start %.2f, actual %.2f (delta %+.6f)'
+                  % (row['good'], row['start'], row['end'], row['delta']))
+    else:
+        print('GOODS BALANCE: reconciled for every good')
 
     reasons = {}
     for row in last['outcomes']:

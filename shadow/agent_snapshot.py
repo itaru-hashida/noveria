@@ -201,9 +201,10 @@ def build(engine, budget, repeat=1):
                                tile_index=row[1], price=row[2],
                                remaining=row[3], reserved=row[4], buyer=row[5],
                                final=row[6]) for row in asks],
-                # Стартовые склады: нужны, чтобы отчёт показал, не исчез ли товар.
-                start_stock={firm['id']: dict(account['stock'])
-                             for firm, account in zip(firms, accounts)},
+                # Склады всех счетов: исполнитель обязан списывать товар у того,
+                # у кого он куплен, иначе покупка у казны создаёт товар из воздуха.
+                all_stock={account_id: dict(account['stock'])
+                           for account_id, account in engine.accounts.items()},
                 # обязан сходиться, иначе деньги теряются.
                 balances={account_id: account['balance']
                           for account_id, account in engine.accounts.items()},
