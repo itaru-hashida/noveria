@@ -81,7 +81,7 @@ def run_mode(mode, seed, months, warmup, workers, batch):
             service.advance_turn(command_id='ipc-warm-%d' % month, source='audit')
         with ProcessPoolExecutor(max_workers=workers) as pool:
             for month in range(months):
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 planner = AgentTurn(pool, batch=batch) if mode == 'pool' else None
                 started = time.perf_counter()
                 engine.step(enterprise_planner=planner)
@@ -116,7 +116,7 @@ def main():
     try:
         for month in range(args.warmup+args.months):
             service.advance_turn(command_id='ipc-snap-%d' % month, source='audit')
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         engine.update_prices()
         engine.prepare_recovery_quotes()
         sells = engine.sell_orders()

@@ -14,7 +14,7 @@ def run(seed, owners_off, months=12):
         try:
             for step in range(1,months+1):
                 service.advance_turn(command_id=f'owners-{seed}-{owners_off}-{step}',source='audit')
-                engine=Economy.load(db); report=db.economy_month(engine.meta['month'])
+                engine=service.economy_state().engine; report=service.economy_state().last_report
                 rows.append(sr.row_for(engine,report,'owners_off' if owners_off else 'baseline',seed))
         finally:
             Economy.owner_requests=original; db.close()

@@ -83,7 +83,7 @@ def main():
 
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             for month in range(args.months):
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 turn = AgentTurn(pool=pool, batch=args.batch)
                 engine.step(enterprise_planner=turn)
                 engine.meta['month']

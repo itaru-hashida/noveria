@@ -5,6 +5,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from core.db import WorldDB
+from core.economy_state import EconomyState
 from core.events import EventBus
 from core.world_service import WorldService
 from modules.economy import Economy
@@ -12,7 +13,7 @@ from ui.game import territory_labels
 
 
 def small_market(service):
-    engine=Economy.load(service.db)
+    engine=service.economy_state().engine
     engine.bootstrap()
     engine.accounts={}
     loc=dict(state_id='noweria',province_id='province-0',city_id=None,tile_id='tile-1-1')
@@ -97,35 +98,40 @@ def test_unreachable_route_and_delivery_limit(service):
 
 def test_economy_persistence_idempotency_and_rollback(service):
     assert service.initialize_economy()
-    before=copy.deepcopy(service.db.economy_records('EconomyMeta'))
+    state = service.economy_state()
+    before = copy.deepcopy(state.engine.meta)
     assert not service.initialize_economy()
-    assert service.db.economy_records('EconomyMeta')==before
+    assert state.engine.meta == before
     report=service.advance_turn(command_id='economy-once')
-    records=service.db.economy_records('EconomyMonth')
-    accounts=service.db.economy_records('EconomyAccount')
+    assert state.last_report['month'] == 1
+    accounts=copy.deepcopy(state.engine.accounts)
     assert service.advance_turn(command_id='economy-once')==report
-    assert service.db.economy_records('EconomyMonth')==records
-    assert service.db.economy_records('EconomyAccount')==accounts
+    # Повторная команда не двигает память: месяц и счета те же.
+    assert state.engine.meta['month'] == 1
+    assert state.engine.accounts == accounts
     def fail(ctx):
         raise ValueError('rollback after economy')
     service.turns.register_phase('failed',fail)
     with pytest.raises(ValueError,match='rollback after economy'):
         service.advance_turn(command_id='rollback-economy')
-    assert service.db.economy_records('EconomyAccount')==accounts
-    assert service.db.economy_records('EconomyMonth')==records
+    # Откат хода возвращает экономику: счета и месяц прежние, отчёта нет.
+    assert state.engine.accounts == accounts
+    assert state.engine.meta['month'] == 1
     assert service.db.turn_result('rollback-economy') is None
 
 
 def test_monthly_invariants_for_all_states(service):
     service.initialize_economy()
-    initial=Economy.load(service.db)
-    initial_stock=initial.total_stock()
+    state = service.economy_state()
+    initial_stock=state.engine.total_stock()
+    initial_gold=state.engine.gold()
+    records=[]
     for i in range(12):
         service.advance_turn(command_id=f'checked-{i}')
-    engine=Economy.load(service.db)
-    records=[r for r in service.db.economy_records('EconomyMonth') if r['month']>0]
+        records.append(state.last_report)
+    engine=state.engine
     assert all(all(r['invariants'].values()) for r in records)
-    assert engine.gold()==pytest.approx(initial.gold(),abs=1e-6)
+    assert engine.gold()==pytest.approx(initial_gold,abs=1e-6)
     assert {e['state_id'] for e in engine.enterprises.values()}=={e['id'] for e in engine.entities.values() if e['kind']=='State'}
     assert {engine.accounts[e['owner_id']]['kind'] for e in engine.enterprises.values()}=={'private','merchant','municipal','treasury'}
     assert any(t['buyer_state']!=t['seller_state'] for r in records for t in r['trades'])
@@ -136,12 +142,19 @@ def test_monthly_invariants_for_all_states(service):
             r['production'].get(g, 0)-r['inputs_used'].get(g, 0)
             -r['consumed'].get(g, 0)-r['construction_used'].get(g, 0)
             -r['equipment_wear'].get(g, 0) for r in records), abs=1e-6)
-    with WorldDB(service.db.path,read_only=True) as reopened:
-        assert reopened.economy_records('Enterprise')==service.db.economy_records('Enterprise')
+    # Товарный и денежный итог переживает checkpoint без допуска.
+    checkpoint = Path(service.db.path).parent/'invariants-economy'
+    state.save_checkpoint(checkpoint)
+    with WorldDB(service.db.path, read_only=True) as reopened:
+        loaded = EconomyState.load_checkpoint(
+            checkpoint, dict(snapshot=reopened.snapshot(), tiles=reopened.tiles(),
+                             campaign=reopened.campaign()))
+        assert loaded.engine.total_stock() == after
+        assert loaded.engine.gold() == engine.gold()
 
 
 def test_production_limits_and_investment_ownership(service):
-    engine=Economy.load(service.db); engine.bootstrap()
+    engine=service.economy_state().engine; engine.bootstrap()
     initial=engine.gold()
     firm=next(e for e in engine.enterprises.values() if e['good']=='bread')
     engine.accounts[firm['id']]['stock']['flour']=0
@@ -160,13 +173,18 @@ def test_production_limits_and_investment_ownership(service):
 def test_safe_stress_copy(service,tmp_path):
     service.initialize_economy()
     service.schedule_social('stratum-province-0-0','loyalty',62,command_id='pending-copy')
-    before=service.db.economy_records('EconomyAccount')
+    state = service.economy_state()
+    before = copy.deepcopy(state.engine.accounts)
+    gold = state.engine.gold()
     history=service.db.counts()['Event']
     destination=tmp_path/'stress-copy.lbug'
     reports=service.simulate_economy(12,destination)
+    # Отчёт месяца 0 плюс двенадцать отчётов прогона.
     assert len(reports)==13
     assert service.db.meta()['turn']==1
-    assert service.db.economy_records('EconomyAccount')==before
+    # Копия работает в памяти: текущая кампания не меняется ни на монету.
+    assert state.engine.accounts == before
+    assert state.engine.gold() == gold
     assert service.db.counts()['Event']==history
     assert service.db.pending_commands()
     with WorldDB(destination) as db:

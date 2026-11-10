@@ -2,6 +2,7 @@
 import copy
 import json
 import math
+import pickle
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -68,15 +69,6 @@ class EconomyServices:
                 limit_values[province, resource].append(self.cfg['extraction_per_tile'])
         self.resource_limits = {key: sum(values) for key, values in limit_values.items()}
         self.reset_report()
-
-    @classmethod
-    def _load_state(cls, db):
-        metadata = db.economy_records('EconomyMeta')
-        # economy_records декодирует каждую запись заново, поэтому объекты уже
-        # никому не принадлежат: движок забирает их без повторного deepcopy.
-        return cls(db.snapshot(), db.tiles(), db.economy_records('EconomyAccount'),
-                   db.economy_records('Enterprise'), metadata[0] if metadata else None,
-                   copy_state=False)
 
     def reset_report(self):
         self.report = dict(id=str(self.meta['month']), month=self.meta['month'], orders=[], trades=[],
@@ -440,23 +432,27 @@ class EconomyServices:
                 protected_by_subsistence=demography.get('protected_by_subsistence', 0),
                 reason='Изменение денег: зарплаты и доходы минус покупки и доставка; дефицит: остаток неисполненной корзины'))
 
-    def save(self, db, include_month=None):
-        # Игра по умолчанию none и не пишет EconomyMonth: это тяжёлая запись
-        # полного отчёта месяца, нужная аудиту и лаборатории, а не ходу.
-        if include_month is None:
-            include_month = self.meta.get('report_detail', 'none') != 'none'
-        for institution in getattr(self, 'pending_institutions', []):
-            db.create_entity(institution['id'], 'Institution', institution['name'], institution['properties'])
-            db.put_link(institution['id'], institution['properties']['state_id'], 'institution_of')
-            db.put_link(institution['id'], institution['properties']['city_id'], 'located_in')
+    # Снимок изменяемой части состояния для отката хода. Раньше откат давала
+    # транзакция Ladybug; теперь экономика живёт в памяти, поэтому копию делает
+    # движок. `pickle` берёт 0,010 s против 0,051 s у deepcopy на тех же данных
+    # (замер audit/storage_parts.py), а структура здесь только из словарей,
+    # списков, чисел и строк.
+    def export_state(self):
+        return pickle.dumps((self.accounts, self.enterprises, self.meta,
+                             self.construction_receipts), protocol=pickle.HIGHEST_PROTOCOL)
+
+    def restore_state(self, blob):
+        accounts, enterprises, meta, receipts = pickle.loads(blob)
+        self.accounts, self.enterprises, self.meta = accounts, enterprises, meta
+        self.construction_receipts = receipts
+        self.cfg = meta['config']
+        self.goods = self.cfg['goods']
+        self.rules = dict(PLANNING_DEFAULTS, **self.cfg.get('mvp_reform', {}))
+        self.seed = meta.get('rng_seed', 0)
+        self.rng = random.Random(self.seed)
+        if meta.get('rng_state') is not None:
+            self.rng.setstate(tuples(meta['rng_state']))
         self.pending_institutions = []
-        db.store_economy('EconomyAccount',list(self.accounts.values()))
-        db.store_economy('Enterprise',list(self.enterprises.values()))
-        db.store_economy('EconomyMeta',[self.meta])
-        if include_month:
-            db.store_economy('EconomyMonth',[self.report])
-        db.update_social_groups({a['group_id']: self.entities[a['group_id']]['properties']
-            for a in self.accounts.values() if a['kind'] == 'household' and a['group_id'] in self.entities})
 
     def __init__(self, *args, **kwargs):
         self._initialize_state(*args, **kwargs)
@@ -470,11 +466,9 @@ class EconomyServices:
 
     @classmethod
     def load(cls, db):
-        engine = cls._load_state(db)
-        if 'rng_state' not in engine.meta:
-            engine.seed = (db.campaign() or {}).get('seed', 0)
-            engine.rng.seed(engine.seed)
-        return engine
+        """Совместимость для внешних вызовов: читать экономику из Ladybug нельзя."""
+        raise RuntimeError('Экономика больше не хранится в Ladybug: используйте '
+                           'EconomyState.load_checkpoint(path, world_graph)')
 
     def shuffled(self, values, key=lambda item: item['id']):
         # ID задаёт каноническую нумерацию, а не приоритет: очередь переставляет RNG.

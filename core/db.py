@@ -90,8 +90,26 @@ class WorldDB:
         self._query('CREATE NODE TABLE IF NOT EXISTS Tile(id STRING PRIMARY KEY, x INT64, y INT64, terrain STRING, province_id STRING, road BOOL, resources STRING, passable BOOL, cost DOUBLE)')
         self._query('CREATE NODE TABLE IF NOT EXISTS TurnResult(id STRING PRIMARY KEY, turn INT64, report STRING)')
         self._query('CREATE NODE TABLE IF NOT EXISTS PendingCommand(id STRING PRIMARY KEY, kind STRING, payload STRING, status STRING)')
+        self._drop_economy_tables()
+
+    def _drop_economy_tables(self):
+        """Удалить прежнее динамическое экономическое хранение.
+
+        Это разрешённая миграция с утратой старых сохранений: экономика целиком
+        переехала в `EconomyState` в памяти и в Parquet-checkpoint. В Ladybug
+        остаются только структурные данные мира и связи, поэтому таблицы счетов,
+        предприятий, метаданных и месячных отчётов удаляются, а не игнорируются:
+        иначе старая копия продолжала бы выглядеть рабочим состоянием.
+        """
         for table in ('EconomyAccount', 'Enterprise', 'EconomyMeta', 'EconomyMonth'):
-            self._query(f'CREATE NODE TABLE IF NOT EXISTS {table}(id STRING PRIMARY KEY, data STRING)')
+            try:
+                self._query(f'DROP TABLE IF EXISTS {table}')
+            except RuntimeError as error:
+                message = str(error)
+                if 'does not exist' in message or 'not exist' in message:
+                    continue
+                raise
+
 
     @contextmanager
     def transaction(self):
@@ -136,17 +154,10 @@ class WorldDB:
                 raise
 
     def economy_month_ids(self):
-        rows = self._query('MATCH (n:EconomyMonth) RETURN n.id')
-        return sorted(int(row[0]) for row in rows)
+        raise RuntimeError('Месячные отчёты экономики больше не хранятся в Ladybug')
 
     def economy_month(self, month):
-        rows = self._query('MATCH (n:EconomyMonth {id:$id}) RETURN n.data', {'id': str(month)})
-        if not rows:
-            return None
-        data = rows[0][0]
-        if data.startswith('z:'):
-            data = zlib.decompress(base64.b64decode(data[2:])).decode('utf-8')
-        return json.loads(data)
+        raise RuntimeError('Месячные отчёты экономики больше не хранятся в Ladybug')
 
     def __enter__(self):
         return self
@@ -420,28 +431,12 @@ class WorldDB:
         self._query("MATCH (c:PendingCommand {id:$id}) SET c.status='completed'",dict(id=command_id))
 
     def economy_records(self, table):
-        if table not in ('EconomyAccount', 'Enterprise', 'EconomyMeta', 'EconomyMonth'):
-            raise ValueError('Неизвестная экономическая таблица')
-        result = []
-        for row in self._query(f'MATCH (n:{table}) RETURN n.data ORDER BY n.id'):
-            data = row[0]
-            if data.startswith('z:'):
-                data = zlib.decompress(base64.b64decode(data[2:])).decode('utf-8')
-            result.append(json.loads(data))
-        return result
+        raise RuntimeError('Динамическая экономика больше не хранится в Ladybug: '
+                           'используйте EconomyState и Parquet-checkpoint')
 
     def store_economy(self, table, records):
-        if table not in ('EconomyAccount', 'Enterprise', 'EconomyMeta', 'EconomyMonth'):
-            raise ValueError('Неизвестная экономическая таблица')
-        if not records:
-            return
-        rows = [dict(id=r['id'], data=encode(r)) for r in records]
-        if table == 'EconomyMonth':
-            for row in rows:
-                row['data'] = 'z:' + base64.b64encode(zlib.compress(row['data'].encode('utf-8'))).decode('ascii')
-            self._query(f'UNWIND $rows AS r CREATE (:{table} {{id:r.id,data:r.data}})', dict(rows=rows))
-        else:
-            self._query(f'UNWIND $rows AS r MERGE (n:{table} {{id:r.id}}) SET n.data=r.data', dict(rows=rows))
+        raise RuntimeError('Динамическая экономика больше не хранится в Ladybug: '
+                           'используйте EconomyState и Parquet-checkpoint')
 
     def update_welfare(self, values):
         rows = []
@@ -452,23 +447,52 @@ class WorldDB:
         if rows:
             self._query('UNWIND $rows AS r MATCH (n:Entity {id:r.id}) SET n.properties=r.data', dict(rows=rows))
 
-    def update_social_groups(self, values):
-        """Сохраняет изменяемые свойства социальных групп (численность и welfare).
+    def update_social_groups(self, values, fields=None):
+        """Сохраняет изменяемые свойства социальных групп.
+
+        `fields` ограничивает запись перечисленными параметрами: экономика
+        меняет только население и благосостояние, а лояльность и влияние —
+        свойства мира, которые она читает, но не пишет. Без этого ограничения
+        экономическое состояние, загруженное в начале сессии, затирало бы
+        лояльность, выставленную игроком или лабораторией.
 
         Новые свойства уже лежат в `values`, поэтому полный `snapshot()` здесь
         не нужен: он читал и декодировал все сущности и все связи мира ради
-        того, чтобы отобрать несколько групп. Запрос сам отбирает существующие
-        узлы нужного типа, поэтому поведение для отсутствующих ID и для других
-        типов прежнее — они молча пропускаются.
+        того, чтобы отобрать несколько групп.
         """
         rows = [dict(id=entity_id, data=encode(properties))
                 for entity_id, properties in sorted(values.items()) if properties is not None]
-        if rows:
-            self._query("UNWIND $rows AS r MATCH (n:Entity {id:r.id}) "
+        if not rows:
+            return
+        if fields is None:
+            self._query('UNWIND $rows AS r MATCH (n:Entity {id:r.id}) '
                         "WHERE n.kind='SocialGroup' SET n.properties=r.data", dict(rows=rows))
+            return
+        # Слияние по полям требует текущих значений: они читаются одним запросом
+        # на все группы месяца, а не по одной.
+        current = {row[0]: json.loads(row[1]) for row in self._query(
+            "UNWIND $ids AS identity MATCH (n:Entity {id:identity}) "
+            "WHERE n.kind='SocialGroup' RETURN n.id,n.properties",
+            dict(ids=[row['id'] for row in rows]))}
+        merged = []
+        for row in rows:
+            properties = current.get(row['id'])
+            if properties is None:
+                continue
+            properties.update({field: value for field, value in json.loads(row['data']).items()
+                               if field in fields})
+            merged.append(dict(id=row['id'], data=encode(properties)))
+        if merged:
+            self._query('UNWIND $rows AS r MATCH (n:Entity {id:r.id}) '
+                        "WHERE n.kind='SocialGroup' SET n.properties=r.data", dict(rows=merged))
 
     def fork_to(self, destination):
-        """Логическая копия под блокировкой, без копирования открытого файла БД."""
+        """Логическая копия структурного мира под блокировкой.
+
+        Экономика в копию не переезжает: она живёт в `EconomyState` и
+        сохраняется отдельным Parquet-checkpoint. Копия мира — это сценарий,
+        на котором экономика запускается заново.
+        """
         destination = Path(destination)
         if destination.exists() or str(destination.resolve()) == str(Path(self.path).resolve()):
             raise ValueError('Для копии требуется новый путь')
@@ -483,7 +507,5 @@ class WorldDB:
                 target.save_campaign(self.campaign())
             target.set_turn(self.meta()['turn'])
             target.mark_seeded()
-            for table in ('EconomyAccount', 'Enterprise', 'EconomyMeta', 'EconomyMonth'):
-                target.store_economy(table, self.economy_records(table))
             for c in self.pending_commands():
                 target.queue_command(c['id'], c['kind'], c['payload'])

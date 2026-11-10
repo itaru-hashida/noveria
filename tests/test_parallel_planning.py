@@ -9,7 +9,7 @@ from shadow import agent_planner, agent_snapshot
 @pytest.fixture
 def market(service):
     service.initialize_economy()
-    engine = Economy.load(service.db)
+    engine = service.economy_state().engine
     arrays, meta = agent_snapshot.build(engine, {f: 10000 for f in engine.enterprises})
     parameters = tuple(engine.cfg[k] for k in
                        ('transport_rate', 'wage', 'consumption_tax', 'markup', 'enterprise_overhead_rate'))
@@ -76,10 +76,13 @@ def test_new_firm_uses_public_history(market):
 
 @pytest.mark.parametrize("workers", [0, 2])
 def test_full_month_replays_recorded_fifo_and_persists(service, workers):
+    import copy
+    from core.economy_state import EconomyState
     from shadow.turn import AgentTurn
     service.initialize_economy()
-    left = Economy.load(service.db)
-    right = Economy.load(service.db)
+    left = EconomyState.load_checkpoint(
+        service.save_checkpoint(), service.world_graph()).engine
+    right = copy.deepcopy(left)
     from concurrent.futures import ProcessPoolExecutor
     import multiprocessing
     from contextlib import ExitStack
@@ -97,9 +100,12 @@ def test_full_month_replays_recorded_fifo_and_persists(service, workers):
     assert left.meta == right.meta
     assert left.report == right.report
     assert all(left.report['invariants'].values())
-    with service.db.transaction():
-        left.save(service.db)
-    loaded = Economy.load(service.db)
+    # Прогноз планировщика переживает checkpoint, а не запись в таблицу.
+    state = EconomyState(left, service.world_graph(), keep_reports=True)
+    state.reports = [left.report]
+    state.save_checkpoint(service.checkpoint_path())
+    loaded = EconomyState.load_checkpoint(service.checkpoint_path(),
+                                          service.world_graph()).engine
     assert loaded.meta['month'] == left.meta['month']
     assert loaded.accounts == left.accounts
     assert loaded.enterprises == left.enterprises
@@ -109,7 +115,7 @@ def test_full_month_replays_recorded_fifo_and_persists(service, workers):
 def test_chain_restores_after_supply_halt(service):
     from shadow.turn import AgentTurn
     service.initialize_economy()
-    engine = Economy.load(service.db)
+    engine = service.economy_state().engine
     original_sync = engine.sync_locations
 
     def sync_with_halt():

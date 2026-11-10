@@ -25,7 +25,7 @@ def main():
     try:
         for month in range(8):
             service.advance_turn(command_id='sb-%d' % month, source='audit')
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         sells = prepare_market(engine)
         budget = {f['id']: engine.free_cash(f['id']) for f in engine.enterprises.values()}
         arrays, meta = agent_snapshot.build(engine, budget, sells=sells)

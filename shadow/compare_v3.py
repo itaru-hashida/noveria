@@ -104,7 +104,7 @@ def run_mode(args, mode, pool):
 
             def economy_phase(ctx):
                 start = time.perf_counter()
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 load = time.perf_counter()-start
                 planner = AgentTurn(pool if mode == 'pool' else None, batch=args.batch) if mode != 'v3' else None
                 # РћСЃС‚Р°РЅРѕРІРєР° РґРѕР±С‹С‡Рё Р±РµР· СѓРґР°Р»РµРЅРёСЏ РґРµРЅРµРі/С‚РѕРІР°СЂРѕРІ, Р·Р°С‚РµРј РѕР±С‹С‡РЅРѕРµ СЃРЅСЏС‚РёРµ.
@@ -118,8 +118,10 @@ def run_mode(args, mode, pool):
                                 firm['suspended'] = args.warmup+3 <= engine.meta['month'] <= args.warmup+5
                     engine.sync_locations = sync_with_halt
                 report = engine.step(enterprise_planner=planner)
+                # Экономика больше не пишется в Ladybug: замеряется снимок для
+                # отката, который теперь делает сам движок.
                 save_start = time.perf_counter()
-                engine.save(db)
+                engine.export_state()
                 save = time.perf_counter()-save_start
                 event_start = time.perf_counter()
                 event = db.record_event(service.event('economy_month',

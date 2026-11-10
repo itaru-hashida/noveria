@@ -10,12 +10,12 @@ from pathlib import Path
 from uuid import uuid4
 
 from core.db import WorldDB
+from core.economy_state import EconomyState
 from core.events import EventBus
 from core.lab_analytics import capture, temporal_anomalies
 from core.lab_store import LabStore
 from core.world_service import WorldService
 from loader import load_world
-from modules.economy import Economy
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RUNS = ROOT / 'data/lab'
@@ -30,9 +30,12 @@ def now():
 
 
 def engine_version():
+    # Движок импортируется здесь: `core.lab` читается и теми сценариями, которые
+    # подменяют хранилище, и модульная зависимость на импорте ломала бы их.
+    from modules.economy import Economy
     paths = [ROOT/p for p in ('modules/economy/v3.py', 'modules/economy/food_diagnostics.py', 'modules/economy/support.py', 'modules/economy/simulation.py', 'modules/geography/logic.py',
         'modules/population/logic.py', 'core/turn_service.py', 'core/world_service.py',
-        'core/db.py', 'loader.py', 'content/economy.json', 'content/initial_world.json')]
+        'core/db.py', 'core/economy_state.py', 'loader.py', 'content/economy.json', 'content/initial_world.json')]
     hashes = {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     return dict(version=getattr(Economy, 'RULES_VERSION', 1), files=hashes, fingerprint=digest(hashes))
 
@@ -61,6 +64,7 @@ def create_experiment(name, months=120, seed=73129, source=None, detail='full', 
 
 def prepare_world(directory, config):
     initial = directory/'initial.lbug'
+    checkpoint = directory/'economy'
     if config['source'] == 'content/initial_world.json':
         content = json.loads((ROOT/config['source']).read_text(encoding='utf-8'))
         content['generation']['seed'] = config['seed']
@@ -68,7 +72,9 @@ def prepare_world(directory, config):
         scenario.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding='utf-8')
         with WorldDB(initial) as db:
             load_world(db, scenario)
-            WorldService(db, EventBus()).initialize_economy()
+            service = WorldService(db, EventBus())
+            service.initialize_economy()
+            state = service.save_checkpoint(checkpoint)
     else:
         source = Path(config['source'])
         if not source.is_file():
@@ -79,14 +85,29 @@ def prepare_world(directory, config):
                 raise ValueError('Требуется завершённое состояние кампании')
             config['seed'] = campaign['seed']
             db.fork_to(initial)
+        # Экономика копируется только из checkpoint: в БД её больше нет.
+        from core.economy_state import default_checkpoint_path
+        source_checkpoint = default_checkpoint_path(type('W', (), {'path': str(source)})())
+        if not source_checkpoint.exists():
+            raise ValueError('У исходного сохранения нет checkpoint экономики: '
+                             +str(source_checkpoint))
+        with WorldDB(initial) as db:
+            graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
+            state = EconomyState.load_checkpoint(source_checkpoint, graph)
+            state.save_checkpoint(checkpoint)
     with WorldDB(initial) as db:
         service = WorldService(db, EventBus())
-        service.initialize_economy()
-        config['initial_month'] = Economy.load(db).meta['month']
+        state = EconomyState.load_checkpoint(checkpoint, service.world_graph())
+        config['initial_month'] = state.engine.meta['month']
         config['initial_state_hash'] = digest(dict(snapshot=db.snapshot(), tiles=db.tiles(),
-            accounts=db.economy_records('EconomyAccount'), enterprises=db.economy_records('Enterprise'),
-            economy=db.economy_records('EconomyMeta'), commands=db.pending_commands(), campaign=db.campaign()))
+            # Путь checkpoint в хеш не входит: у каждой копии он свой, а состояние
+            # должно совпадать у прогонов с одинаковым сидом.
+            economy=dict(month=state.engine.meta['month'], gold=state.engine.gold(),
+                         accounts=len(state.engine.accounts),
+                         enterprises=len(state.engine.enterprises)),
+            commands=db.pending_commands(), campaign=db.campaign()))
         db.fork_to(directory/'world.lbug')
+    state.save_checkpoint(checkpoint)
 
 
 def execute_experiment(directory):
@@ -102,7 +123,13 @@ def execute_experiment(directory):
             prepare_world(directory, config)
             with WorldDB(directory/'world.lbug') as db:
                 service = WorldService(db, EventBus())
-                engine = Economy.load(db)
+                # Один объект состояния на весь эксперимент: ход больше не
+                # перечитывает и не переписывает экономику в Ladybug.
+                state = EconomyState.load_checkpoint(directory/'economy',
+                                                     service.world_graph(), strict=False)
+                state.keep_reports = True
+                service.attach_economy(state)
+                engine = state.engine
                 initial = capture(engine, dict(month=0), config['detail'])
                 # В исходном мире могли уже пройти месяцы: ось эксперимента начинается с нуля.
                 store.append_month(0, initial, config)
@@ -111,8 +138,8 @@ def execute_experiment(directory):
                         config['status'] = 'cancelled'
                         break
                     service.advance_turn(command_id=f'lab-{config["id"]}-{step}', source='lab')
-                    engine = Economy.load(db)
-                    report = db.economy_month(engine.meta['month'])
+                    engine = state.engine
+                    report = state.last_report
                     data = capture(engine, report, config['detail'])
                     for rows in data.values():
                         for row in rows:
@@ -122,6 +149,9 @@ def execute_experiment(directory):
                     store.append_month(step, data, config)
                 else:
                     config['status'] = 'completed'
+                # Checkpoint пишется один раз — по завершении эксперимента, а не
+                # каждый ход: сам ход экономику на диск не выгружает.
+                state.save_checkpoint(directory/'economy')
             config['finished_at'] = now()
             store.save_metadata(config)
         except BaseException as error:
@@ -221,6 +251,27 @@ def compare_experiments(directories, dataset='overview', **filters):
     return rows
 
 
+def live_reports(path):
+    """Месячные отчёты живого мира из его Parquet-checkpoint.
+
+    Отчёты больше не лежат в Ladybug: вместе с прочей динамикой они пишутся в
+    checkpoint по явному сохранению. Поэтому Live World читает их оттуда же,
+    откуда их возьмёт новая сессия.
+    """
+    from core.economy_state import default_checkpoint_path
+
+    class _Path:
+        def __init__(self, value):
+            self.path = str(value)
+
+    checkpoint = default_checkpoint_path(_Path(path))
+    if not checkpoint.exists():
+        return []
+    with WorldDB(path, read_only=True) as db:
+        graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
+    return EconomyState.load_checkpoint(checkpoint, graph, strict=False).reports
+
+
 def read_live(path, month=None):
     if not Path(path).is_file():
         raise ValueError('Сохранение не найдено; Live World не создаёт новые базы')
@@ -228,38 +279,36 @@ def read_live(path, month=None):
         campaign = db.campaign()
         if not campaign or campaign.get('status') != 'ready':
             raise ValueError('Нет завершённого состояния кампании')
-        ids = [i for i in db.economy_month_ids() if i > 0]
+        reports = live_reports(path)
+        ids = [report['month'] for report in reports if report.get('month', 0) > 0]
         chosen = month if month in ids else ids[-1] if ids else None
-        return dict(campaign=campaign, months=ids, report=db.economy_month(chosen) if chosen else None,
-            snapshot=db.snapshot(), tiles=db.tiles(), accounts=db.economy_records('EconomyAccount'),
-            enterprises=db.economy_records('Enterprise'))
+        report = next((r for r in reports if r.get('month') == chosen), None) if chosen else None
+        return dict(campaign=campaign, months=ids, report=report,
+            snapshot=db.snapshot(), tiles=db.tiles(), reports=reports)
 
 
 def live_series(path, start, end, state_id=None, province_id=None, good=None):
     if not Path(path).is_file():
         raise ValueError('Сохранение не найдено')
     rows = []
-    with WorldDB(path, read_only=True) as db, db.read_transaction():
-        if db.campaign().get('status') != 'ready':
-            raise ValueError('Нет завершённого состояния')
-        for month in db.economy_month_ids():
-            if month == 0 or not start <= month <= end:
-                continue
-            report = db.economy_month(month)
-            provinces = [p for p in report.get('provinces', [])
-                if (state_id is None or p['state_id'] == state_id) and
-                   (province_id is None or p['province_id'] == province_id)]
-            def quantity(mapping):
-                return mapping.get(good, 0) if good else sum(mapping.values())
-            trades = [t for t in report.get('trades', [])
-                if (good is None or t['good'] == good) and
-                   (state_id is None or state_id in (t['buyer_state'], t['seller_state'])) and
-                   (province_id is None or province_id in (t['buyer_province'], t['seller_province']))]
-            rows.append(dict(month=month, output=sum(quantity(p['production']) for p in provinces),
-                consumed=sum(quantity(p['consumption']) for p in provinces),
-                unmet=sum(quantity(p['deficits']) for p in provinces),
-                household_gold=sum(p['household_gold'] for p in provinces),
-                sold=sum(t['quantity'] for t in trades),
-                international_volume=sum(t['quantity'] for t in trades if t['buyer_state'] != t['seller_state']),
-                domestic_volume=sum(t['quantity'] for t in trades if t['buyer_state'] == t['seller_state'])))
+    for report in live_reports(path):
+        month = report.get('month', 0)
+        if month == 0 or not start <= month <= end:
+            continue
+        provinces = [p for p in report.get('provinces', [])
+            if (state_id is None or p['state_id'] == state_id) and
+               (province_id is None or p['province_id'] == province_id)]
+        def quantity(mapping):
+            return mapping.get(good, 0) if good else sum(mapping.values())
+        trades = [t for t in report.get('trades', [])
+            if (good is None or t['good'] == good) and
+               (state_id is None or state_id in (t['buyer_state'], t['seller_state'])) and
+               (province_id is None or province_id in (t['buyer_province'], t['seller_province']))]
+        rows.append(dict(month=month, output=sum(quantity(p['production']) for p in provinces),
+            consumed=sum(quantity(p['consumption']) for p in provinces),
+            unmet=sum(quantity(p['deficits']) for p in provinces),
+            household_gold=sum(p['household_gold'] for p in provinces),
+            sold=sum(t['quantity'] for t in trades),
+            international_volume=sum(t['quantity'] for t in trades if t['buyer_state'] != t['seller_state']),
+            domestic_volume=sum(t['quantity'] for t in trades if t['buyer_state'] == t['seller_state'])))
     return rows

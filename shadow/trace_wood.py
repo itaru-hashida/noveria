@@ -106,7 +106,7 @@ def main():
                 service.advance_turn(command_id='tw-warm-%d' % month, source='audit')
             with ProcessPoolExecutor(max_workers=args.workers) as pool:
                 for month in range(args.months):
-                    engine = Economy.load(db)
+                    engine = service.economy_state().engine
                     planner = AgentTurn(pool, batch=args.batch) if mode == 'pool' else None
                     opening_wood = engine.total_stock().get('wood', 0.0)
                     engine.step(enterprise_planner=planner)

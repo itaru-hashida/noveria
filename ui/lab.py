@@ -228,9 +228,15 @@ def analytics_page(store, meta):
         paged(store, dataset, start, end, selected, 'production')
         initial = Path(meta['directory'])/'initial.lbug'
         if initial.is_file() and st.checkbox('Показать производственные цепочки'):
+            from core.economy_state import EconomyState, default_config
             from core.db import WorldDB
-            with WorldDB(initial, read_only=True) as db, db.read_transaction():
-                config = db.economy_records('EconomyMeta')[0]['config']
+            with WorldDB(initial, read_only=True) as db:
+                graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
+            # Цепочки читаются из конфига экономики, а не из таблицы метаданных:
+            # динамического экономического хранения в Ladybug больше нет.
+            checkpoint = Path(meta['directory'])/'economy'
+            config = (EconomyState.load_checkpoint(checkpoint, graph).engine.cfg
+                      if checkpoint.exists() else default_config())
             edges = [dict(сырьё=g, продукт=good, количество=ratio)
                 for good, recipe in config['goods'].items() for g, ratio in recipe['inputs'].items()]
             table(edges, 'recipes')

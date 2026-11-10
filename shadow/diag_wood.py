@@ -36,7 +36,7 @@ def run(mode, seed, warmup, months, workers):
         snapshot = None
         with ProcessPoolExecutor(max_workers=workers) as pool:
             for month in range(months):
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 planner = AgentTurn(pool, batch=32) if mode == 'pool' else None
                 engine.step(enterprise_planner=planner)
                 if month == months-1:

@@ -52,35 +52,60 @@ class TurnService:
         command_id=str(uuid4()) if command_id is None else command_id
         if not isinstance(command_id,str) or not command_id.strip(): raise ValueError('Требуется command_id')
         start=time.perf_counter(); ctx=dict(command_id=command_id,events=[],changes=[],warnings=[],phases=[])
+        commit_started=time.perf_counter()
+        state = self.service.economy_state() if self.db.campaign() else None
         with self.db.transaction():
+            # Проверка повтора стоит до копии состояния: повторная команда не
+            # должна платить за снимок памяти.
             existing=self.db.turn_result(command_id)
             if existing: return existing
-            config=self.db.campaign()
-            if not config: raise ValueError('Старая кампания: создайте новую с картой')
-            config['status']='processing'; self.db.save_campaign(config)
-            for name,handler in self.phases:
-                phase_start=time.perf_counter(); count=handler(ctx)
-                duration=time.perf_counter()-phase_start
-                ctx['phases'].append(dict(name=name,processed=count,duration=duration))
-                log.info('command_id=%s phase=%s processed=%s duration=%.4f',command_id,name,count,duration)
-            old=self.db.meta()['turn']; self.db.set_turn(old+1)
-            completed_month=config['month']; completed_year=config['year']
-            config['month']=config['month']%12+1
-            config['year']+=int(config['month']==1); config['status']='ready'
-            self.db.save_campaign(config)
-            report=dict(command_id=command_id,turn=old+1,completed_month=completed_month,completed_year=completed_year,
-                        month=config['month'],year=config['year'],status='completed',phases=ctx['phases'],
-                        changes=ctx['changes'],warnings=ctx['warnings'],snapshot=ctx['snapshot'],duration=time.perf_counter()-start,
-                        summary='Месяц завершён, существенных изменений нет' if not ctx['changes'] else f'Месяц завершён: изменений {len(ctx["changes"])}')
-            event=self.service.event('turn_advanced',dict(old=old,new=old+1,report=report),[],source=source,
-                                     action_id=command_id,summary=report['summary'])
-            ctx['events'].append(self.db.record_event(event)); self.db.save_turn_result(command_id,report)
+            if state is not None:
+                # Экономика живёт в памяти, поэтому откат хода — это её снимок.
+                # Раньше откат давала транзакция Ladybug; теперь БД откатывает
+                # только события и структурные правки.
+                state.begin_turn()
+            try:
+                config=self.db.campaign()
+                if not config: raise ValueError('Старая кампания: создайте новую с картой')
+                config['status']='processing'; self.db.save_campaign(config)
+                for name,handler in self.phases:
+                    phase_start=time.perf_counter(); count=handler(ctx)
+                    duration=time.perf_counter()-phase_start
+                    ctx['phases'].append(dict(name=name,processed=count,duration=duration))
+                    log.info('command_id=%s phase=%s processed=%s duration=%.4f',command_id,name,count,duration)
+                old=self.db.meta()['turn']; self.db.set_turn(old+1)
+                completed_month=config['month']; completed_year=config['year']
+                config['month']=config['month']%12+1
+                config['year']+=int(config['month']==1); config['status']='ready'
+                self.db.save_campaign(config)
+                if state is not None:
+                    # Завершённые стройки — структурные сущности мира: они
+                    # попадают в БД один раз, в этой же транзакции.
+                    state.flush_structural(self.db)
+                report=dict(command_id=command_id,turn=old+1,completed_month=completed_month,completed_year=completed_year,
+                            month=config['month'],year=config['year'],status='completed',phases=ctx['phases'],
+                            changes=ctx['changes'],warnings=ctx['warnings'],snapshot=ctx['snapshot'],duration=time.perf_counter()-start,
+                            summary='Месяц завершён, существенных изменений нет' if not ctx['changes'] else f'Месяц завершён: изменений {len(ctx["changes"])}')
+                event=self.service.event('turn_advanced',dict(old=old,new=old+1,report=report),[],source=source,
+                                         action_id=command_id,summary=report['summary'])
+                ctx['events'].append(self.db.record_event(event)); self.db.save_turn_result(command_id,report)
+            except BaseException:
+                if state is not None:
+                    state.rollback()
+                raise
             commit_started=time.perf_counter()
         commit_seconds=time.perf_counter()-commit_started
         notify_started=time.perf_counter()
         for event in ctx['events']: self.service.notify(event)
         wall=time.perf_counter()-start
         notifications=time.perf_counter()-notify_started
+        self._autosave(state)
         self.last_timings=dict(wall=wall,commit=commit_seconds,notifications=notifications,
             orchestration=wall-sum(p['duration'] for p in ctx['phases'])-commit_seconds-notifications)
         return report
+
+    def _autosave(self, state):
+        """Autosave по умолчанию выключен: экономика пишется только по явному save."""
+        if state is None or self.service.autosave != 'turn':
+            return
+        state.save_checkpoint(self.service.checkpoint_path())

@@ -63,7 +63,7 @@ def run(seed, months):
     try:
         for month in range(2):
             service.advance_turn(command_id='warm-%d' % month, source='audit')
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         prepare_market(engine)
         parameters = (engine.cfg['transport_rate'], engine.cfg['wage'],
                       engine.cfg['consumption_tax'], engine.cfg['markup'],

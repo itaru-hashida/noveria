@@ -1,28 +1,78 @@
 """Координация атомарных действий и уведомлений после фиксации БД."""
+import time
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 
 from core.db import IntegrityError
 
 
 class WorldService:
-    def __init__(self, db, bus):
+    def __init__(self, db, bus, economy=None):
         self.db, self.bus = db, bus
         from core.turn_service import TurnService
         self.turns=TurnService(self)
         self._tiles_cache=None
+        # Единственное экономическое состояние мира. Мир грузится один раз,
+        # объект создаётся один раз и передаётся между ходами; ход не читает и
+        # не пишет экономику в Ladybug.
+        self._economy_state = economy
+        self.autosave = 'off'
+        self.autosave_path = None
+        self._session_started = time.perf_counter()
 
     def tiles(self):
         if self._tiles_cache is None: self._tiles_cache=self.db.tiles()
         return self._tiles_cache
 
+    def world_graph(self):
+        """Структурный мир для экономики: сущности, связи и клетки."""
+        return dict(snapshot=self.db.snapshot(), tiles=self.tiles(),
+                    campaign=self.db.campaign())
+
+    def economy_state(self):
+        if self._economy_state is None:
+            from core.economy_state import EconomyState, default_config
+            self._economy_state = EconomyState.create(self.world_graph(),
+                                                      config=default_config())
+        return self._economy_state
+
+    def attach_economy(self, state):
+        """Привязать готовое состояние (например, восстановленное из Parquet)."""
+        if self._economy_state is not None and state is not self._economy_state:
+            raise ValueError('У мира уже есть экономическое состояние')
+        self._economy_state = state
+        return state
+
     def initialize_economy(self):
         from modules.economy import initialize
         return initialize(self)
 
+    def save_checkpoint(self, path=None):
+        """Записать экономику в Parquet по явному сохранению."""
+        from core.economy_state import EconomyState
+        state = self.economy_state()
+        destination = Path(path or self.autosave_path or self.checkpoint_path())
+        return EconomyState.save_checkpoint(state, destination)
+
+    def load_checkpoint(self, path=None):
+        """Прочитать экономику из Parquet и продолжить игру с того же места."""
+        from core.economy_state import EconomyState
+        destination = Path(path or self.autosave_path or self.checkpoint_path())
+        state = EconomyState.load_checkpoint(destination, self.world_graph())
+        self._economy_state = state
+        return state
+
     def simulate_economy(self, months, destination, progress=None):
         from modules.economy import run_stress
         return run_stress(self, months, destination, progress=progress)
+
+    def checkpoint_path(self):
+        """Где лежит checkpoint этого мира по умолчанию."""
+        from core.economy_state import default_checkpoint_path
+        if self.autosave_path:
+            return Path(self.autosave_path)
+        return default_checkpoint_path(self.db)
 
     def event(self,event_type,payload,entities,source='player',importance=5,summary=None,action_id=None):
         return dict(id=str(uuid4()),type=event_type,payload=payload,entities=entities,source=source,
@@ -67,10 +117,10 @@ class WorldService:
     def start_institution_project(self, city_id, kind, mode='normal', source='player', action_id=None):
         """Заказать муниципальную постройку из статической сметы экономики."""
         def operation(payload):
-            from modules.economy import Economy
-            engine = Economy.load(self.db)
+            # Состояние уже в памяти: стройка заводится без загрузки и записи в
+            # Ladybug, а завершится она внутри месячного хода.
+            engine = self.economy_state().engine
             project = engine.start_public_project(city_id, kind, mode)
-            engine.save(self.db, include_month=False)
             payload.update(project_id=project['id'], institution_id=project['institution_id'],
                 kind=kind, city_id=city_id, mode=mode, materials=project['material_bill'],
                 equipment=project['equipment'], work_required=project['work_required'])

@@ -25,7 +25,7 @@ def main(seed=73129, months=4):
     try:
         with ProcessPoolExecutor(max_workers=4) as pool:
             for month in range(months):
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 prepare_market(engine)
                 parameters = (engine.cfg['transport_rate'], engine.cfg['wage'],
                               engine.cfg['consumption_tax'], engine.cfg['markup'],

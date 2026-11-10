@@ -1,3 +1,4 @@
+import copy
 import csv
 import io
 import json
@@ -7,6 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from core.db import WorldDB
+from core.economy_state import EconomyState
 from core.lab import (compare_experiments, create_experiment, digest, execute_experiment,
                       list_experiments, live_series, read_live, start_experiment)
 from core.lab_import import import_csv
@@ -32,10 +34,16 @@ def pair(tmp_path_factory):
 
 def test_reproducible_isolated_runs_and_optional_journal(pair):
     assert pair[0] != pair[1]
-    with WorldDB(pair[0]/'world.lbug', read_only=True) as first, WorldDB(pair[1]/'world.lbug', read_only=True) as second:
-        assert first.economy_records('EconomyMonth') == second.economy_records('EconomyMonth')
-        assert first.economy_records('EconomyAccount') == second.economy_records('EconomyAccount')
-        assert first.economy_records('Enterprise') == second.economy_records('Enterprise')
+    # Экономика эксперимента лежит в его Parquet-checkpoint, а граф мира — отдельно.
+    from core.economy_state import EconomyState
+    states = []
+    for directory in pair:
+        with WorldDB(directory/'world.lbug', read_only=True) as db:
+            graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
+        states.append(EconomyState.load_checkpoint(directory/'economy', graph, strict=False))
+    assert states[0].engine.accounts == states[1].engine.accounts
+    assert states[0].engine.enterprises == states[1].engine.enterprises
+    assert [r['month'] for r in states[0].reports] == [r['month'] for r in states[1].reports]
     with LabStore(pair[0]/'analytics.sqlite') as full, LabStore(pair[1]/'analytics.sqlite') as summary:
         assert full.metadata()['initial_state_hash'] == summary.metadata()['initial_state_hash']
         assert full.query('orders')
@@ -48,9 +56,14 @@ def test_reproducible_isolated_runs_and_optional_journal(pair):
 
 
 def test_analytics_match_engine_and_order_links(pair):
-    with LabStore(pair[0]/'analytics.sqlite') as store, WorldDB(pair[0]/'world.lbug', read_only=True) as db:
+    from core.economy_state import EconomyState
+    with WorldDB(pair[0]/'world.lbug', read_only=True) as db:
+        graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
+    state = EconomyState.load_checkpoint(pair[0]/'economy', graph, strict=False)
+    reports = {report['month']: report for report in state.reports}
+    with LabStore(pair[0]/'analytics.sqlite') as store:
         for month in (1, 2, 3):
-            report = db.economy_month(month)
+            report = reports[month]
             overview = store.query('overview', start=month, end=month)[0]
             assert overview['output'] == pytest.approx(sum(report['production'].values()))
             assert overview['sold'] == pytest.approx(sum(t['quantity'] for t in report['trades']))
@@ -69,7 +82,7 @@ def test_analytics_match_engine_and_order_links(pair):
                 if order['side'] == 'buy':
                     executions = store.order_trades(month, order['id'], limit=10000)
                     assert sum(t['quantity'] for t in executions) == pytest.approx(order['filled'])
-        current = {e['id']: e for e in db.economy_records('Enterprise')}
+        current = state.engine.enterprises
         for row in store.query('enterprises', start=3, end=3, limit=10000):
             assert row['owner_id'] == current[row['id']]['owner_id']
             assert row['output'] == current[row['id']]['output']
@@ -80,8 +93,12 @@ def test_source_unchanged_and_read_only_live(service, tmp_path):
     service.advance_turn(command_id='source-month')
     service.schedule_social('stratum-province-0-0', 'loyalty', 62, command_id='lab-copy-command')
     path = Path(service.db.path)
-    snapshot = dict(accounts=service.db.economy_records('EconomyAccount'),
-                    counts=service.db.counts(), meta=service.db.meta(), commands=service.db.pending_commands())
+    # Сохранение экономики — явное: без него экономика остаётся в памяти и
+    # checkpoint не создаётся.
+    service.save_checkpoint()
+    accounts = copy.deepcopy(service.economy_state().engine.accounts)
+    snapshot = dict(counts=service.db.counts(), meta=service.db.meta(),
+                    commands=service.db.pending_commands())
     service.db.close()
     before = path.read_bytes()
     live = read_live(path)
@@ -93,14 +110,21 @@ def test_source_unchanged_and_read_only_live(service, tmp_path):
     assert config['seed'] == 73129
     assert path.read_bytes() == before
     with WorldDB(path, read_only=True) as db:
-        assert dict(accounts=db.economy_records('EconomyAccount'), counts=db.counts(),
-                    meta=db.meta(), commands=db.pending_commands()) == snapshot
+        assert dict(counts=db.counts(), meta=db.meta(),
+                    commands=db.pending_commands()) == snapshot
         with db.read_transaction():
             with pytest.raises(RuntimeError):
                 db.set_turn(999)
     with WorldDB(directory/'world.lbug', read_only=True) as clone:
         assert clone.meta()['turn'] == snapshot['meta']['turn']+2
         assert clone.get_entity('stratum-province-0-0')['properties']['loyalty'] == 62
+    with WorldDB(path, read_only=True) as db:
+        graph = dict(snapshot=db.snapshot(), tiles=db.tiles(), campaign=db.campaign())
+    copied = EconomyState.load_checkpoint(directory/'economy', graph, strict=False)
+    # Прогон копии длиннее исходника: счета исходника входят в копию, а новые
+    # предприятия за два месяца — это нормальный рост, а не потеря состояния.
+    assert set(accounts) <= set(copied.engine.accounts)
+    assert copied.engine.meta['month'] > 1
     missing = tmp_path/'missing.lbug'
     with pytest.raises(ValueError):
         read_live(missing)

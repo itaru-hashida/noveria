@@ -63,7 +63,7 @@ def run_seed(seed, months, detail):
         digests = {}
         for step in range(1, months + 1):
             service.advance_turn(command_id='matrix-%d-%d' % (seed, step), source='audit')
-            engine = Economy.load(db)
+            engine = service.economy_state().engine
             digests[engine.meta['month']] = state_digest(engine)
         return dict(seed=seed, digests=digests, seconds=round(time.perf_counter() - started, 2))
     finally:

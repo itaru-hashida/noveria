@@ -47,7 +47,7 @@ def main():
             service.advance_turn(command_id='cv-warm-%d' % month, source='audit')
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             for month in range(args.months):
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 planner = AgentTurn(pool, batch=32)
                 engine.step(enterprise_planner=planner)
                 if month == args.months-1:

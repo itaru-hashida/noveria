@@ -55,7 +55,7 @@ def main():
     db, service = sr.build_world(args.seed, work, report_detail='none')
     for month in range(args.months):
         service.advance_turn(command_id='warm-%d-%d' % (args.seed, month), source='audit')
-    engine = Economy.load(db)
+    engine = service.economy_state().engine
     prepare_market(engine)
     parameters = (engine.cfg['transport_rate'], engine.cfg['wage'],
                   engine.cfg['consumption_tax'], engine.cfg['markup'],

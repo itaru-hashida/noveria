@@ -200,15 +200,15 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         db, service = sr.build_world(a.seed, tmp)
         try:
-            engine = Economy.load(db)
+            engine = service.economy_state().engine
             if shock:
                 sr.SHOCK['province'] = sr.choose_province(engine)
                 result['shock_province'] = sr.SHOCK['province']
             for step in range(1, a.months+1):
                 service.advance_turn(command_id=f'diag-{a.scenario}-{a.seed}-{step}', source='audit')
                 if step in at:
-                    engine = Economy.load(db)
-                    report = db.economy_month(engine.meta['month'])
+                    engine = service.economy_state().engine
+                    report = service.economy_state().last_report
                     result[str(step)] = snapshot(engine, report)
                     print('diag month', step, flush=True)
         finally:

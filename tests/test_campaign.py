@@ -31,8 +31,9 @@ def test_generator_reproducible():
 def test_generated_stone_deposits_wait_for_private_demand(tmp_path):
     with WorldDB(tmp_path/'stone.lbug') as db:
         load_world(db)
-        WorldService(db, EventBus()).initialize_economy()
-        engine = Economy.load(db)
+        service = WorldService(db, EventBus())
+        service.initialize_economy()
+        engine = service.economy_state().engine
         assert any('камень' in tile['resources'] for tile in engine.tiles.values())
         # До первого строительного заказа добыча камня не имеет сбыта и не
         # должна появляться как заранее обречённая на закрытие фирма.
@@ -46,7 +47,7 @@ def test_municipality_can_start_persisted_institution_project(tmp_path):
         service = WorldService(db, EventBus())
         service.initialize_economy()
         event = service.start_institution_project('city-0-0', 'academy', action_id='academy-order')
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         project = engine.accounts['municipal:city-0-0']['public_projects'][0]
         assert event['payload']['project_id'] == project['id']
         assert project['material_bill']['stone'] == 120
@@ -56,8 +57,9 @@ def test_municipality_can_start_persisted_institution_project(tmp_path):
 def test_completed_institution_project_persists_entity_and_location(tmp_path):
     with WorldDB(tmp_path/'completed-institution.lbug') as db:
         load_world(db)
-        WorldService(db, EventBus()).initialize_economy()
-        engine = Economy.load(db)
+        service = WorldService(db, EventBus())
+        service.initialize_economy()
+        engine = service.economy_state().engine
         engine.cfg['institutions'] = {
             'academy': dict(name='Академия', materials={'planks': 1}, equipment={'tools': 1},
                 equipment_wear={'tools': 0}, work_required=1, max_workers=1)
@@ -71,7 +73,9 @@ def test_completed_institution_project_persists_entity_and_location(tmp_path):
         project['equipment_held']['tools'] = 1
         engine._construction_labor = defaultdict(float, {('noweria', 'province-0'): 1})
         engine.advance_public_projects()
-        engine.save(db, include_month=False)
+        # Институт — структурная сущность мира, поэтому он попадает в граф
+        # сразу при завершении стройки, а не в конце месяца.
+        service.economy_state().flush_structural(db)
 
         institution = db.get_entity(project['institution_id'])
         assert institution['kind'] == 'Institution'

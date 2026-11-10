@@ -22,7 +22,7 @@ def run(seed, mode, months=12):
         try:
             for _ in range(months):
                 service.advance_turn(command_id=f'hyp-{mode}-{seed}-{len(rows)+1}',source='audit')
-                engine=Economy.load(db); report=db.economy_month(engine.meta['month'])
+                engine=service.economy_state().engine; report=service.economy_state().last_report
                 rows.append(sr.row_for(engine,report,mode,seed))
         finally:
             Economy.owner_requests=original_owner; Economy.step=original_step; db.close()

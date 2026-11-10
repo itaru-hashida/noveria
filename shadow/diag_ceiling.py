@@ -39,7 +39,7 @@ def main():
             service.advance_turn(command_id='ce-warm-%d' % month, source='audit')
 
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
-            engine = Economy.load(db)
+            engine = service.economy_state().engine
             turn = AgentTurn(pool=pool, batch=32)
             engine.step(enterprise_planner=turn)
 

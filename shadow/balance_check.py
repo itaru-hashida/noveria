@@ -22,7 +22,7 @@ print('PARAMS: seed=%d months=%d detail=none' % (seed, months))
 try:
     bad_months = 0
     for month in range(months):
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         before = goods_balance.totals(engine)
         # Фазу считаем в памяти, чтобы получить отчёт: в БД он не сохраняется.
         engine.meta['month'] += 1
@@ -40,7 +40,6 @@ try:
                          row['wear'], row['end']))
         else:
             print('месяц %d: баланс сошёлся' % engine.meta['month'])
-        engine.save(db, include_month=True)
     print('ИТОГ: месяцев с расхождением %d из %d' % (bad_months, months))
 finally:
     db.close()

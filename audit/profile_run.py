@@ -113,7 +113,7 @@ def main():
         db, service = sr.build_world(args.seed, tmp,
                                      report_detail=args.detail or 'deep')
         try:
-            engine = Economy.load(db)
+            engine = service.economy_state().engine
             if args.detail:
                 engine.meta['report_detail'] = args.detail
 

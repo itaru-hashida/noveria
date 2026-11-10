@@ -5,7 +5,7 @@ import pickle
 
 import pytest
 
-from core.db import WorldDB
+from core.economy_state import EconomyState
 from modules.economy.food_diagnostics import FoodDiagnostics
 from scripts.record_food_diagnostics import run, summarize
 from test_economy_v3 import engine
@@ -52,11 +52,17 @@ def test_missing_observation_stays_visible_as_accounting_gap(engine):
 
 
 def test_compact_report_survives_real_database(engine, tmp_path):
-    engine.step()
-    with WorldDB(tmp_path/'food.lbug') as db:
-        engine.save(db)
-        saved = db.economy_records('EconomyMonth')[0]
-        assert saved['food_diagnostics'] == engine.report['food_diagnostics']
+    report = engine.step()
+    # Отчёт месяца живёт в checkpoint: таблицы месяцев в Ladybug больше нет.
+    world = dict(snapshot=dict(entities=list(engine.entities.values()),
+                                 links=[dict(source=owner, target=target, kind='owns')
+                                        for target, owner in engine.owners.items()]),
+                 tiles=list(engine.tiles.values()), campaign=None)
+    state = EconomyState(engine, world, keep_reports=True)
+    state.reports = [report]
+    state.save_checkpoint(tmp_path/'food')
+    saved = EconomyState.load_checkpoint(tmp_path/'food', world).reports[0]
+    assert saved['food_diagnostics'] == engine.report['food_diagnostics']
 
 
 def test_gzip_export_is_readable_and_refuses_overwrite(engine, tmp_path):

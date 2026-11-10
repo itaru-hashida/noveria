@@ -5,23 +5,22 @@ from uuid import uuid4
 import pandas as pd
 import streamlit as st
 
-from modules.economy import Economy
-
 
 def economy_page(service):
     st.header('Экономика и торговля')
     if not service.db.campaign():
         st.info('Для экономики нужна кампания с географией. Создайте отдельную новую кампанию по инструкции README.')
         return
-    if not service.db.economy_records('EconomyMeta'):
+    state = service.economy_state()
+    if not state.initialized:
         st.info('Начальные фонды и резервы создаются один раз. Это также произойдёт при завершении первого месяца.')
         if st.button('Инициализировать экономику'):
             service.initialize_economy()
             st.rerun()
         return
-    engine=Economy.load(service.db)
+    engine=state.engine
     entities=engine.entities
-    months=service.db.economy_records('EconomyMonth')
+    months=state.reports
     with st.expander('Тестовый прогон на отдельной копии'):
         duration=st.selectbox('Месяцев',[12,60,120])
         st.caption('Новая база в data/economy-runs. Основная кампания не изменяется. Копия выполняет полный месячный цикл, включая ожидающие распоряжения.')
@@ -39,9 +38,7 @@ def economy_page(service):
         if not saved:
             st.info('Сначала запустите тестовую симуляцию.'); return
         months=saved['reports']
-        from core.db import WorldDB
-        with WorldDB(saved['path']) as db:
-            engine=Economy.load(db)
+        st.caption('Прогон остался в памяти этой сессии; на диск экономика не выгружалась.')
     states=[e['id'] for e in entities.values() if e['kind']=='State']
     state=st.selectbox('Государство',[None]+states,format_func=lambda i:entities[i]['name'] if i else 'Все государства')
     provinces=[e['id'] for e in entities.values() if e['kind']=='Province' and (not state or engine.owners[e['id']]==state)]

@@ -353,6 +353,9 @@ def run(args):
             engine = pickle.load(f)
     else:
         from core.db import WorldDB
+        from core.economy_state import EconomyState
+        from core.events import EventBus
+        from core.world_service import WorldService
         from loader import load_world
         content = json.loads((ROOT/'content/initial_world.json').read_text(encoding='utf-8'))
         content['generation']['seed'] = args.seed
@@ -360,9 +363,11 @@ def run(args):
         scenario.write_text(json.dumps(content, ensure_ascii=False), encoding='utf-8')
         with WorldDB(out/'initial.lbug') as db:
             load_world(db, scenario)
-            engine = Economy.load(db)
-            engine.bootstrap()
-            engine.save(db)
+            service = WorldService(db, EventBus())
+            # Экономика создаётся в памяти один раз: в Ladybug её больше нет.
+            state = EconomyState.create(service.world_graph())
+            state.bootstrap()
+            engine = state.engine
         for _ in range(args.warmup):
             engine.step()
         checkpoint = out/'checkpoint.pickle'

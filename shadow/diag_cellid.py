@@ -19,7 +19,7 @@ def main():
     try:
         for month in range(3):
             service.advance_turn(command_id='ci-%d' % month, source='audit')
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         with_cell = [a for a in engine.accounts.values() if a.get('cell_id')]
         print('PARAMS: seed=73129 months=3 detail=none')
         print('счетов всего %d, с cell_id %d' % (len(engine.accounts), len(with_cell)))

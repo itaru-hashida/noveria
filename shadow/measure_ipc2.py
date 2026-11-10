@@ -52,7 +52,7 @@ def main():
     try:
         for month in range(args.warmup+args.months):
             service.advance_turn(command_id='mp2-%d' % month, source='audit')
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         engine.update_prices()
         engine.prepare_recovery_quotes()
         sells = engine.sell_orders()
@@ -117,7 +117,7 @@ def main():
         # Второй месяц: измерить простой исполнителя в реальном ходе.
         rows = []
         for month in range(3):
-            engine = Economy.load(db)
+            engine = service.economy_state().engine
             planner = AgentTurn(pool=None, batch=args.batch)
             engine.step(enterprise_planner=planner)
             rows.append(dict(stream=dict(planner.metrics), wall=0.0))

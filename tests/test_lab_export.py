@@ -261,6 +261,24 @@ def test_completion_hook_without_running_simulation(tmp_path, monkeypatch):
     with LabStore(directory/'analytics.sqlite', create=True) as store:
         store.save_metadata(meta)
     engine = SimpleNamespace(meta={'month': 0})
+
+    class FakeState:
+        def __init__(self, *args, **kwargs):
+            self.engine = engine
+            self.last_report = {'month': 0}
+            self.keep_reports = False
+            self.reports = []
+
+        @classmethod
+        def load_checkpoint(cls, *args, **kwargs):
+            return cls()
+
+        def save_checkpoint(self, *args, **kwargs):
+            return args[0] if args else None
+
+        def attach(self, *args, **kwargs):
+            return self
+
     class FakeDB:
         def __init__(self, *args):
             pass
@@ -268,13 +286,14 @@ def test_completion_hook_without_running_simulation(tmp_path, monkeypatch):
             return self
         def __exit__(self, *args):
             pass
-        def economy_month(self, month):
-            return {'month': month}
+
     monkeypatch.setattr(lab, 'prepare_world', lambda *args: None)
     monkeypatch.setattr(lab, 'WorldDB', FakeDB)
-    monkeypatch.setattr(lab, 'Economy', SimpleNamespace(load=lambda db: engine))
+    monkeypatch.setattr(lab, 'EconomyState', FakeState)
     monkeypatch.setattr(lab, 'WorldService', lambda *args: SimpleNamespace(
-        advance_turn=lambda **kwargs: engine.meta.update(month=1)))
+        advance_turn=lambda **kwargs: engine.meta.update(month=1),
+        attach_economy=lambda state: state,
+        world_graph=lambda: {'snapshot': {'entities': [], 'links': []}, 'tiles': []}))
     monkeypatch.setattr(lab, 'capture', lambda engine, report, detail: copy.deepcopy(monthly_data(report['month'])))
     monkeypatch.setattr(lab, 'temporal_anomalies', lambda *args: None)
     assert lab.execute_experiment(directory)['status'] == 'completed'

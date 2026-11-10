@@ -1,10 +1,12 @@
+import copy
 import json
 from pathlib import Path
 
 import pytest
 
-from modules.economy import Economy
 from core.db import WorldDB
+from core.economy_state import EconomyState
+from modules.economy import Economy
 from core.lab_analytics import capture
 from core.lab_export import AnalysisExporter
 from core.lab_store import LabStore
@@ -307,13 +309,19 @@ def test_defaults_and_dividend_guard_survive_old_configuration_reload(engine, tm
     assert engine.cfg['owner_consumption_rate'] == .05
     engine.pay_dividends({})
     before = {i: a['balance'] for i, a in engine.accounts.items()}
-    with WorldDB(tmp_path/'owners.lbug') as db:
-        db.store_economy('EconomyAccount', list(engine.accounts.values()))
-        db.store_economy('Enterprise', list(engine.enterprises.values()))
-        db.store_economy('EconomyMeta', [engine.meta])
-        reopened = Economy.load(db)
-        reopened.pay_dividends({})
-        assert {i: a['balance'] for i, a in reopened.accounts.items()} == before
+    # Перезагрузка идёт через checkpoint, а не через таблицы Ladybug.
+    world = dict(snapshot=dict(entities=list(engine.entities.values()),
+                                 links=[dict(source=owner, target=target, kind='owns')
+                                        for target, owner in engine.owners.items()]),
+                 tiles=list(engine.tiles.values()), campaign=None)
+    state = EconomyState.create(world, accounts=list(engine.accounts.values()),
+                                enterprises=list(engine.enterprises.values()),
+                                meta=engine.meta)
+    state.save_checkpoint(tmp_path/'owners')
+    reopened_state = EconomyState.load_checkpoint(tmp_path/'owners', world)
+    reopened = reopened_state.engine
+    reopened.pay_dividends({})
+    assert {i: a['balance'] for i, a in reopened.accounts.items()} == before
 
 
 def test_short_run_conserves_money_goods_and_exposes_lab_metrics(engine):
@@ -351,16 +359,19 @@ def test_owner_consumption_analytics_pass_export_consistency_checks(engine, tmp_
 
 def test_repeated_command_does_not_repeat_dividends_or_consumption(service):
     service.initialize_economy()
-    e = next(e for e in service.db.economy_records('Enterprise') if e['good'] == 'fish')
+    state = service.economy_state()
+    e = next(e for e in state.engine.enterprises.values() if e['good'] == 'fish')
     # Прибыльная реальная продажа вместо условного положительного поля profit.
     e['price'] *= 2
-    with service.db.transaction():
-        service.db.store_economy('Enterprise', [e])
     service.advance_turn(command_id='owners-once')
-    accounts = service.db.economy_records('EconomyAccount')
-    report = service.db.economy_month(1)
+    accounts = copy.deepcopy(state.engine.accounts)
+    report = state.last_report
     assert report['owner_consumption']
     assert any(r['dividends'] > 0 for r in report['dividends'])
+    # Повторная команда не повторяет ни дивиденды, ни потребление: экономика в
+    # памяти не двигается, а отчёт возвращается сохранённый.
     service.advance_turn(command_id='owners-once')
-    assert service.db.economy_records('EconomyAccount') == accounts
-    assert service.db.economy_month(1) == report
+    assert state.engine.accounts == accounts
+    assert state.engine.meta['month'] == 1
+    # Ход начинается с 1 и увеличивается до 2: сохранён тот же отчёт, а не новый.
+    assert service.db.turn_result('owners-once')['turn'] == 2

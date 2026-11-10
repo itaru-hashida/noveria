@@ -183,7 +183,7 @@ def main():
     work.mkdir(parents=True, exist_ok=True)
     db, service = sr.build_world(args.seed, work, report_detail=args.detail)
     try:
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         engine.meta['report_detail'] = args.detail
         for _ in range(args.warmup):
             engine.step()

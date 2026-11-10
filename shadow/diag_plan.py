@@ -21,7 +21,7 @@ def main(seed=73129, months=3):
     try:
         for month in range(months):
             service.advance_turn(command_id='dp-%d' % month, source='audit')
-        engine = Economy.load(db)
+        engine = service.economy_state().engine
         prepare_market(engine)
         budget = budget_cap(engine)
         arrays, meta = agent_snapshot.build(engine, budget)

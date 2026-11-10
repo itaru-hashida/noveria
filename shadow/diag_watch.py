@@ -69,7 +69,7 @@ def main():
         Economy.match = watching
         try:
             with ProcessPoolExecutor(max_workers=args.workers) as pool:
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 turn = AgentTurn(pool=pool, batch=32)
                 engine.step(enterprise_planner=turn)
         finally:

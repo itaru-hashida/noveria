@@ -222,7 +222,7 @@ def main():
                 service.advance_turn(command_id='warmup-%d-%d' % (args.seed, month),
                                      source='audit')
             for month in range(args.months):
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 prepare_market(engine)
                 parameters = (engine.cfg['transport_rate'], engine.cfg['wage'],
                               engine.cfg['consumption_tax'], engine.cfg['markup'],

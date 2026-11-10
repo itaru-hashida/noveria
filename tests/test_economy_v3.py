@@ -7,6 +7,7 @@ import pytest
 
 from core.db import WorldDB
 from core.lab_analytics import capture
+from core.economy_state import EconomyState
 from modules.economy import Economy
 
 
@@ -308,14 +309,20 @@ def test_observations_preserve_economic_results_and_survive_real_db(engine, tmp_
         assert observed_meta == silent_meta
         assert observed_report['trades'] == silent_report['trades']
         assert observed_report['flows'] == silent_report['flows']
-    with WorldDB(tmp_path/'observations.lbug') as db:
-        observed.save(db)
-        stored = db.economy_records('EconomyMonth')[0]
-        buys = [o for o in stored['orders'] if o['side'] == 'buy']
-        assert buys and all('match_observation' in o for o in buys)
-        captured = capture(observed, observed_report)
-        assert any('match_observation' in o for o in captured['orders'])
-        assert any('production_observation' in e for e in captured['enterprises'])
+    # Отчёт с наблюдениями сохраняется в checkpoint, а не в таблицу месяцев.
+    world = dict(snapshot=dict(entities=list(observed.entities.values()),
+                               links=[dict(source=owner, target=target, kind='owns')
+                                      for target, owner in observed.owners.items()]),
+                 tiles=list(observed.tiles.values()), campaign=None)
+    state = EconomyState(observed, world, keep_reports=True)
+    state.reports = [observed_report]
+    state.save_checkpoint(tmp_path/'observations')
+    stored = EconomyState.load_checkpoint(tmp_path/'observations', world).reports[0]
+    buys = [o for o in stored['orders'] if o['side'] == 'buy']
+    assert buys and all('match_observation' in o for o in buys)
+    captured = capture(observed, observed_report)
+    assert any('match_observation' in o for o in captured['orders'])
+    assert any('production_observation' in e for e in captured['enterprises'])
 
 
 def test_none_report_skips_market_observations_without_changing_economy(engine):
@@ -418,12 +425,16 @@ def test_demand_snapshot_does_not_use_late_income(engine):
 def test_reserves_survive_real_database_reload(engine, tmp_path):
     clear(engine)
     engine.order('h', 'bread', 20, 'buy', 3, 'Базовые нужды')
-    with WorldDB(tmp_path/'reserves.lbug') as db:
-        db.store_economy('EconomyAccount', list(engine.accounts.values()))
-        db.store_economy('EconomyMeta', [engine.meta])
-        reopened = Economy.load(db)
-        assert reopened.accounts['h']['reserved'] == 60
-        assert reopened.free_cash('h') == engine.free_cash('h')
+    world = dict(snapshot=dict(entities=list(engine.entities.values()),
+                                 links=[dict(source=owner, target=target, kind='owns')
+                                        for target, owner in engine.owners.items()]),
+                 tiles=list(engine.tiles.values()), campaign=None)
+    EconomyState.create(world, accounts=list(engine.accounts.values()),
+                        enterprises=list(engine.enterprises.values()),
+                        meta=engine.meta).save_checkpoint(tmp_path/'reserves')
+    reopened = EconomyState.load_checkpoint(tmp_path/'reserves', world).engine
+    assert reopened.accounts['h']['reserved'] == 60
+    assert reopened.free_cash('h') == engine.free_cash('h')
 
 
 def test_no_profit_distribution_or_idle_capacity_charge(engine):
@@ -885,11 +896,17 @@ def test_partial_project_and_locked_materials_survive_reload(engine, tmp_path):
     assert engine.order(a['id'], 'planks', 1, 'sell', 2, 'Продажа') is None
     engine.finish_projects()
     assert 'project' in a
-    with WorldDB(tmp_path/'project.lbug') as db:
-        db.store_economy('EconomyAccount', list(engine.accounts.values()))
-        db.store_economy('EconomyMeta', [engine.meta])
-        reopened = Economy.load(db)
-        assert reopened.accounts[a['id']]['project'] == a['project']
+    # Незавершённая стройка — часть экономического состояния, а не структуры:
+    # она должна переживать checkpoint вместе с материалами и деньгами.
+    world = dict(snapshot=dict(entities=list(engine.entities.values()),
+                                 links=[dict(source=owner, target=target, kind='owns')
+                                        for target, owner in engine.owners.items()]),
+                 tiles=list(engine.tiles.values()), campaign=None)
+    EconomyState.create(world, accounts=list(engine.accounts.values()),
+                        enterprises=list(engine.enterprises.values()),
+                        meta=engine.meta).save_checkpoint(tmp_path/'project')
+    reopened = EconomyState.load_checkpoint(tmp_path/'project', world).engine
+    assert reopened.accounts[a['id']]['project'] == a['project']
     p = a['project']
     for g, q in engine.construction_bill(5).items():
         missing = q-a['stock'].get(g, 0)
@@ -1129,21 +1146,24 @@ def test_old_save_without_frozen_plans_reloads_and_repeated_runs_match(engine,tm
     for e in engine.enterprises.values():
         e.pop('production_plan',None)
     engine.meta['rng_state']=engine.rng.getstate()
-    with WorldDB(tmp_path/'old-planning.lbug') as db:
-        for entity in engine.entities.values():
-            db.create_entity(entity['id'],entity['kind'],entity['name'],entity['properties'])
-        for target,owner in engine.owners.items():
-            db.put_link(owner,target,'owns')
-        db.store_tiles(list(engine.tiles.values()))
-        engine.save(db,include_month=False)
-        reopened=Economy.load(db)
-        for _ in range(3):
-            expected=copy.deepcopy(engine.step())
-            assert reopened.step()==expected
-            assert reopened.accounts==engine.accounts
-            assert reopened.enterprises==engine.enterprises
-            assert all(e.get('production_plan',{}).get('month')==reopened.meta['month']
-                for e in reopened.enterprises.values() if e['status']!='closed'
-                and e['available_from']<=reopened.meta['month'])
-            assert all(e['output']==0 for e in reopened.enterprises.values()
-                if e['available_from']>reopened.meta['month'])
+    # Круг сохранения идёт через checkpoint: экономика живёт в памяти, а не в
+    # таблицах Ladybug, поэтому проверяется именно тот путь, что и в игре.
+    world = dict(snapshot=dict(entities=list(engine.entities.values()),
+                                 links=[dict(source=owner, target=target, kind='owns')
+                                        for target, owner in engine.owners.items()]),
+                 tiles=list(engine.tiles.values()), campaign=None)
+    state = EconomyState.create(world, accounts=list(engine.accounts.values()),
+                                enterprises=list(engine.enterprises.values()),
+                                meta=engine.meta)
+    state.save_checkpoint(tmp_path/'old-planning')
+    reopened = EconomyState.load_checkpoint(tmp_path/'old-planning', world).engine
+    for _ in range(3):
+        expected=copy.deepcopy(engine.step())
+        assert reopened.step()==expected
+        assert reopened.accounts==engine.accounts
+        assert reopened.enterprises==engine.enterprises
+        assert all(e.get('production_plan',{}).get('month')==reopened.meta['month']
+            for e in reopened.enterprises.values() if e['status']!='closed'
+            and e['available_from']<=reopened.meta['month'])
+        assert all(e['output']==0 for e in reopened.enterprises.values()
+            if e['available_from']>reopened.meta['month'])

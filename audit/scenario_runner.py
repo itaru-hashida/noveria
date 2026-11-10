@@ -57,9 +57,9 @@ def build_world(seed, directory, report_detail='deep'):
     load_world(db, scenario)
     service = WorldService(db, EventBus())
     service.initialize_economy()
-    engine = Economy.load(db)
-    engine.meta['report_detail'] = report_detail
-    engine.save(db, include_month=False)
+    # Экономика живёт в памяти: режим отчёта задаётся один раз на состояние, а
+    # не переписывается в таблицу метаданных Ladybug.
+    service.economy_state().engine.meta['report_detail'] = report_detail
     return db, service
 
 
@@ -141,16 +141,16 @@ def run(seed, months, scenario, shock, out, events_path=None, report_detail='sta
     with tempfile.TemporaryDirectory() as tmp:
         db, service = build_world(seed, tmp, report_detail=report_detail)
         try:
-            engine = Economy.load(db)
+            engine = service.economy_state().engine
             if shock:
                 SHOCK['province'] = shock[1] if shock[1] != 'auto' else choose_province(engine)
             for step in range(1, months+1):
                 service.advance_turn(command_id=f'audit-{scenario}-{seed}-{step}', source='audit')
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 if report_detail == 'none':
                     r = row_for_none(engine, scenario, seed)
                 else:
-                    report = db.economy_month(engine.meta['month'])
+                    report = service.economy_state().last_report
                     if events_path:
                         events.extend(report.get('events', []))
                     r = row_for(engine, report, scenario, seed)

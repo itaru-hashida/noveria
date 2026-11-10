@@ -43,7 +43,7 @@ def main():
 
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             for month in range(args.months):
-                engine = Economy.load(db)
+                engine = service.economy_state().engine
                 turn = AgentTurn(pool=pool, batch=32)
                 bought_before = {a['id']: dict(a['stock']) for a in engine.accounts.values()}
                 cash_before = {a['id']: a['balance'] for a in engine.accounts.values()}

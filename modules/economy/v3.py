@@ -3614,29 +3614,38 @@ class Economy(EconomyServices):
 
 
 def initialize(service):
+    """Создать экономическое состояние нового мира один раз, в памяти.
+
+    Старых экономических записей в Ladybug больше нет: `EconomyMeta` удалена из
+    схемы. Признак инициализации — живое состояние сервиса, а не строка в БД.
+    """
     if not service.db.campaign():
         return False
-    with service.db.transaction():
-        if service.db.economy_records('EconomyMeta'):
-            return False
-        engine = Economy.load(service.db)
-        engine.bootstrap()
-        engine.save(service.db)
-        event = service.db.record_event(service.event('economy_initialized',
-            dict(gold=engine.gold(), enterprises=len(engine.enterprises), rules_version=3), [], source='economy', summary='Начальное состояние экономики V3'))
+    state = service.economy_state()
+    if state.initialized:
+        return False
+    state.bootstrap()
+    event = service.db.record_event(service.event('economy_initialized',
+        dict(gold=state.engine.gold(), enterprises=len(state.engine.enterprises),
+             rules_version=3), [], source='economy',
+        summary='Начальное состояние экономики V3'))
     service.notify(event)
     return True
 
 
 def monthly_phase(service, ctx):
-    engine = Economy.load(service.db)
-    if not engine.accounts:
-        engine.bootstrap()
-    report = engine.step()
-    engine.save(service.db)
+    """Месяц экономики: тот же объект состояния, никакой загрузки и записи в БД.
+
+    `state.step()` и есть весь ход: состояние остаётся в памяти, а отчёт
+    месяца уходит в Parquet только по явному сохранению/autosave.
+    """
+    state = service.economy_state()
+    if not state.initialized:
+        state.bootstrap()
+    report = state.step()
     ctx['changes'].append(f'Экономика V3: {report["active_enterprises"]} предприятий, {len(report["trades"])} сделок')
     event = service.db.record_event(service.event('economy_month',
         dict(month=report['month'], invariants=report['invariants'], trades=len(report['trades']), rules_version=3), [],
         source='economy', action_id=ctx['command_id'], summary=ctx['changes'][-1]))
     ctx['events'].append(event)
-    return len(engine.enterprises)
+    return len(state.engine.enterprises)

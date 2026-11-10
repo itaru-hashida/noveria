@@ -6,7 +6,7 @@ import pytest
 from modules.economy import Economy
 from test_supply_response import market
 from test_economy_v3 import engine
-from core.db import WorldDB
+from core.economy_state import EconomyState
 from scripts import research_supply_response, explain_supply_case
 
 
@@ -61,14 +61,13 @@ def test_existing_save_gets_new_revision_and_roundtrips(engine, tmp_path):
     engine.meta.pop('stock_planning_revision',None)
     engine.step()
     assert engine.meta['stock_planning_revision']==2
-    with WorldDB(tmp_path/'stock.lbug') as db:
-        for entity in engine.entities.values():
-            db.create_entity(entity['id'],entity['kind'],entity['name'],entity['properties'])
-        for target,owner in engine.owners.items():
-            db.put_link(owner,target,'owns')
-        db.store_tiles(list(engine.tiles.values()))
-        engine.save(db)
-        restored=Economy.load(db)
+    # Круг сохранения идёт через Parquet-checkpoint, а не через Ladybug.
+    world = dict(snapshot=dict(entities=list(engine.entities.values()),
+                                 links=[dict(source=owner, target=target, kind='owns')
+                                        for target, owner in engine.owners.items()]),
+                 tiles=list(engine.tiles.values()), campaign=None)
+    EconomyState(engine, world, keep_reports=True).save_checkpoint(tmp_path/'stock')
+    restored = EconomyState.load_checkpoint(tmp_path/'stock', world).engine
     assert restored.meta['stock_planning_revision']==2
     restored.step();engine.step()
     assert restored.accounts==engine.accounts
