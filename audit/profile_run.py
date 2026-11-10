@@ -106,6 +106,9 @@ def main():
                         help='без cProfile и таймеров фаз: честная скорость игры')
     parser.add_argument('--no-cprofile', action='store_true',
                         help='таймеры фаз без cProfile: честные доли фаз')
+    parser.add_argument('--market-probe', action='store_true',
+                        help='счётчики рыночной картины: книга, landed, котировки, '
+                             'попадания в кэш; печатает отчёт после прогона')
     parser.add_argument('--out', type=Path, default=ROOT / 'audit/_runs')
     args = parser.parse_args()
 
@@ -121,6 +124,18 @@ def main():
                 t0 = time.perf_counter()
                 warm_caches(engine, args.warmup)
                 print('прогрев %d мес: %.2fs' % (args.warmup, time.perf_counter() - t0))
+
+            # Проба только считает вызовы и время: она ничего не меняет в
+            # расчёте, но её накладные расходы входят в замер, поэтому её
+            # включают явным флагом и не смешивают с чистым таймингом.
+            probe = None
+            if args.market_probe:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(
+                    'market_probe', ROOT/'audit'/'market_probe.py')
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                probe = module.MarketProbe().install()
 
             if args.plain:
                 # cProfile честно показывает структуру, но удваивает время:
@@ -144,6 +159,10 @@ def main():
                 print('быстрейший %.2fs, медленнейший %.2fs, разброс %.2fx'
                       % (min(step_times), max(step_times),
                          max(step_times) / max(min(step_times), 1e-9)))
+                if probe is not None:
+                    print()
+                    probe.report(stream=print)
+                    probe.restore()
                 return
 
             totals, counts, restore = install_phase_timers()
@@ -183,6 +202,9 @@ def main():
                       % (seconds, 100 * seconds / wall, counts[name], name))
 
             if args.no_cprofile:
+                if probe is not None:
+                    probe.report(stream=print)
+                    probe.restore()
                 return
 
             stream = io.StringIO()
