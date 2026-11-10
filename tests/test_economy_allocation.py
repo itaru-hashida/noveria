@@ -20,6 +20,18 @@ def test_cheaper_stock_only_covers_one_buyer_once(engine):
     assert engine.reachable_demand(bakery, {'bread': [sell]}) == 1
 
 
+def test_grouped_demand_does_not_move_cash_between_orders(engine):
+    clear(engine)
+    bakery = firm(engine)
+    bakery['price'] = 2.1
+    unfunded = engine.order('h', 'bread', 10, 'buy', 10, 'Базовые нужды')
+    funded = engine.order('h', 'bread', 1, 'buy', 10, 'Базовые нужды')
+    unfunded['reserved'] = 0
+    funded['reserved'] = 100
+
+    assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(1)
+
+
 def test_existing_affordable_capacity_prevents_duplicate_bakery(engine):
     clear(engine)
     for a in engine.accounts.values():

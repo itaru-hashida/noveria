@@ -2057,7 +2057,7 @@ class Economy(EconomyServices):
         только чистым прогнозом reachable_demand.
         """
         orders = getattr(self, '_planning_orders', self.report.get('orders', [])) if orders is None else orders
-        key = (id(orders), len(orders), e['tile_id'], e['good'],
+        key = (id(orders), len(orders), e['tile_id'], e['good'], e['price'],
             getattr(self, '_market_quote_version', 0))
         cache = getattr(self, '_customer_demand_groups_cache', {})
         entry = cache.get(key)
@@ -2070,9 +2070,13 @@ class Economy(EconomyServices):
             limit = order['price']-freight
             group_key = (order['participant'], order['tile_id'], order['price'], limit)
             row = grouped.setdefault(group_key, [order['participant'], order['tile_id'],
-                order['price'], limit, 0.0, 0.0])
-            row[4] += order['remaining']
-            row[5] += order['reserved']
+                order['price'], limit, 0.0])
+            landed = self.landed(e['tile_id'], order['tile_id'], e['good'], e['price'])[0]
+            # Solvency belongs to an individual order.  Summing quantity and
+            # money separately can let one order's cash fund another order's
+            # unfunded quantity: min(sum(q), sum(cash) / price) !=
+            # sum(min(q, cash / price)).
+            row[4] += min(order['remaining'], order['reserved']/max(landed, EPS))
         result = tuple(tuple(row) for row in grouped.values())
         cache[key] = (orders, result)
         self._customer_demand_groups_cache = cache
@@ -2083,14 +2087,13 @@ class Economy(EconomyServices):
         # Конкуренты важны лишь для товара кандидата: копия всех книг рынка
         # создавалась тысячи раз при планировании выпуска.
         remaining = {sell['id']: sell['remaining'] for sell in sells.get(e['good'], [])}
-        for participant, tile_id, order_price, limit, order_remaining, order_reserved in self.customer_demand_groups(e):
+        for participant, tile_id, order_price, limit, volume in self.customer_demand_groups(e):
             if participant == e['id']:
                 continue
             if limit+EPS < e['price']:
                 continue
             buyer = self.accounts[participant]
             landed = self.landed(e['tile_id'], tile_id, e['good'], e['price'])[0]
-            volume = min(order_remaining, order_reserved/landed)
             for price, sell, _ in self.offers(buyer, e['good'], sells):
                 if sell['participant'] == e['id'] or price > order_price+EPS or price >= landed-EPS:
                     continue
@@ -2543,14 +2546,13 @@ class Economy(EconomyServices):
         residual = 0.0
         # Та же рабочая книга только для оцениваемого товара.
         cheap = {o['id']: o['remaining'] for o in sells.get(candidate['good'], [])}
-        for participant, tile_id, order_price, limit, order_remaining, order_reserved in self.customer_demand_groups(candidate):
+        for participant, tile_id, order_price, limit, volume in self.customer_demand_groups(candidate):
             if participant == candidate['id']:
                 continue
             if limit+EPS < candidate['price']:
                 continue
             buyer = self.accounts[participant]
             landed = self.landed(candidate['tile_id'], tile_id, candidate['good'], candidate['price'])[0]
-            volume = min(order_remaining, order_reserved/landed)
             for price, sell, _ in self.offers(buyer, candidate['good'], sells):
                 if price > order_price+EPS:
                     continue
