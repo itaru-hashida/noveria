@@ -31,7 +31,10 @@ class SupplyEconomy(research.ObservedEconomy):
     # Историческая независимая реализация эксперимента до переноса в игру.
     STOCK_PLANNING_REVISION = 0
     def production_outlook(self, firm, sells=None):
-        result = super().production_outlook(firm, sells)
+        # V3 кэширует результат и возвращает тот же словарь при повторном
+        # запросе. Исследовательская поправка не должна портить этот кэш:
+        # после переключения variant=control нужен исходный план V3.
+        result = dict(super().production_outlook(firm, sells))
         variant = self.probe.variant
         active = variant == 'lead_time' or (variant == 'raw_lead_time' and not self.goods[firm['good']]['inputs'])
         if not active or result['expected_margin'] < -EPS:
