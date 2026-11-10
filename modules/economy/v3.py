@@ -78,7 +78,7 @@ class Economy(EconomyServices):
                     '_physical_stock_totals', '_match_observation_count',
                     '_customer_quotes_cache', '_customer_demand_groups_cache', '_quoted_cost_cache',
                     '_reference_price_cache', '_unit_cost_cache', '_production_outlook_cache',
-                    '_market_signal_cache'):
+                    '_market_signal_cache', '_route_order_components'):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
         self._demand_revision = defaultdict(int)
@@ -1738,13 +1738,35 @@ class Economy(EconomyServices):
         result = entry[1] if entry and entry[0] is orders else None
         if result is None:
             result = []
-            for order in self._customer_orders(orders, good):
+            customer_orders = self._customer_orders(orders, good)
+            for order in self._orders_in_route_component(customer_orders, tile_id):
                 quote = self.landed(tile_id, order['tile_id'], good, 0)
                 if quote:
                     result.append((order, quote[1]))
             cache[key] = (orders, result)
             self._customer_quotes_cache = cache
         return result
+
+    def _orders_in_route_component(self, orders, destination_tile):
+        """Вернуть только заявки из физически достижимой части карты.
+
+        Группировка строится один раз для конкретного списка заявок. Живые
+        объекты заявок сохраняются: сделки продолжают менять те же остатки.
+        """
+        destination_component = self.route_component(destination_tile)
+        if self._route_component_count == 1:
+            return orders
+        cache = getattr(self, '_route_order_components', {})
+        key = (id(orders), len(orders))
+        entry = cache.get(key)
+        groups = entry[1] if entry is not None and entry[0] is orders else None
+        if groups is None:
+            groups = defaultdict(list)
+            for order in orders:
+                groups[self.route_component(order['tile_id'])].append(order)
+            cache[key] = (orders, groups)
+            self._route_order_components = cache
+        return groups.get(destination_component, ())
 
     def _market_book(self, buyer, good, sells, record=False):
         """Одна отсортированная доска предложений на рынок назначения.
@@ -1763,7 +1785,7 @@ class Economy(EconomyServices):
             return entry
 
         options = []
-        for sell in sell_list:
+        for sell in self._orders_in_route_component(sell_list, self.market_tile(buyer)):
             quote = self.landed(sell['tile_id'], self.market_tile(buyer), good, sell['price'])
             if quote:
                 options.append((quote[0], sell, quote))

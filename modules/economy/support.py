@@ -40,6 +40,8 @@ class EconomyServices:
             for tile in self.tiles.values()))
         self._route_graph_shape = (self.graph.number_of_nodes(), self.graph.number_of_edges())
         self._route_shape_checked_month = None
+        self._route_components = None
+        self._route_component_count = None
         # Загрузка из БД получает свежие объекты (json.loads на каждую запись) и
         # забирает их во владение: повторное deepcopy только удваивало время.
         # Тесты и внешние вызовы, передающие собственные структуры, копируют.
@@ -240,9 +242,31 @@ class EconomyServices:
         distances, paths = self.paths[start]
         return (distances.get(end), paths.get(end, []))
 
+    def route_component(self, tile_id):
+        """Числовой ID физически связной части транспортного графа."""
+        if self._route_shape_checked_month != self.meta.get('month'):
+            if (self.graph.number_of_nodes(), self.graph.number_of_edges()) != self._route_graph_shape:
+                self.invalidate_routes()
+            self._route_shape_checked_month = self.meta.get('month')
+        if self._route_components is None:
+            components = {}
+            component_count = 0
+            for component_id, nodes in enumerate(nx.connected_components(self.graph)):
+                component_count = component_id+1
+                for node in nodes:
+                    components[node] = component_id
+            self._route_components = components
+            self._route_component_count = component_count
+        return self._route_components.get(tile_id)
+
     def invalidate_routes(self):
         """Сбросить маршруты после изменения дороги или ручной правки графа."""
         self.paths = {}
+        self._route_components = None
+        self._route_component_count = None
+        self.__dict__.pop('_route_order_components', None)
+        self.__dict__.pop('_customer_quotes_cache', None)
+        self.__dict__.pop('_market_books', None)
         # Изменённый вручную graph может не совпадать с данными tiles. Нельзя
         # записывать его дерево под ключом исходной карты.
         self._route_cache_key = ('runtime', id(self.graph), self.meta.get('month', 0))
