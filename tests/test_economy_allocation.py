@@ -32,6 +32,21 @@ def test_grouped_demand_does_not_move_cash_between_orders(engine):
     assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(1)
 
 
+def test_investment_customer_limit_reuses_market_and_excludes_investor(engine):
+    clear(engine)
+    candidate = firm(engine)
+    candidate.update(id='h', price=2.1)
+    engine.order('h', 'bread', 1, 'buy', 10, 'Базовые нужды')
+    engine.order('merchant:s', 'bread', 1, 'buy', 7, 'Личное потребление собственника')
+
+    own_excluded = engine.investment_customer_limit(candidate)
+    other = dict(candidate, id='private:s')
+    own_included = engine.investment_customer_limit(other)
+
+    assert own_excluded == pytest.approx(7)
+    assert own_included == pytest.approx(10)
+
+
 def test_existing_affordable_capacity_prevents_duplicate_bakery(engine):
     clear(engine)
     for a in engine.accounts.values():

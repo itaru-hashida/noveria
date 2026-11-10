@@ -2050,6 +2050,35 @@ class Economy(EconomyServices):
             result.append((o, o['price']-freight))
         return result
 
+    def investment_customer_limit(self, e):
+        """Лучшая цена спроса для кандидата без повторного скана заявок.
+
+        Во время одного инвестиционного обзора заявки не исполняются и не
+        отменяются. Для каждой площадки и товара достаточно запомнить лучшие
+        цены по покупателям; две верхние позволяют исключить самого инвестора.
+        """
+        cache = getattr(self, '_investment_customer_limits', None)
+        if cache is None:
+            cache = {}
+            self._investment_customer_limits = cache
+        key = (e['tile_id'], e['good'])
+        leaders = cache.get(key)
+        if leaders is None:
+            by_participant = {}
+            orders = self.report.get('orders', [])
+            for order, freight in self._customer_quote_index(e['tile_id'], e['good'], orders):
+                if order['remaining'] <= EPS or order['status'] in ('cancelled', 'expired'):
+                    continue
+                limit = order['price']-freight
+                by_participant[order['participant']] = max(
+                    limit, by_participant.get(order['participant'], -math.inf))
+            leaders = tuple(sorted(
+                ((limit, participant) for participant, limit in by_participant.items()),
+                reverse=True)[:2])
+            cache[key] = leaders
+        return next((limit for limit, participant in leaders
+                     if participant != e['id'] and limit > 0), None)
+
     def customer_demand_groups(self, e, orders=None):
         """Агрегировать одинаковый спрос для оценки нового предложения.
 
@@ -2607,9 +2636,9 @@ class Economy(EconomyServices):
                     continue
                 loc.update(tile_id=expansion['tile_id'] if expansion else self.shuffled(tiles)[0]['id'], city_id=None)
             quote_firm = dict(id=investor['id'], good=good, price=expansion['price'] if expansion else self.goods[good]['price'], **loc)
-            limits = [limit for _, limit in self.customer_quotes(quote_firm) if limit > 0]
+            customer_limit = self.investment_customer_limit(quote_firm)
             signal = self.market_signal(history, investor['state_id'], pid, good)
-            price = max(limits) if limits else signal['price'] or self.goods[good]['price']
+            price = customer_limit if customer_limit is not None else signal['price'] or self.goods[good]['price']
             quote_firm['price'] = price
             demand = max(0, self.investment_demand(quote_firm, sells)-investor['stock'].get(good, 0))
             if derived_demand and good in derived_demand:
@@ -2897,6 +2926,7 @@ class Economy(EconomyServices):
             self.__dict__.pop('_upstream_candidate_cache', None)
             self.__dict__.pop('_investment_input_reserved', None)
             self.__dict__.pop('_investment_state', None)
+            self.__dict__.pop('_investment_customer_limits', None)
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:
