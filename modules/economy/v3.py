@@ -77,7 +77,8 @@ class Economy(EconomyServices):
         for key in ('_market_books', '_landed_cache', '_customer_order_index',
                     '_physical_stock_totals', '_match_observation_count',
                     '_customer_quotes_cache', '_customer_demand_groups_cache', '_quoted_cost_cache',
-                    '_reference_price_cache', '_unit_cost_cache', '_production_outlook_cache'):
+                    '_reference_price_cache', '_unit_cost_cache', '_production_outlook_cache',
+                    '_market_signal_cache'):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
         self._demand_revision = defaultdict(int)

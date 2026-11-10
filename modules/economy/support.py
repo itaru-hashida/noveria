@@ -452,16 +452,36 @@ class EconomyServices:
             investor['risk_tolerance'] = self.rng.uniform(0.1, 0.9)
 
     def market_signal(self, history, state, province, good):
+        """Средние показатели рынка по провинции и товару за всю историю.
+
+        Функция чистая: результат зависит только от `history` и ключа. Внутри
+        месяца история не меняется, а вызов идёт из циклов по фирмам и
+        инвесторам — без кэша каждый вызов заново обходит все месяцы и все
+        строки рынка (за прогон это десятки тысяч полных обходов).
+        """
+        cache = self.__dict__.get('_market_signal_cache')
+        if cache is None:
+            cache = self._market_signal_cache = {}
+        key = (state, province, good)
+        entry = cache.get(key)
+        # Сверяем сам список истории, а не только ключ: месяц пересобирает
+        # market_history новым объектом, и прежняя запись тогда недействительна.
+        if entry is not None and entry[0] is history:
+            return dict(entry[1])
         rows = [r for month in history for r in month['markets']
             if r['state_id'] == state and r['province_id'] == province and r['good'] == good]
-        if not rows:
-            return dict(volume=0, unmet=0, price=None, landed_price=None, limit_price=None)
-        volume = sum(r['volume'] for r in rows)
-        requested = sum(r['requested'] for r in rows)
-        return dict(volume=volume/len(history), unmet=sum(r['unmet_solvent'] for r in rows)/len(history),
-            price=sum(r['trade_gold'] for r in rows)/volume if volume else None,
-            landed_price=sum(r['trade_gold']+r['freight'] for r in rows)/volume if volume else None,
-            limit_price=sum(r['limit_value'] for r in rows)/requested if requested else None)
+        if rows:
+            volume = sum(r['volume'] for r in rows)
+            requested = sum(r['requested'] for r in rows)
+            signal = dict(volume=volume/len(history), unmet=sum(r['unmet_solvent'] for r in rows)/len(history),
+                price=sum(r['trade_gold'] for r in rows)/volume if volume else None,
+                landed_price=sum(r['trade_gold']+r['freight'] for r in rows)/volume if volume else None,
+                limit_price=sum(r['limit_value'] for r in rows)/requested if requested else None)
+        else:
+            signal = dict(volume=0, unmet=0, price=None, landed_price=None, limit_price=None)
+        cache[key] = (history, signal)
+        # Отдаём копию: вызывающий получает собственный словарь, как и без кэша.
+        return dict(signal)
 
     def construction_bill(self, capacity):
         return {g: q*capacity/self.cfg['minimum_capacity'] for g, q in self.cfg['construction'].items()}
