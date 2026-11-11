@@ -62,7 +62,7 @@ CACHES = {
     'quoted_cost': '_quoted_cost_cache',
     'reference_price': '_reference_price_cache',
     'customer_quotes': '_customer_quotes_cache',
-    'customer_demand_groups': '_customer_demand_groups_cache',
+    'customer_demand_groups': '_customer_demand_rows_cache',
     'production_outlook': '_production_outlook_cache',
     'investment_demand': '_investment_demand_cache',
 }

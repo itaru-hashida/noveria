@@ -273,6 +273,9 @@ class EconomyServices:
         self._route_component_count = None
         self.__dict__.pop('_route_order_components', None)
         self.__dict__.pop('_customer_quotes_cache', None)
+        # Плоские строки спроса держат доставку между площадками, посчитанную
+        # по старой сети: построенная дорога обязана их выбросить.
+        self.__dict__.pop('_customer_demand_rows_cache', None)
         self.__dict__.pop('_market_books', None)
         # Изменённый вручную graph может не совпадать с данными tiles. Нельзя
         # записывать его дерево под ключом исходной карты.

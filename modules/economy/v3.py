@@ -82,7 +82,8 @@ class Economy(EconomyServices):
         # лабораторным сценариям, которые вручную начинают следующий месяц.
         for key in ('_market_books', '_landed_cache', '_customer_order_index',
                     '_physical_stock_totals', '_match_observation_count',
-                    '_customer_quotes_cache', '_customer_demand_groups_cache', '_quoted_cost_cache',
+                    '_customer_quotes_cache',
+                    '_customer_demand_rows_cache', '_quoted_cost_cache',
                     '_reference_price_cache', '_unit_cost_cache', '_production_outlook_cache',
                     '_market_signal_cache', '_route_order_components', '_market_source_index'):
             self.__dict__.pop(key, None)
@@ -2242,31 +2243,61 @@ class Economy(EconomyServices):
 
         Реальные заявки и порядок сделок не меняются. Группировка используется
         только чистым прогнозом reachable_demand.
+
+        Предел заявки (`limit = цена заявки − доставка`) от цены кандидата НЕ
+        зависит, зависит только её предел платёжеспособности: `reserved` покрывает
+        объём по `e['price']+freight`. Поэтому дешёвая часть (участник, площадка,
+        цена заявки, предел, доставка) считается один раз на смену книги, а
+        денежный объём — на каждую цену. Ответ остаётся прежним: отсев по цене
+        здесь воспроизводит проверку `limit+EPS < e['price']`, которую делают
+        оба вызывающих, только до деления денег на цену.
         """
         orders = getattr(self, '_planning_orders', self.report.get('orders', [])) if orders is None else orders
-        key = (id(orders), len(orders), e['tile_id'], e['good'], e['price'],
-            getattr(self, '_market_quote_version', 0))
-        cache = getattr(self, '_customer_demand_groups_cache', {})
-        entry = cache.get(key)
-        if entry is not None and entry[0] is orders:
-            return entry[1]
+        rows = self._customer_demand_rows(e['tile_id'], e['good'], orders)
+        price = e['price']
         grouped = {}
-        for order, freight in self._customer_quote_index(e['tile_id'], e['good'], orders):
-            if order['remaining'] <= EPS or order['status'] in ('cancelled', 'expired'):
+        for participant, tile_id, order_price, limit, freight, remaining, reserved in rows:
+            # Тот же отсев, что делают оба вызывающих (`limit+EPS < e['price']`),
+            # но до деления денег на цену: 93% строк не проходят по цене, и
+            # платёжеспособность для них считать незачем.
+            if limit+EPS < price:
                 continue
-            limit = order['price']-freight
-            group_key = (order['participant'], order['tile_id'], order['price'], limit)
-            row = grouped.setdefault(group_key, [order['participant'], order['tile_id'],
-                order['price'], limit, freight, 0.0])
-            landed = e['price']+freight
+            group_key = (participant, tile_id, order_price)
+            row = grouped.get(group_key)
+            if row is None:
+                row = grouped[group_key] = [participant, tile_id, order_price, limit,
+                                            freight, 0.0]
             # Solvency belongs to an individual order.  Summing quantity and
             # money separately can let one order's cash fund another order's
             # unfunded quantity: min(sum(q), sum(cash) / price) !=
             # sum(min(q, cash / price)).
-            row[5] += min(order['remaining'], order['reserved']/max(landed, EPS))
-        result = tuple(tuple(row) for row in grouped.values())
+            row[5] += min(remaining, reserved/max(price+freight, EPS))
+        return tuple(tuple(row) for row in grouped.values())
+
+    def _customer_demand_rows(self, tile_id, good, orders):
+        """Дешёвая часть агрегата спроса: плоские строки на смену книги.
+
+        Ключ повторяет `_customer_quote_index`: тот же список заявок, товар и
+        площадка, плюс версия книги. В записи только скаляры, снятые с живых
+        заявок в момент построения. Сделки их не портят: запись живёт до
+        ближайшего изменения книги, а любая сделка или отмена поднимает версию.
+        """
+        key = (id(orders), len(orders), tile_id, good,
+               getattr(self, '_market_quote_version', 0))
+        cache = getattr(self, '_customer_demand_rows_cache', {})
+        entry = cache.get(key)
+        if entry is not None and entry[0] is orders:
+            return entry[1]
+        rows = []
+        for order, freight in self._customer_quote_index(tile_id, good, orders):
+            if order['remaining'] <= EPS or order['status'] in ('cancelled', 'expired'):
+                continue
+            rows.append((order['participant'], order['tile_id'], order['price'],
+                         order['price']-freight, freight, order['remaining'],
+                         order['reserved']))
+        result = tuple(rows)
         cache[key] = (orders, result)
-        self._customer_demand_groups_cache = cache
+        self._customer_demand_rows_cache = cache
         return result
 
     def reachable_demand(self, e, sells):

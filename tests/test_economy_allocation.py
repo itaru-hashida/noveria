@@ -32,6 +32,31 @@ def test_grouped_demand_does_not_move_cash_between_orders(engine):
     assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(1)
 
 
+def test_demand_groups_keep_rows_at_the_price_border_and_drop_the_rest(engine):
+    """Предварительный отсев по цене не должен сдвигать границу вызывающего.
+
+    Группы пересобираются до фильтра, поэтому проверяем обе стороны границы:
+    заявка ровно по цене кандидата остаётся (вызывающий пускает её по EPS), а
+    заявка дешевле цены на две EPS — отсекается там же, где и раньше.
+    """
+    clear(engine)
+    bakery = firm(engine)
+    bakery.update(price=2.0, tile_id='t')
+    at_price = engine.order('h', 'bread', 4, 'buy', 2.0, 'Базовые нужды')
+    below = engine.order('merchant:s', 'bread', 4, 'buy', 2.0-3e-7, 'Базовые нужды')
+    at_price['reserved'] = 100
+    below['reserved'] = 100
+
+    groups = engine.customer_demand_groups(bakery)
+    assert {row[0] for row in groups} == {'h'}
+    # Та же граница, что у вызывающего: строка ниже цены отсекается, а ровно
+    # по цене остаётся с тем же объёмом, ограниченным деньгами.
+    assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(4)
+
+    bakery['price'] = 2.0+3e-7
+    assert {row[0] for row in engine.customer_demand_groups(bakery)} == set()
+
+
 def test_investment_customer_limit_reuses_market_and_excludes_investor(engine):
     clear(engine)
     candidate = firm(engine)
