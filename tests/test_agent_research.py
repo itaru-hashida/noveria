@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import subprocess
 import sys
 
@@ -133,9 +134,15 @@ def test_fresh_cli_can_prove_observer_parity_without_external_artifacts(tmp_path
 
 def test_promoted_policy_is_not_presented_as_a_new_experiment(tmp_path):
     output = tmp_path/'duplicate-policy'
+    # Кодировку задаём явно с обеих сторон. На Windows дочерний Python писал
+    # stderr в системную кодировку (cp1251), а text=True декодировал её как
+    # UTF-8: проверка русской строки падала не из-за ответа скрипта, а из-за
+    # окружения. PYTHONIOENCODING фиксирует запись, encoding — чтение.
+    environment = dict(os.environ, PYTHONIOENCODING='utf-8')
     result = subprocess.run([sys.executable, str(ROOT/'scripts/research_agents.py'),
         '--seed', '17', '--warmup', '0', '--months', '1', '--variant', 'input_bid',
-        '--out', str(output)], cwd=ROOT, capture_output=True, text=True)
+        '--out', str(output)], cwd=ROOT, capture_output=True, text=True,
+        encoding='utf-8', env=environment)
     assert result.returncode != 0
     assert 'уже включена' in result.stderr
     assert not output.exists()
