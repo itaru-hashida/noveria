@@ -196,8 +196,29 @@ def plan_all(snapshot, firm_order=None):
     return {firm_id: plan(snapshot, firm_id) for firm_id in order}
 
 
-def apply_plans(engine, plans, sells):
-    """Материализовать планы по firm_id; только здесь меняется живой мир."""
+def publish_sales(engine, plans, sells):
+    """Опубликовать только стартовые запасы до заявок покупателей."""
+    published = False
+    for firm_id in sorted(plans):
+        item = plans[firm_id]
+        firm = engine.enterprises[firm_id]
+        if firm['status'] == 'closed' or item.sale_quantity <= EPS:
+            continue
+        offer = engine.order(
+            firm_id, item.good, item.sale_quantity, 'sell',
+            item.sale_price, 'Продажа запасов',
+        )
+        if offer:
+            sells[item.good].append(offer)
+            published = True
+    if published:
+        # Публикация меняет состав книги, а не только цены её офферов.
+        engine.invalidate_market_books()
+    return sells
+
+
+def apply_plans(engine, plans):
+    """Применить производство и закупки без повторной публикации продаж."""
     for firm_id in sorted(plans):
         item = plans[firm_id]
         firm = engine.enterprises[firm_id]
@@ -243,13 +264,6 @@ def apply_plans(engine, plans, sells):
             input_orders=[],
         )
         firm['production_plan'] = production_plan
-        if item.sale_quantity > EPS:
-            offer = engine.order(
-                firm_id, item.good, item.sale_quantity, 'sell',
-                item.sale_price, 'Продажа запасов',
-            )
-            if offer:
-                sells[item.good].append(offer)
         for purchase in sorted(item.purchases, key=lambda row: (row.good, row.purpose)):
             order = engine.order(
                 firm_id, purchase.good, purchase.quantity, 'buy',
@@ -257,4 +271,3 @@ def apply_plans(engine, plans, sells):
             )
             if order:
                 production_plan['input_orders'].append(order['id'])
-    return sells

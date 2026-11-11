@@ -3497,7 +3497,7 @@ class Economy(EconomyServices):
         lagged_plans = None
         lagged_firms = ()
         if planning_mode == 'lagged_batch':
-            from shadow.lagged_batch import apply_plans, build_snapshot, plan_all
+            from shadow.lagged_batch import apply_plans, build_snapshot, plan_all, publish_sales
             phase_started = time.perf_counter()
             snapshot = build_snapshot(self)
             lagged_plans = plan_all(snapshot)
@@ -3509,6 +3509,8 @@ class Economy(EconomyServices):
         # В lagged_batch стартовые склады фирм публикуются их intents ровно один
         # раз; заявки остальных участников и сам sell_orders не меняются.
         sells = self.sell_orders(exclude=lagged_firms)
+        if planning_mode == 'lagged_batch':
+            publish_sales(self, lagged_plans, sells)
         households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')
         detail = self.report_detail()
         food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS and detail == 'deep' else None
@@ -3523,7 +3525,7 @@ class Economy(EconomyServices):
         timings['preparation'] = time.perf_counter()-started
         phase_started = time.perf_counter()
         if planning_mode == 'lagged_batch':
-            apply_plans(self, lagged_plans, sells)
+            apply_plans(self, lagged_plans)
             timings['lagged_apply'] = time.perf_counter()-phase_started
         elif enterprise_planner is None:
             self.plan_enterprises(existing, sells)

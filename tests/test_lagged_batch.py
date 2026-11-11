@@ -5,7 +5,7 @@ from collections import defaultdict
 import pytest
 
 from modules.economy.support import EPS
-from shadow.lagged_batch import apply_plans, build_snapshot, plan_all
+from shadow.lagged_batch import apply_plans, build_snapshot, plan_all, publish_sales
 
 
 def initialized_engine(service):
@@ -71,7 +71,8 @@ def test_apply_respects_cash_stock_and_actual_clearing(service):
     opening_stock = {firm_id: dict(engine.accounts[firm_id]['stock'])
                      for firm_id in snapshot.eligible}
 
-    sells = apply_plans(engine, plans, defaultdict(list))
+    sells = publish_sales(engine, plans, defaultdict(list))
+    apply_plans(engine, plans)
 
     for firm_id in snapshot.eligible:
         account = engine.accounts[firm_id]
@@ -91,6 +92,34 @@ def test_apply_respects_cash_stock_and_actual_clearing(service):
     assert all(account['balance'] >= -EPS for account in engine.accounts.values())
     assert all(quantity >= -EPS for account in engine.accounts.values()
                for quantity in account['stock'].values())
+
+
+def test_household_requests_see_and_buy_published_opening_stock(service, monkeypatch):
+    engine = initialized_engine(service)
+    observed = []
+    original = engine.household_requests
+
+    def observe_firm_offers(households, needs, purpose, sells):
+        if purpose == 'Базовые нужды' and not observed:
+            offers = [order for rows in sells.values() for order in rows
+                      if order['participant'] in engine.enterprises]
+            observed.extend(offers)
+            assert offers
+            assert all(order['quantity'] <= engine.accounts[order['participant']]['stock'].get(
+                order['good'], 0.0)+EPS for order in offers)
+        return original(households, needs, purpose, sells)
+
+    monkeypatch.setattr(engine, 'household_requests', observe_firm_offers)
+    report = engine.step(planning_mode='lagged_batch')
+
+    assert observed
+    assert any(trade['seller'] in engine.enterprises
+               and engine.accounts[trade['buyer']]['kind'] == 'household'
+               for trade in report['trades'])
+    published = {(order['participant'], order['good']) for order in observed}
+    for firm_id, good in published:
+        assert sum(order['side'] == 'sell' and order['participant'] == firm_id
+                   and order['good'] == good for order in report['orders']) == 1
 
 
 def test_full_step_materializes_only_lagged_firm_intents(service, monkeypatch):
