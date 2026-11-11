@@ -5,6 +5,7 @@
 """
 import argparse
 from collections import Counter, defaultdict
+import inspect
 from pathlib import Path
 import pickle
 import sys
@@ -36,6 +37,7 @@ def main():
     timings = defaultdict(float)
     counts = Counter()
     deepcopy_types = Counter()
+    deepcopy_callers = Counter()
     originals = {name: getattr(v3.Economy, name) for name in METHODS}
     original_deepcopy = v3.copy.deepcopy
     original_sorted = v3.sorted if hasattr(v3, 'sorted') else sorted
@@ -58,6 +60,10 @@ def main():
             timings['deepcopy'] += time.perf_counter()-started
             counts['deepcopy'] += 1
             deepcopy_types[type(value).__name__] += 1
+            frame = inspect.currentframe().f_back
+            if frame and str(frame.f_code.co_filename).startswith(str(ROOT)):
+                caller = Path(frame.f_code.co_filename).relative_to(ROOT)
+                deepcopy_callers[f'{caller}:{frame.f_lineno}'] += 1
 
     def counted_sorted(*sort_args, **kwargs):
         started = time.perf_counter()
@@ -98,6 +104,7 @@ def main():
     for name in sorted(timings, key=timings.get, reverse=True):
         print(f'{name}: seconds={timings[name]:.6f} calls={counts[name]}')
     print('deepcopy_types=' + repr(deepcopy_types.most_common()))
+    print('deepcopy_callers=' + repr(deepcopy_callers.most_common()))
     print(f'report_bytes_mean={sum(report_sizes)/len(report_sizes):.0f} '
           f'history_bytes_mean={sum(history_sizes)/len(history_sizes):.0f}')
     print('checkpoint_or_db_writes_inside_engine_step=0 (no save/checkpoint call path)')

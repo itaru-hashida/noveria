@@ -107,6 +107,9 @@ class Economy(EconomyServices):
         self._market_quotes_epoch = 0
         self._trades_by_seller = defaultdict(int)
         super().reset_report()
+        if self.report_detail() == 'none':
+            self.report.pop('provinces', None)
+            self.report.pop('prices', None)
         self.report.update(rules_version=3, investment_decisions=[], dividends=[],
             owner_consumption=[], owner_consumed={}, events=[],
             investment_candidates=[], expansion_intents=[],
@@ -3284,6 +3287,7 @@ class Economy(EconomyServices):
             self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='expanded' if p['expansion'] else 'built', enterprise=e['id']))
 
     def produce(self, existing, sells):
+        observe = self.report_detail() == 'deep'
         labor, resources = defaultdict(float), defaultdict(float)
         for a in self.accounts.values():
             if a['kind'] == 'household':
@@ -3293,7 +3297,8 @@ class Economy(EconomyServices):
         for t in self.tiles.values():
             for resource in t['resources']:
                 resources[t['province_id'], resource] += self.cfg['extraction_per_tile']
-        self.report['labor_available'] = [dict(state_id=s, province_id=p, workers=q) for (s, p), q in labor.items()]
+        if observe:
+            self.report['labor_available'] = [dict(state_id=s, province_id=p, workers=q) for (s, p), q in labor.items()]
         for e in self.shuffled(existing):
             if e['status'] == 'closed' or e.get('suspended') or e['available_from'] > self.meta['month']:
                 continue
@@ -3312,11 +3317,12 @@ class Economy(EconomyServices):
                 constraints['Сырьё: '+g] = self.free_stock(e['id'], g)/ratio
             for g, ratio in recipe.get('equipment', {}).items():
                 constraints['Оборудование: '+g] = self.free_stock(e['id'], g)/ratio
-            e['production_observation'] = dict(month=self.meta['month'], constraints=dict(constraints),
-                stocks_before=dict(a['stock']), free_cash_before=self.free_cash(e['id']),
-                procurement_plan=copy.deepcopy(plan) if plan.get('month') == self.meta['month'] else None,
-                expected_margin=e['expected_margin'], expected_unit_cost=e['expected_unit_cost'],
-                expected_price=e['expected_price'])
+            if observe:
+                e['production_observation'] = dict(month=self.meta['month'], constraints=dict(constraints),
+                    stocks_before=dict(a['stock']), free_cash_before=self.free_cash(e['id']),
+                    procurement_plan=copy.deepcopy(plan) if plan.get('month') == self.meta['month'] else None,
+                    expected_margin=e['expected_margin'], expected_unit_cost=e['expected_unit_cost'],
+                    expected_price=e['expected_price'])
             reason = min(constraints, key=constraints.get)
             q = max(0, constraints[reason])
             e['input_limited'] = any(k.startswith('Сырьё') and v+EPS < planned for k, v in constraints.items())
@@ -3402,7 +3408,9 @@ class Economy(EconomyServices):
             row['unmet_solvent'] += min(o['remaining'], o['reserved']/o['price'])
             row['reserved_unmet'] += o['reserved']
             if remaining > EPS:
-                public.append(copy.deepcopy(o))
+                # Следующий месяц читает только рыночные скаляры; вложенные
+                # диагностические данные заявки не нужны.
+                public.append(self._planning_order_snapshot(o))
             o['unmet_solvent'] = min(o['remaining'], o['reserved']/o['price'])
         for t in self.report['trades']:
             row = rows[t['buyer_state'], t['buyer_province'], t['good']]
@@ -3572,36 +3580,39 @@ class Economy(EconomyServices):
         self.apply_migration()
         for a in self.accounts.values():
             a['project_reserve'] = self.project_cash_reserve(a['id'], planning_sells)
-        self.report['diagnostics'].extend(self.report['investment_decisions'])
         if detail != 'none':
+            self.report['diagnostics'].extend(self.report['investment_decisions'])
             self.report['diagnostics'].extend(dict(kind='owner_consumption', **copy.deepcopy(row))
                 for row in self.report['owner_consumption'])
         timings['production_settlement'] = time.perf_counter()-phase_started
         phase_started = time.perf_counter()
-        self.summarize(prior_cash)
-        self.report['account_flows'] = []
-        sectors = defaultdict(float)
-        incoming_by_account, outgoing_by_account = defaultdict(float), defaultdict(float)
-        for f in self.report['flows']:
-            incoming_by_account[f['recipient']] += f['gold']
-            outgoing_by_account[f['sender']] += f['gold']
-        for a in self.accounts.values():
-            incoming = incoming_by_account[a['id']]
-            outgoing = outgoing_by_account[a['id']]
-            self.report['account_flows'].append(dict(id=a['id'], kind=a['kind'], incoming=incoming, outgoing=outgoing, net=incoming-outgoing))
-        for f in self.report['flows']:
-            sectors[self.accounts[f['sender']]['kind'], self.accounts[f['recipient']]['kind']] += f['gold']
-        self.report['sector_flows'] = [dict(sender_kind=s, recipient_kind=r, gold=q) for (s, r), q in sorted(sectors.items())]
-        self.report['gold_after'] = self.gold()
-        self.report['balances'] = {kind: sum(a['balance'] for a in self.accounts.values() if a['kind'] == kind) for kind in sorted({a['kind'] for a in self.accounts.values()})}
-        total_gold = self.gold()
-        self.report['money_shares'] = {kind: balance/total_gold if total_gold else 0
-            for kind, balance in self.report['balances'].items()}
-        self.report['diagnostics'].extend(dict(kind='money_share', sector=kind, balance=balance,
-            share=self.report['money_shares'][kind]) for kind, balance in self.report['balances'].items())
-        self.report['stocks'] = self.total_stock()
-        self.report['active_enterprises'] = sum(e['status'] == 'active' for e in self.enterprises.values())
-        self.report['open_enterprises'] = sum(e['status'] != 'closed' for e in self.enterprises.values())
+        if detail == 'none':
+            self.update_welfare()
+        else:
+            self.summarize(prior_cash)
+            self.report['account_flows'] = []
+            sectors = defaultdict(float)
+            incoming_by_account, outgoing_by_account = defaultdict(float), defaultdict(float)
+            for f in self.report['flows']:
+                incoming_by_account[f['recipient']] += f['gold']
+                outgoing_by_account[f['sender']] += f['gold']
+            for a in self.accounts.values():
+                incoming = incoming_by_account[a['id']]
+                outgoing = outgoing_by_account[a['id']]
+                self.report['account_flows'].append(dict(id=a['id'], kind=a['kind'], incoming=incoming, outgoing=outgoing, net=incoming-outgoing))
+            for f in self.report['flows']:
+                sectors[self.accounts[f['sender']]['kind'], self.accounts[f['recipient']]['kind']] += f['gold']
+            self.report['sector_flows'] = [dict(sender_kind=s, recipient_kind=r, gold=q) for (s, r), q in sorted(sectors.items())]
+            self.report['gold_after'] = self.gold()
+            self.report['balances'] = {kind: sum(a['balance'] for a in self.accounts.values() if a['kind'] == kind) for kind in sorted({a['kind'] for a in self.accounts.values()})}
+            total_gold = self.gold()
+            self.report['money_shares'] = {kind: balance/total_gold if total_gold else 0
+                for kind, balance in self.report['balances'].items()}
+            self.report['diagnostics'].extend(dict(kind='money_share', sector=kind, balance=balance,
+                share=self.report['money_shares'][kind]) for kind, balance in self.report['balances'].items())
+            self.report['stocks'] = self.total_stock()
+            self.report['active_enterprises'] = sum(e['status'] == 'active' for e in self.enterprises.values())
+            self.report['open_enterprises'] = sum(e['status'] != 'closed' for e in self.enterprises.values())
         self.persist_investment_state()
         self.meta['rng_state'] = self.rng.getstate()
         self.validate(before)
@@ -3691,7 +3702,8 @@ def monthly_phase(service, ctx):
     if not state.initialized:
         state.bootstrap()
     report = state.step()
-    ctx['changes'].append(f'Экономика V3: {report["active_enterprises"]} предприятий, {len(report["trades"])} сделок')
+    active = sum(e['status'] == 'active' for e in state.engine.enterprises.values())
+    ctx['changes'].append(f'Экономика V3: {active} предприятий, {len(report["trades"])} сделок')
     event = service.db.record_event(service.event('economy_month',
         dict(month=report['month'], invariants=report['invariants'], trades=len(report['trades']), rules_version=3), [],
         source='economy', action_id=ctx['command_id'], summary=ctx['changes'][-1]))

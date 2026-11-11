@@ -344,6 +344,7 @@ def test_short_run_conserves_money_goods_and_exposes_lab_metrics(engine):
 
 
 def test_owner_consumption_analytics_pass_export_consistency_checks(engine, tmp_path):
+    engine.meta['report_detail'] = 'deep'
     meta = dict(id='owners', status='completed', completed=0, months=2, detail='full',
         seed=17, initial_month=engine.meta['month'], engine={'version': 3})
     with LabStore(tmp_path/'analytics.sqlite', create=True) as store:

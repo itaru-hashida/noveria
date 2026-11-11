@@ -130,6 +130,9 @@ def execute_experiment(directory):
                 state.keep_reports = True
                 service.attach_economy(state)
                 engine = state.engine
+                # Лаборатория явно запрашивает отчёт. Игровой `none` не должен
+                # незаметно платить за её агрегаты.
+                engine.meta['report_detail'] = 'deep' if config['detail'] == 'full' else 'standard'
                 initial = capture(engine, dict(month=0), config['detail'])
                 # В исходном мире могли уже пройти месяцы: ось эксперимента начинается с нуля.
                 store.append_month(0, initial, config)

@@ -368,6 +368,9 @@ def run(args):
             state = EconomyState.create(service.world_graph())
             state.bootstrap()
             engine = state.engine
+        # Исследовательский observer читает полный отчёт; игровой none для
+        # этого намеренно недостаточен.
+        engine.meta['report_detail'] = 'deep'
         for _ in range(args.warmup):
             engine.step()
         checkpoint = out/'checkpoint.pickle'

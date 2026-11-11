@@ -404,11 +404,7 @@ class EconomyServices:
             households = index['households'][pid]
             population=sum(self.population(a) for a in households)
             deficits={g:sum(a.get('needs',{}).get(g,{}).get('deficit',0) for a in households) for g in self.cfg['basic_needs']|self.cfg['extra_needs']}
-            for a in households:
-                basic=sum(a.get('needs',{}).get(g,{}).get('consumed',0) for g in self.cfg['basic_needs'])
-                needed=sum(a.get('needs',{}).get(g,{}).get('needed',0) for g in self.cfg['basic_needs'])
-                # Благосостояние — наблюдаемое покрытие базовой корзины, а не заданный тренд.
-                a['welfare']=min(100,max(0,100*basic/needed)) if needed else 100
+            self.update_welfare(households)
             imports=[t for t in index['province_trades'][pid] if t['buyer_province']==pid and t['seller_province']!=pid]
             exports=[t for t in index['province_trades'][pid] if t['seller_province']==pid and t['buyer_province']!=pid]
             firms = index['firms'][pid]
@@ -434,6 +430,15 @@ class EconomyServices:
                 market_food_shortfall=demography.get('market_food_shortfall', 0),
                 protected_by_subsistence=demography.get('protected_by_subsistence', 0),
                 reason='Изменение денег: зарплаты и доходы минус покупки и доставка; дефицит: остаток неисполненной корзины'))
+
+    def update_welfare(self, households=None):
+        """Обновить состояние благосостояния без построения месячной сводки."""
+        households = (a for a in self.accounts.values() if a['kind'] == 'household') if households is None else households
+        for a in households:
+            basic=sum(a.get('needs',{}).get(g,{}).get('consumed',0) for g in self.cfg['basic_needs'])
+            needed=sum(a.get('needs',{}).get(g,{}).get('needed',0) for g in self.cfg['basic_needs'])
+            # Благосостояние — наблюдаемое покрытие базовой корзины, а не заданный тренд.
+            a['welfare']=min(100,max(0,100*basic/needed)) if needed else 100
 
     # Снимок изменяемой части состояния для отката хода. Раньше откат давала
     # транзакция Ladybug; теперь экономика живёт в памяти, поэтому копию делает

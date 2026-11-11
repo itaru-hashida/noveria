@@ -334,12 +334,35 @@ def test_none_report_skips_market_observations_without_changing_economy(engine):
     deep_report = deep.step()
     fast_report = fast.step()
 
+    for enterprise in deep.enterprises.values():
+        enterprise.pop('production_observation', None)
     assert fast.accounts == deep.accounts
+    assert fast.enterprises == deep.enterprises
     assert fast.enterprises == deep.enterprises
     assert fast_report['trades'] == deep_report['trades']
     assert fast_report['market_boards'] == []
     assert fast_report['events'] == []
     assert all('match_observation' not in order for order in fast_report['orders'])
+
+
+def test_none_report_skips_lab_aggregates_without_changing_welfare(engine):
+    deep = copy.deepcopy(engine)
+    fast = copy.deepcopy(engine)
+    deep.meta['report_detail'] = 'deep'
+    fast.meta['report_detail'] = 'none'
+
+    deep_report = deep.step()
+    fast_report = fast.step()
+
+    for enterprise in deep.enterprises.values():
+        enterprise.pop('production_observation', None)
+    assert fast.accounts == deep.accounts
+    assert fast.enterprises == deep.enterprises
+    assert fast_report['trades'] == deep_report['trades']
+    for key in ('prices', 'provinces', 'account_flows', 'sector_flows',
+                'balances', 'money_shares', 'stocks', 'active_enterprises',
+                'open_enterprises'):
+        assert key not in fast_report
 
 
 @pytest.mark.parametrize('missing_options,expected', [(True, 'executable_not_matched'),

@@ -89,6 +89,7 @@ def test_analytics_match_engine_and_order_links(pair):
 
 def test_source_unchanged_and_read_only_live(service, tmp_path):
     service.initialize_economy()
+    service.economy_state().engine.meta['report_detail'] = 'standard'
     service.advance_turn(command_id='source-month')
     service.schedule_social('stratum-province-0-0', 'loyalty', 62, command_id='lab-copy-command')
     path = Path(service.db.path)
