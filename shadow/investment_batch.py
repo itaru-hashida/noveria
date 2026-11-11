@@ -1,6 +1,8 @@
 """Чистая рыночная оценка инвестиций и последовательный commit."""
 import copy
+import multiprocessing
 import time
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 
@@ -447,9 +449,53 @@ def evaluate(snapshot, candidate):
     return CandidateEvaluation(candidate, True, 'Кандидат принят к применению', score, project)
 
 
-def evaluate_all(snapshot, candidates=None):
+_WORKER_SNAPSHOT = None
+
+
+def _spawn_snapshot(snapshot):
+    """Снять mappingproxy перед передачей неизменяемого снимка в spawn."""
+    mappings = {name: dict(getattr(snapshot, name)) for name in (
+        'recipes', 'investors', 'offers', 'orders', 'suppliers', 'projects', 'labor',
+        'resource_used', 'resource_limits', 'recovery_quotes', 'distances')}
+    index = snapshot.evaluation_index
+    if index is not None:
+        mappings['evaluation_index'] = replace(index, **{
+            name: dict(getattr(index, name)) for name in (
+                'history', 'customer_rows', 'demand_groups', 'offer_curves', 'supplier_economics')})
+    return replace(snapshot, **mappings)
+
+
+def _init_evaluation_worker(snapshot):
+    global _WORKER_SNAPSHOT
+    mappings = {name: MappingProxyType(getattr(snapshot, name)) for name in (
+        'recipes', 'investors', 'offers', 'orders', 'suppliers', 'projects', 'labor',
+        'resource_used', 'resource_limits', 'recovery_quotes', 'distances')}
+    index = snapshot.evaluation_index
+    if index is not None:
+        mappings['evaluation_index'] = replace(index, **{
+            name: MappingProxyType(getattr(index, name)) for name in (
+                'history', 'customer_rows', 'demand_groups', 'offer_curves', 'supplier_economics')})
+    _WORKER_SNAPSHOT = replace(snapshot, **mappings)
+
+
+def _evaluate_chunk(candidates):
+    return tuple(evaluate(_WORKER_SNAPSHOT, candidate) for candidate in candidates)
+
+
+def evaluate_all(snapshot, candidates=None, workers=1):
     rows = snapshot.candidates if candidates is None else tuple(candidates)
-    return tuple(evaluate(snapshot, candidate) for candidate in rows)
+    if workers < 1:
+        raise ValueError('workers должен быть положительным')
+    if workers == 1 or not rows:
+        return tuple(evaluate(snapshot, candidate) for candidate in rows)
+    chunk_size = (len(rows)+workers-1)//workers
+    chunks = tuple(rows[start:start+chunk_size] for start in range(0, len(rows), chunk_size))
+    context = multiprocessing.get_context('spawn')
+    with ProcessPoolExecutor(max_workers=workers, mp_context=context,
+            initializer=_init_evaluation_worker, initargs=(_spawn_snapshot(snapshot),)) as pool:
+        results = {evaluation.candidate.key: evaluation
+                   for chunk in pool.map(_evaluate_chunk, chunks) for evaluation in chunk}
+    return tuple(results[candidate.key] for candidate in rows)
 
 
 def _required_market_keys(snapshot):
@@ -815,7 +861,7 @@ def commit(engine, evaluations, sells, flow_balances=None):
         _clear_build_caches(engine)
 
 
-def run_snapshot_batch(engine, sells):
+def run_snapshot_batch(engine, sells, workers=1):
     """Новый инвестиционный обзор; материальные закупки остаются общим кодом V3."""
     due = engine.meta['month'] % engine.cfg['investment_interval'] == 0
     dirty_goods = set(getattr(engine, '_investment_dirty_goods',
@@ -835,7 +881,7 @@ def run_snapshot_batch(engine, sells):
     snapshot = build_snapshot(engine, sells, allowed_goods, index_timings) if should_evaluate else None
     build_seconds = time.perf_counter()-started
     started = time.perf_counter()
-    evaluations = evaluate_all(snapshot) if snapshot is not None else ()
+    evaluations = evaluate_all(snapshot, workers=workers) if snapshot is not None else ()
     best = {}
     for evaluation in evaluations:
         current = best.get(evaluation.candidate.investor_id)

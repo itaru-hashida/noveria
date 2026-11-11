@@ -89,6 +89,18 @@ def test_reverse_evaluation_order_preserves_results(service):
         row.candidate.key: row for row in reverse}
 
 
+def test_spawn_pool_matches_serial_and_is_reproducible(service):
+    engine = initialized_engine(service)
+    snapshot, _sells = prepared_snapshot(engine)
+
+    serial = evaluate_all(snapshot, workers=1)
+    first = evaluate_all(snapshot, workers=2)
+    second = evaluate_all(snapshot, workers=2)
+
+    assert first == serial
+    assert second == serial
+
+
 def test_commit_rejects_second_candidate_for_same_owner(service):
     engine = initialized_engine(service)
     snapshot, sells = prepared_snapshot(engine)
@@ -183,6 +195,24 @@ def test_missing_required_market_key_is_an_error(service):
 
     with pytest.raises(KeyError):
         evaluate(broken, candidate)
+
+
+def test_snapshot_batch_step_with_two_spawn_workers(tmp_path):
+    db = WorldDB(tmp_path/'world.lbug')
+    try:
+        load_world(db)
+        service = WorldService(db, EventBus())
+        engine = initialized_engine(service)
+        engine.meta['report_detail'] = 'none'
+
+        report = engine.step(investment_mode='snapshot_batch', investment_workers=2)
+
+        assert report['month'] == 1
+        assert report['investment_mode'] == 'snapshot_batch'
+        assert all(report['invariants'].values())
+        engine.validate()
+    finally:
+        db.close()
 
 
 def test_twelve_months_snapshot_batch_reproducible_and_valid(tmp_path):

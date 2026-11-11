@@ -3465,7 +3465,7 @@ class Economy(EconomyServices):
             if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
                 self.input_requests(e, sells)
 
-    def step(self, enterprise_planner=None, planning_mode='v3', investment_mode='v3'):
+    def step(self, enterprise_planner=None, planning_mode='v3', investment_mode='v3', investment_workers=1):
         if planning_mode not in ('v3', 'lagged_batch'):
             raise ValueError('Неизвестный режим планирования: '+str(planning_mode))
         if investment_mode not in ('v3', 'snapshot_batch'):
@@ -3531,7 +3531,7 @@ class Economy(EconomyServices):
         # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
         if investment_mode == 'snapshot_batch':
             from shadow.investment_batch import run_snapshot_batch
-            investment_timings = run_snapshot_batch(self, sells)
+            investment_timings = run_snapshot_batch(self, sells, workers=investment_workers)
             timings.update(investment_timings)
             self.report['investment_mode'] = investment_mode
         else:
