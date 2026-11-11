@@ -1,9 +1,4 @@
-"""Независимая оценка инвестиций и последовательное применение решений.
-
-Снимок и кандидаты материализуют все обращения к живому миру и RNG. ``evaluate``
-работает только с этими неизменяемыми данными; проекты, резервы и отчёты создаёт
-исключительно канонический последовательный ``commit``.
-"""
+"""Чистая рыночная оценка инвестиций и последовательный commit."""
 import copy
 import time
 from dataclasses import dataclass
@@ -14,40 +9,127 @@ from modules.economy.v3 import project_finances
 
 
 @dataclass(frozen=True, slots=True)
+class RecipeSnapshot:
+    inputs: tuple
+    equipment: tuple
+    wear: tuple
+    labor: float
+    resource: str | None
+    price: float
+    weight: float
+
+
+@dataclass(frozen=True, slots=True)
+class InvestorSnapshot:
+    id: str
+    state_id: str
+    province_id: str
+    tile_id: str
+    available_cash: float
+    stock: tuple
+    risk_tolerance: float
+
+
+@dataclass(frozen=True, slots=True)
+class OfferSnapshot:
+    id: str
+    participant: str
+    tile_id: str
+    price: float
+    remaining: float
+
+
+@dataclass(frozen=True, slots=True)
+class OrderSnapshot:
+    participant: str
+    tile_id: str
+    price: float
+    remaining: float
+    reserved: float
+    final_consumption: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SupplierSnapshot:
+    id: str
+    good: str
+    tile_id: str
+    state_id: str
+    province_id: str
+    price: float
+    production_price: float
+    capacity: float
+    funds: float
+    labor_available: float
+    resource_limit: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectSupply:
+    tile_id: str
+    price: float
+    capacity: float
+
+    def __iter__(self):
+        return iter((self.tile_id, self.price, self.capacity))
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryRow:
+    state_id: str
+    province_id: str
+    good: str
+    requested: float
+    volume: float
+    trade_gold: float
+    freight: float
+    limit_value: float
+    unmet: float
+
+
+@dataclass(frozen=True, slots=True)
 class InvestmentCandidate:
     key: str
     investor_id: str
     good: str
     province_id: str
-    location: tuple[tuple[str, str], ...]
+    location: tuple
     expansion: bool
-    expected_price: float
-    demand: float
-    unit_cost: float
-    fixed_unit: float
-    margin: float
-    material: float
-    delivery: float
-    equipment_capital: float
-    available_cash: float
-    startup_cash: float
-    risk_tolerance: float
-    labor_available: float
-    resource_available: float | None
-    chain_ratios: tuple[tuple[str, float], ...]
     parent_project_id: str | None = None
     derived_demand: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
-class InvestmentSnapshot:
+class MarketInvestmentSnapshot:
     month: int
     minimum_capacity: float
     investment_payback_months: float
     project_stall_months: int
-    labor_per_output: MappingProxyType
-    candidates: tuple[InvestmentCandidate, ...]
-    investor_ids: tuple[str, ...]
+    startup_cash: float
+    wage: float
+    consumption_tax: float
+    overhead_rate: float
+    transport_rate: float
+    construction: tuple
+    consumer_goods: frozenset
+    recipes: MappingProxyType
+    investors: MappingProxyType
+    offers: MappingProxyType
+    orders: MappingProxyType
+    suppliers: MappingProxyType
+    projects: MappingProxyType
+    history: tuple
+    history_months: int
+    labor: MappingProxyType
+    resource_used: MappingProxyType
+    resource_limits: MappingProxyType
+    recovery_quotes: MappingProxyType
+    distances: MappingProxyType
+    candidates: tuple
+    investor_ids: tuple
+
+
+InvestmentSnapshot = MarketInvestmentSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,59 +145,391 @@ def _location(candidate):
     return dict(candidate.location)
 
 
+def _freight(snapshot, source, target, good):
+    distance = snapshot.distances.get((source, target))
+    if distance is None:
+        return None
+    return distance*snapshot.recipes[good].weight*snapshot.transport_rate
+
+
+def _offers(snapshot, good, buyer_id, buyer_tile):
+    result = []
+    for offer in snapshot.offers.get(good, ()):
+        if offer.participant == buyer_id or offer.remaining <= EPS:
+            continue
+        freight = _freight(snapshot, offer.tile_id, buyer_tile, good)
+        if freight is not None:
+            result.append((offer.price+freight, offer))
+    result.sort(key=lambda row: (row[0], row[1].id))
+    return result
+
+
+def _market_signal(snapshot, state_id, province_id, good):
+    rows = [row for row in snapshot.history if row.state_id == state_id
+            and row.province_id == province_id and row.good == good]
+    if not rows:
+        return dict(volume=0.0, unmet=0.0, price=None, landed_price=None, limit_price=None)
+    volume = sum(row.volume for row in rows)
+    requested = sum(row.requested for row in rows)
+    count = snapshot.history_months
+    return dict(volume=volume/count,
+        unmet=sum(row.unmet for row in rows)/count,
+        price=sum(row.trade_gold for row in rows)/volume if volume else None,
+        landed_price=sum(row.trade_gold+row.freight for row in rows)/volume if volume else None,
+        limit_price=sum(row.limit_value for row in rows)/requested if requested else None)
+
+
+def _reference_price(snapshot, good, buyer_id, buyer_tile, state_id, province_id):
+    offers = _offers(snapshot, good, buyer_id, buyer_tile)
+    if offers:
+        return offers[0][0]
+    signal = _market_signal(snapshot, state_id, province_id, good)
+    return signal['landed_price'] or snapshot.recipes[good].price
+
+
+def _quoted_cost(snapshot, good, quantity, buyer_id, buyer_tile, state_id, province_id):
+    left, value, ceiling = quantity, 0.0, 0.0
+    for price, offer in _offers(snapshot, good, buyer_id, buyer_tile):
+        amount = min(left, offer.remaining)
+        value += amount*price
+        ceiling = max(ceiling, price)
+        left -= amount
+        if left <= EPS:
+            break
+    if left > EPS:
+        reference = _reference_price(snapshot, good, buyer_id, buyer_tile, state_id, province_id)
+        quotes = []
+        for firm_id, tile_id, price in snapshot.recovery_quotes.get(good, ()):
+            if firm_id == buyer_id:
+                continue
+            freight = _freight(snapshot, tile_id, buyer_tile, good)
+            if freight is not None:
+                quotes.append(price+freight)
+        if quotes:
+            reference = max(reference, min(quotes))
+        value += left*reference
+        ceiling = max(ceiling, reference)
+    return value, max(ceiling, EPS), left <= EPS
+
+
+def _unit_cost(snapshot, good, buyer_id, buyer_tile, state_id, province_id):
+    recipe = snapshot.recipes[good]
+    raw = sum(ratio*_reference_price(snapshot, input_good, buyer_id, buyer_tile, state_id, province_id)
+              for input_good, ratio in recipe.inputs)
+    wear = sum(ratio*_reference_price(snapshot, equipment, buyer_id, buyer_tile, state_id, province_id)
+               for equipment, ratio in recipe.wear)
+    return recipe.labor*snapshot.wage+raw+wear
+
+
+def _customer_rows(snapshot, tile_id, good):
+    rows = []
+    for order in snapshot.orders.get(good, ()):
+        freight = _freight(snapshot, tile_id, order.tile_id, good)
+        if freight is not None and order.remaining > EPS:
+            rows.append((order, freight, order.price-freight))
+    return rows
+
+
+def _net_price(snapshot, good, price, tile_id):
+    quantity, final_quantity = 0.0, 0.0
+    for order, freight, limit in _customer_rows(snapshot, tile_id, good):
+        if limit+EPS < price:
+            continue
+        volume = min(order.remaining, order.reserved/max(price+freight, EPS))
+        quantity += volume
+        if order.final_consumption:
+            final_quantity += volume
+    share = final_quantity/quantity if quantity > EPS else float(good in snapshot.consumer_goods)
+    return price*(1-snapshot.consumption_tax*share)
+
+
+def _customer_limit(snapshot, candidate, tile_id, good, price):
+    by_participant = {}
+    for order, freight, _limit in _customer_rows(snapshot, tile_id, good):
+        limit = price-freight
+        by_participant[order.participant] = max(
+            limit, by_participant.get(order.participant, float('-inf')))
+    leaders = sorted(((limit, participant) for participant, limit in by_participant.items()),
+                     reverse=True)[:2]
+    return next((limit for limit, participant in leaders
+                 if participant != candidate.investor_id and limit > 0), None)
+
+
+def _demand_groups(snapshot, good, tile_id, price):
+    grouped = {}
+    for order, freight, limit in _customer_rows(snapshot, tile_id, good):
+        if limit+EPS < price:
+            continue
+        key = (order.participant, order.tile_id, order.price)
+        row = grouped.get(key)
+        if row is None:
+            row = grouped[key] = [order.participant, order.tile_id, order.price,
+                                  limit, freight, 0.0]
+        row[5] += min(order.remaining, order.reserved/max(price+freight, EPS))
+    return tuple(tuple(row) for row in grouped.values())
+
+
+def _investment_demand(snapshot, candidate, price):
+    good = candidate.good
+    tile_id = _location(candidate)['tile_id']
+    suppliers = []
+    for firm in snapshot.suppliers.get(good, ()):
+        cost = _unit_cost(snapshot, good, firm.id, firm.tile_id, firm.state_id, firm.province_id)
+        price_firm = firm.price
+        if _net_price(snapshot, good, price_firm, firm.tile_id)+EPS < cost:
+            price_firm = firm.production_price
+        if _net_price(snapshot, good, price_firm, firm.tile_id)+EPS < cost:
+            continue
+        if firm.funds <= EPS:
+            continue
+        capacity = min(firm.capacity, firm.labor_available/snapshot.recipes[good].labor)
+        if firm.resource_limit is not None:
+            capacity = min(capacity, firm.resource_limit)
+        suppliers.append([firm.tile_id, price_firm, capacity])
+    suppliers.extend([list(project) for project in snapshot.projects.get(good, ())])
+    cheap = {offer.id: offer.remaining for offer in snapshot.offers.get(good, ())}
+    residual = 0.0
+    for participant, order_tile, order_price, limit, freight, volume in _demand_groups(
+            snapshot, good, tile_id, price):
+        if participant == candidate.investor_id:
+            continue
+        for offer_price, offer in _offers(snapshot, good, participant, order_tile):
+            if offer_price > order_price+EPS:
+                break
+            covered = min(volume, cheap[offer.id])
+            cheap[offer.id] -= covered
+            volume -= covered
+        for supply in suppliers:
+            if volume <= EPS:
+                break
+            if supply[2] <= EPS:
+                continue
+            freight_supply = _freight(snapshot, supply[0], order_tile, good)
+            if freight_supply is not None and supply[1]+freight_supply <= order_price+EPS:
+                covered = min(volume, supply[2])
+                supply[2] -= covered
+                volume -= covered
+        residual += volume
+    investor = snapshot.investors[candidate.investor_id]
+    return max(0.0, residual-dict(investor.stock).get(good, 0.0))
+
+
+def _chain_requirements(snapshot, good, quantity):
+    result = {}
+    stack = [(good, quantity)]
+    while stack:
+        product, amount = stack.pop()
+        for input_good, ratio in snapshot.recipes[product].inputs:
+            required = amount*ratio
+            result[input_good] = result.get(input_good, 0.0)+required
+            stack.append((input_good, required))
+    return result
+
+
 def evaluate(snapshot, candidate):
-    """Чистая оценка: без engine, RNG, заявок, резервов и изменений снимка."""
-    demand = candidate.demand
+    """Полная чистая оценка кандидата по неизменяемым рыночным данным."""
+    location = _location(candidate)
+    tile_id = location['tile_id']
+    investor = snapshot.investors[candidate.investor_id]
+    recipe = snapshot.recipes[candidate.good]
+    if candidate.expansion:
+        firm = next(row for row in snapshot.suppliers[candidate.good]
+                    if row.id == candidate.investor_id)
+        initial_price = firm.price
+    else:
+        initial_price = recipe.price
+    limit = _customer_limit(snapshot, candidate, tile_id, candidate.good, initial_price)
+    signal = _market_signal(snapshot, investor.state_id, candidate.province_id, candidate.good)
+    price = limit if limit is not None else signal['price'] or recipe.price
+    demand = _investment_demand(snapshot, candidate, price)
     if candidate.derived_demand is not None:
         demand = max(demand, candidate.derived_demand)
     if demand < snapshot.minimum_capacity:
         return CandidateEvaluation(candidate, False, 'Недостаточный спрос', 0.0)
     capacity = min(demand, candidate.derived_demand) \
         if candidate.derived_demand is not None else demand
-    labor_per_output = snapshot.labor_per_output[candidate.good]
-    capacity = min(capacity, candidate.labor_available/labor_per_output)
-    if candidate.resource_available is not None:
-        capacity = min(capacity, max(0.0, candidate.resource_available))
+    labor = snapshot.labor.get((location['state_id'], candidate.province_id), 0.0)
+    capacity = min(capacity, labor/recipe.labor)
+    if recipe.resource:
+        key = (candidate.province_id, recipe.resource)
+        available = snapshot.resource_limits.get(key, 0.0)-snapshot.resource_used.get(key, 0.0)
+        capacity = min(capacity, max(0.0, available))
     if capacity < snapshot.minimum_capacity:
         return CandidateEvaluation(candidate, False, 'Недостаточны труд или ресурс', 0.0)
-    if candidate.margin <= EPS:
+    unit = _unit_cost(snapshot, candidate.good, investor.id, tile_id,
+                      investor.state_id, candidate.province_id)
+    fixed_unit = recipe.labor*snapshot.wage*snapshot.overhead_rate
+    margin = _net_price(snapshot, candidate.good, price, tile_id)-unit-fixed_unit
+    if margin <= EPS:
         return CandidateEvaluation(candidate, False, 'Неположительная маржа', 0.0)
-
+    distance = snapshot.distances.get((investor.tile_id, tile_id))
+    if distance is None:
+        return CandidateEvaluation(candidate, False, 'Нет маршрута', 0.0)
+    material = sum(quantity*_quoted_cost(snapshot, good, quantity, investor.id,
+        investor.tile_id, investor.state_id, investor.province_id)[0]/max(quantity, EPS)
+        for good, quantity in snapshot.construction)
+    delivery = (sum(quantity*snapshot.recipes[good].weight
+                    for good, quantity in snapshot.construction)*distance*snapshot.transport_rate)
+    equipment_capital = sum(ratio*_quoted_cost(snapshot, equipment, ratio, investor.id,
+        investor.tile_id, investor.state_id, investor.province_id)[1]
+        for equipment, ratio in recipe.equipment)
+    startup = 0.0 if candidate.expansion else snapshot.startup_cash
     capacity, working, investment, profit = project_finances(
-        capacity, candidate.available_cash, candidate.startup_cash,
-        candidate.material, candidate.delivery, candidate.unit_cost,
-        candidate.fixed_unit, candidate.equipment_capital, candidate.margin,
-        candidate.expansion,
-    )
+        capacity, investor.available_cash, startup, material, delivery, unit,
+        fixed_unit, equipment_capital, margin, candidate.expansion)
     if capacity < snapshot.minimum_capacity:
         return CandidateEvaluation(candidate, False, 'Недостаточно денег для минимальной мощности', 0.0)
-    horizon = snapshot.investment_payback_months*(0.5+candidate.risk_tolerance)
-    if investment > candidate.available_cash+EPS or profit*horizon < investment:
+    horizon = snapshot.investment_payback_months*(0.5+investor.risk_tolerance)
+    if investment > investor.available_cash+EPS or profit*horizon < investment:
         return CandidateEvaluation(candidate, False, 'Окупаемость не проходит', 0.0)
-
     project_id = f'{candidate.investor_id}:{candidate.good}:{candidate.province_id}:{snapshot.month}'
-    project = dict(
-        good=candidate.good, capacity=capacity, location=_location(candidate),
-        materials={}, working_cash=working, expected_price=candidate.expected_price,
+    project = dict(good=candidate.good, capacity=capacity, location=location,
+        materials={}, working_cash=working, expected_price=price,
         expected_profit=profit, expected_investment=investment,
-        expected_unit_cost=candidate.unit_cost+candidate.fixed_unit,
-        expansion=candidate.expansion, created=snapshot.month,
-        chain_requirements={good: capacity*ratio
-                            for good, ratio in candidate.chain_ratios},
+        expected_unit_cost=unit+fixed_unit, expansion=candidate.expansion,
+        created=snapshot.month, chain_requirements=_chain_requirements(snapshot, candidate.good, capacity),
         project_id=project_id, parent_project_id=candidate.parent_project_id,
         derived_demand=candidate.derived_demand,
         dependency_expires=snapshot.month+snapshot.project_stall_months
-            if candidate.parent_project_id else None,
-    )
+            if candidate.parent_project_id else None)
     score = profit*snapshot.investment_payback_months-investment
     return CandidateEvaluation(candidate, True, 'Кандидат принят к применению', score, project)
 
 
 def evaluate_all(snapshot, candidates=None):
-    """Оценить каждого кандидата независимо; порядок входа не влияет на результат."""
     rows = snapshot.candidates if candidates is None else tuple(candidates)
     return tuple(evaluate(snapshot, candidate) for candidate in rows)
 
+
+def build_snapshot(engine, sells, allowed_goods=None):
+    """Собрать общие данные; кандидатная экономика выполняется только в evaluate."""
+    investors = sorted((a for a in engine.accounts.values()
+        if a['kind'] in ('private', 'merchant', 'treasury', 'municipal')
+        or (a['kind'] == 'enterprise'
+            and engine.enterprises[a['id']]['status'] != 'closed'
+            and engine.enterprises[a['id']]['available_from'] <= engine.meta['month'])),
+        key=lambda a: a['id'])
+    for investor in investors:
+        engine.profile(investor)
+    index = engine.build_investment_state()['index']
+    candidates = []
+    for investor in investors:
+        markets = set(index['markets'].get(investor['state_id'], ()))
+        expansion = engine.enterprises.get(investor['id'])
+        for province_id, good in sorted(markets):
+            if allowed_goods is not None and good not in allowed_goods:
+                continue
+            if expansion and (good != expansion['good'] or province_id != expansion['province_id']):
+                continue
+            location = ({key: expansion[key]
+                         for key in ('state_id', 'province_id', 'city_id', 'tile_id')}
+                        if expansion else engine.location(province_id))
+            if location['state_id'] != investor['state_id']:
+                continue
+            recipe = engine.goods[good]
+            if recipe['resource']:
+                tiles = index['resource_tiles'].get(
+                    (investor['state_id'], province_id, recipe['resource']), [])
+                if not tiles:
+                    continue
+                location.update(tile_id=expansion['tile_id'] if expansion
+                                else engine.shuffled(tiles)[0]['id'], city_id=None)
+            key = f'{investor["id"]}:{good}:{province_id}'
+            candidates.append(InvestmentCandidate(key, investor['id'], good, province_id,
+                tuple(sorted(location.items())), bool(expansion)))
+    recipes = {good: RecipeSnapshot(tuple(sorted(recipe['inputs'].items())),
+        tuple(sorted(recipe.get('equipment', {}).items())),
+        tuple(sorted((equipment, ratio*engine.goods[equipment].get('durable', {}).get('wear_rate', 0))
+                     for equipment, ratio in recipe.get('equipment', {}).items())),
+        recipe['labor'], recipe['resource'], recipe['price'], recipe['weight'])
+        for good, recipe in engine.goods.items()}
+    investor_rows = {a['id']: InvestorSnapshot(a['id'], a['state_id'], a['province_id'],
+        engine.market_tile(a), engine.free_cash(a['id']), tuple(sorted(a['stock'].items())),
+        a['risk_tolerance']) for a in investors}
+    offer_rows = {good: tuple(OfferSnapshot(o['id'], o['participant'], o['tile_id'],
+        o['price'], o['remaining']) for o in sells.get(good, ())
+        if o['remaining'] > EPS and o['status'] not in ('cancelled', 'expired'))
+        for good in engine.goods}
+    order_rows = {good: tuple(OrderSnapshot(o['participant'], o['tile_id'], o['price'],
+        o['remaining'], o['reserved'], o.get('final_consumption', False))
+        for o in engine.report['orders'] if o['side'] == 'buy' and o['good'] == good
+        and o['remaining'] > EPS and o['status'] not in ('cancelled', 'expired'))
+        for good in engine.goods}
+    supplier_rows = {good: [] for good in engine.goods}
+    for firm in engine.enterprises.values():
+        if firm['status'] == 'closed' or firm.get('suspended'):
+            continue
+        recipe = engine.goods[firm['good']]
+        owner = engine.accounts[firm['owner_id']]
+        funds = engine.free_cash(firm['id'])+engine.cash_after_commitments(
+            owner['id'], engine.project_cash_reserve(owner['id'], sells))
+        labor = sum(engine.population(a)*engine.cfg['labor_share'] for a in engine.workforce(firm))
+        resource_limit = (engine.resource_limits.get((firm['province_id'], recipe['resource']), 0.0)
+                          if recipe['resource'] else None)
+        supplier_rows[firm['good']].append(SupplierSnapshot(firm['id'], firm['good'],
+            firm['tile_id'], firm['state_id'], firm['province_id'], firm['price'],
+            firm.get('production_price', firm['price']), firm['capacity'], funds,
+            labor, resource_limit))
+    supplier_rows = {good: tuple(rows) for good, rows in supplier_rows.items()}
+    project_rows = {good: tuple(ProjectSupply(location['tile_id'], price, capacity)
+                    for location, price, capacity in index['projects'].get(good, ()))
+                    for good in engine.goods}
+    history = tuple(HistoryRow(row['state_id'], row['province_id'], row['good'],
+        row['requested'], row['volume'], row['trade_gold'], row['freight'],
+        row['limit_value'], row['unmet_solvent'])
+        for month in engine.meta.get('market_history', []) for row in month['markets'])
+    recovery = {good: tuple((firm['id'], firm['tile_id'], price)
+        for firm, price in getattr(engine, '_recovery_quotes', {}).get(good, ()))
+        for good in engine.goods}
+
+    route_pairs = set()
+    for good in engine.goods:
+        orders = order_rows[good]
+        offers = offer_rows[good]
+        for order in orders:
+            route_pairs.update((offer.tile_id, order.tile_id) for offer in offers)
+        for candidate in candidates:
+            if candidate.good == good:
+                tile = _location(candidate)['tile_id']
+                route_pairs.update((tile, order.tile_id) for order in orders)
+                route_pairs.update((offer.tile_id, tile) for offer in offers)
+        for supplier in supplier_rows[good]:
+            route_pairs.update((supplier.tile_id, order.tile_id) for order in orders)
+            route_pairs.update((offer.tile_id, supplier.tile_id) for offer in offers)
+    for candidate in candidates:
+        investor = investor_rows[candidate.investor_id]
+        tile = _location(candidate)['tile_id']
+        route_pairs.add((investor.tile_id, tile))
+        for good, _quantity in engine.cfg['construction'].items():
+            route_pairs.update((offer.tile_id, investor.tile_id) for offer in offer_rows[good])
+        for good, _ratio in recipes[candidate.good].equipment:
+            route_pairs.update((offer.tile_id, investor.tile_id) for offer in offer_rows[good])
+        for rows in recovery.values():
+            route_pairs.update((source, tile) for _firm, source, _price in rows)
+    distances = {}
+    for source, target in sorted(route_pairs):
+        distance, _path = engine.path(source, target)
+        if distance is not None:
+            distances[source, target] = distance
+    return MarketInvestmentSnapshot(
+        month=engine.meta['month'], minimum_capacity=engine.cfg['minimum_capacity'],
+        investment_payback_months=engine.cfg['investment_payback_months'],
+        project_stall_months=engine.cfg['project_stall_months'],
+        startup_cash=engine.cfg['startup_cash'], wage=engine.cfg['wage'],
+        consumption_tax=engine.cfg['consumption_tax'],
+        overhead_rate=engine.cfg.get('enterprise_overhead_rate', 0),
+        transport_rate=engine.cfg['transport_rate'],
+        construction=tuple(sorted(engine.cfg['construction'].items())),
+        consumer_goods=frozenset(engine.cfg['basic_needs'] | engine.cfg['extra_needs']),
+        recipes=MappingProxyType(recipes), investors=MappingProxyType(investor_rows),
+        offers=MappingProxyType(offer_rows), orders=MappingProxyType(order_rows),
+        suppliers=MappingProxyType(supplier_rows), projects=MappingProxyType(project_rows),
+        history=history, history_months=len(engine.meta.get('market_history', [])),
+        labor=MappingProxyType(dict(index['labor'])),
+        resource_used=MappingProxyType(dict(index['resource_used'])),
+        resource_limits=MappingProxyType(dict(engine.resource_limits)),
+        recovery_quotes=MappingProxyType(recovery), distances=MappingProxyType(distances),
+        candidates=tuple(candidates), investor_ids=tuple(a['id'] for a in investors))
 
 def _set_build_caches(engine, state):
     engine._investment_state = state
@@ -131,96 +545,6 @@ def _clear_build_caches(engine):
                  '_upstream_candidate_cache', '_investment_input_reserved', '_investment_state',
                  '_investment_customer_limits'):
         engine.__dict__.pop(name, None)
-
-
-def build_snapshot(engine, sells, allowed_goods=None):
-    """Материализовать рыночные входы, профили и выбор ресурсных клеток."""
-    investors = sorted((a for a in engine.accounts.values()
-        if a['kind'] in ('private', 'merchant', 'treasury', 'municipal')
-        or (a['kind'] == 'enterprise'
-            and engine.enterprises[a['id']]['status'] != 'closed'
-            and engine.enterprises[a['id']]['available_from'] <= engine.meta['month'])),
-        key=lambda a: a['id'])
-    for investor in investors:
-        engine.profile(investor)
-    state = engine.build_investment_state()
-    _set_build_caches(engine, state)
-    candidates = []
-    try:
-        index = state['index']
-        history = engine.meta.get('market_history', [])
-        for investor in investors:
-            markets = set(index['markets'].get(investor['state_id'], ()))
-            expansion = engine.enterprises.get(investor['id'])
-            for province_id, good in sorted(markets):
-                if allowed_goods is not None and good not in allowed_goods:
-                    continue
-                if expansion and (good != expansion['good'] or province_id != expansion['province_id']):
-                    continue
-                location = ({key: expansion[key]
-                             for key in ('state_id', 'province_id', 'city_id', 'tile_id')}
-                            if expansion else engine.location(province_id))
-                if location['state_id'] != investor['state_id']:
-                    continue
-                recipe = engine.goods[good]
-                resource_available = None
-                if recipe['resource']:
-                    tiles = index['resource_tiles'].get(
-                        (investor['state_id'], province_id, recipe['resource']), [])
-                    if not tiles:
-                        continue
-                    location.update(
-                        tile_id=expansion['tile_id'] if expansion else engine.shuffled(tiles)[0]['id'],
-                        city_id=None)
-                    used = index['resource_used'].get((province_id, recipe['resource']), 0.0)
-                    resource_available = (len(tiles)*engine.cfg['extraction_per_tile']-used)
-                quote_firm = dict(id=investor['id'], good=good,
-                    price=expansion['price'] if expansion else recipe['price'], **location)
-                customer_limit = engine.investment_customer_limit(quote_firm)
-                signal = engine.market_signal(history, investor['state_id'], province_id, good)
-                price = customer_limit if customer_limit is not None else signal['price'] or recipe['price']
-                quote_firm['price'] = price
-                demand = max(0.0, engine.investment_demand(quote_firm, sells)
-                             - investor['stock'].get(good, 0.0))
-                unit = engine.unit_cost(quote_firm, sells)
-                fixed_unit = (recipe['labor']*engine.cfg['wage']
-                              *engine.cfg.get('enterprise_overhead_rate', 0))
-                margin = engine.net_price(quote_firm)-unit-fixed_unit
-                distance, _route = engine.path(engine.market_tile(investor), location['tile_id'])
-                if distance is None:
-                    continue
-                bill = engine.construction_bill(1)
-                material = sum(quantity*engine.quoted_cost(investor, good_name, quantity, sells)[0]
-                               / max(quantity, EPS) for good_name, quantity in bill.items())
-                delivery = (sum(quantity*engine.goods[good_name]['weight']
-                                for good_name, quantity in bill.items())
-                            * distance*engine.cfg['transport_rate'])
-                equipment_capital = sum(
-                    ratio*engine.quoted_cost(investor, equipment, ratio, sells)[1]
-                    for equipment, ratio in recipe.get('equipment', {}).items())
-                labor = index['labor'].get((location['state_id'], province_id), 0.0)
-                key = f'{investor["id"]}:{good}:{province_id}'
-                candidates.append(InvestmentCandidate(
-                    key=key, investor_id=investor['id'], good=good, province_id=province_id,
-                    location=tuple(sorted(location.items())), expansion=bool(expansion),
-                    expected_price=price, demand=demand, unit_cost=unit, fixed_unit=fixed_unit,
-                    margin=margin, material=material, delivery=delivery,
-                    equipment_capital=equipment_capital, available_cash=engine.free_cash(investor['id']),
-                    startup_cash=0.0 if expansion else engine.cfg['startup_cash'],
-                    risk_tolerance=investor['risk_tolerance'], labor_available=labor,
-                    resource_available=resource_available,
-                    chain_ratios=tuple(sorted(engine.recipe_requirements(good, 1.0).items())),
-                ))
-    finally:
-        _clear_build_caches(engine)
-    return InvestmentSnapshot(
-        month=engine.meta['month'], minimum_capacity=engine.cfg['minimum_capacity'],
-        investment_payback_months=engine.cfg['investment_payback_months'],
-        project_stall_months=engine.cfg['project_stall_months'],
-        labor_per_output=MappingProxyType({good: recipe['labor']
-                                           for good, recipe in engine.goods.items()}),
-        candidates=tuple(candidates), investor_ids=tuple(a['id'] for a in investors),
-    )
 
 
 def _reject(engine, evaluation, reason):
