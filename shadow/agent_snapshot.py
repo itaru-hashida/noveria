@@ -46,6 +46,31 @@ def _group_index(values, n_groups):
     return np.cumsum(counts).astype(np.int32)
 
 
+def _distance_matrix(engine, tiles):
+    """Матрица расстояний и достижимости между торговыми площадками.
+
+    Нужны только расстояние и факт достижимости, а не денежный фрахт. Поэтому
+    берётся `path`: `landed` для той же пары умножал расстояние на вес товара и
+    тариф и собирал кортеж из четырёх полей, а здесь на 78 площадках 6006 пар.
+    `path` отдаёт те же `distance`/`None` из своего кэша, поэтому матрица
+    остаётся бит-в-бит прежней.
+    """
+    n_tiles = len(tiles)
+    distance = np.zeros((n_tiles, n_tiles), dtype=np.float64)
+    reachable = np.ones((n_tiles, n_tiles), dtype=np.uint8)
+    for seller_row, seller_tile in enumerate(tiles):
+        for buyer_row, buyer_tile in enumerate(tiles):
+            if seller_row == buyer_row:
+                continue
+            route, _ = engine.path(seller_tile, buyer_tile)
+            if route is None:
+                reachable[seller_row, buyer_row] = 0
+                distance[seller_row, buyer_row] = 0.0
+            else:
+                distance[seller_row, buyer_row] = route
+    return distance, reachable
+
+
 def build(engine, budget, repeat=1, sells=None):
     """Собрать массивы. `repeat` — синтетическое размножение агентов для замера роста.
 
@@ -204,18 +229,7 @@ def build(engine, budget, repeat=1, sells=None):
     ask_buyer = [row[5] for row in asks]
     ask_final = [row[6] for row in asks]
 
-    distance = np.zeros((n_tiles, n_tiles), dtype=np.float64)
-    reachable = np.ones((n_tiles, n_tiles), dtype=np.uint8)
-    for seller_row, seller_tile in enumerate(tiles):
-        for buyer_row, buyer_tile in enumerate(tiles):
-            if seller_row == buyer_row:
-                continue
-            quote = engine.landed(seller_tile, buyer_tile, goods[0], 0)
-            if quote is None:
-                reachable[seller_row, buyer_row] = 0
-                distance[seller_row, buyer_row] = 0.0
-            else:
-                distance[seller_row, buyer_row] = quote[2]
+    distance, reachable = _distance_matrix(engine, tiles)
 
     # Котировки включают опубликованные склады фирм. Исключение этих офферов
     # из книги исполнителя не должно заменять их цены ценами из контента.
