@@ -70,15 +70,22 @@ def build(engine, budget, repeat=1, sells=None):
                 clone['id'] = '%s~%d' % (firm['id'], copy) if copy else firm['id']
                 firms.append(clone)
     accounts = [engine.accounts[firm['id'].split('~')[0]] for firm in firms]
-    tiles = sorted({market_tile(account) for account in engine.accounts.values()})
+    # Площадка и провинция счёта не меняются внутри сборки, поэтому считаются
+    # по одному разу на счёт и переиспользуются ниже. `market_province` сам
+    # вызывает `market_tile`, так что прежний код делал это дважды на агента.
+    account_tile = {account_id: market_tile(account)
+                    for account_id, account in engine.accounts.items()}
+    account_province = {account_id: engine.market_province(account)
+                        for account_id, account in engine.accounts.items()}
+    tiles = sorted(set(account_tile.values()))
     tile_index = {tile: index for index, tile in enumerate(tiles)}
-    provinces = sorted({engine.market_province(account) for account in accounts})
+    provinces = sorted({account_province[account['id']] for account in accounts})
     province_index = {province: index for index, province in enumerate(provinces)}
     n_agents, n_tiles, n_provinces = len(firms), len(tiles), len(provinces)
 
     agent_good = np.array([good_index[f['good']] for f in firms], dtype=np.int32)
-    agent_tile = np.array([tile_index[market_tile(a)] for a in accounts], dtype=np.int32)
-    agent_province = np.array([province_index[engine.market_province(a)] for a in accounts],
+    agent_tile = np.array([tile_index[account_tile[a['id']]] for a in accounts], dtype=np.int32)
+    agent_province = np.array([province_index[account_province[a['id']]] for a in accounts],
                               dtype=np.int32)
     agent_capacity = np.array([f['capacity'] for f in firms], dtype=np.float64)
     agent_price = np.array([f['price'] for f in firms], dtype=np.float64)
@@ -224,6 +231,27 @@ def build(engine, budget, repeat=1, sells=None):
         for g in recipe['inputs'].keys() | recipe.get('equipment', {}).keys():
             agent_input_price[row, good_index[g]] = engine.reference_price(account, g, public_sells)
 
+    # Домохозяйства по провинциям одним проходом по счетам. Раньше обе
+    # структуры собирались отдельными comprehension на каждую провинцию, то есть
+    # все счета перебирались 2×N_provinces раз, и каждый `market_province`
+    # заново звал `market_tile`. Теперь `market_province` считается один раз на
+    # счёт, а `population` — один раз на домохозяйство.
+    # Порядок домохозяйств внутри провинции — порядок `engine.accounts`,
+    # сложение населения — `sum` по возрастающему списку людей, как и раньше:
+    # оба совпадают с прежним результатом бит-в-бит.
+    communities = {}
+    for account_id, account in engine.accounts.items():
+        if account['kind'] != 'household':
+            continue
+        province = engine.market_province(account)
+        if province not in province_index:
+            continue
+        communities.setdefault(province, []).append(
+            (account_id, engine.population(account)))
+    province_population = {province: sum(people for _, people in rows)
+                           for province, rows in communities.items()}
+    households_by_province = dict(communities)
+
     arrays = {
         'agent_good': agent_good, 'agent_tile': agent_tile,
         'agent_province': agent_province, 'agent_capacity': agent_capacity,
@@ -271,17 +299,8 @@ def build(engine, budget, repeat=1, sells=None):
                 all_stock={account_id: dict(account['stock'])
                            for account_id, account in engine.accounts.items()},
                 # Труд и ресурсы: физические ограничения выпуска.
-                province_population={province: sum(
-                    engine.population(account) for account in engine.accounts.values()
-                    if account['kind'] == 'household'
-                    and engine.market_province(account) == province)
-                    for province in provinces},
-                households_by_province={
-                    province: [(account['id'], engine.population(account))
-                               for account in engine.accounts.values()
-                               if account['kind'] == 'household'
-                               and engine.market_province(account) == province]
-                    for province in provinces},
+                province_population=province_population,
+                households_by_province=households_by_province,
                 resource_limits=[(province, resource, quantity)
                                  for (province, resource), quantity
                                  in engine.resource_limits.items()
@@ -293,8 +312,7 @@ def build(engine, budget, repeat=1, sells=None):
                 # обязан сходиться, иначе деньги теряются.
                 balances={account_id: account['balance']
                           for account_id, account in engine.accounts.items()},
-                tile_of_account={account_id: market_tile(account)
-                                 for account_id, account in engine.accounts.items()})
+                tile_of_account=account_tile)
     return arrays, meta
 
 
