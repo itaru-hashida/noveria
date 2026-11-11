@@ -3195,6 +3195,10 @@ class Economy(EconomyServices):
             self.__dict__.pop('_investment_input_reserved', None)
             self.__dict__.pop('_investment_state', None)
             self.__dict__.pop('_investment_customer_limits', None)
+        self.project_material_requests(sells, due, investors)
+
+    def project_material_requests(self, sells, due, investors):
+        """Последовательные закупки и отмены уже принятых проектов."""
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:
@@ -3461,9 +3465,13 @@ class Economy(EconomyServices):
             if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
                 self.input_requests(e, sells)
 
-    def step(self, enterprise_planner=None, planning_mode='v3'):
+    def step(self, enterprise_planner=None, planning_mode='v3', investment_mode='v3'):
         if planning_mode not in ('v3', 'lagged_batch'):
             raise ValueError('Неизвестный режим планирования: '+str(planning_mode))
+        if investment_mode not in ('v3', 'snapshot_batch'):
+            raise ValueError('Неизвестный инвестиционный режим: '+str(investment_mode))
+        if investment_mode == 'snapshot_batch' and planning_mode != 'v3':
+            raise ValueError('snapshot_batch пока совместим только с планированием v3')
         if planning_mode == 'lagged_batch' and enterprise_planner is not None:
             raise ValueError('lagged_batch несовместим с enterprise_planner')
         started = time.perf_counter()
@@ -3521,7 +3529,13 @@ class Economy(EconomyServices):
             self.recover_enterprises(sells)
         self.public_project_requests(sells)
         # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
-        self.project_requests(sells)
+        if investment_mode == 'snapshot_batch':
+            from shadow.investment_batch import run_snapshot_batch
+            investment_timings = run_snapshot_batch(self, sells)
+            timings.update(investment_timings)
+            self.report['investment_mode'] = investment_mode
+        else:
+            self.project_requests(sells)
         timings['preparation'] = time.perf_counter()-started
         phase_started = time.perf_counter()
         if planning_mode == 'lagged_batch':
