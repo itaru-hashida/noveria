@@ -4,12 +4,15 @@ from collections import defaultdict
 from dataclasses import replace
 from types import MappingProxyType
 
+import pytest
+
 from core.db import WorldDB
 from core.events import EventBus
 from core.world_service import WorldService
 from loader import load_world
-from shadow.investment_batch import (OrderSnapshot, _customer_limit, build_snapshot,
-    commit, evaluate, evaluate_all)
+from shadow.investment_batch import (OrderSnapshot, RequiredMarketKeys,
+    _build_evaluation_index, _customer_limit, _required_market_keys, build_snapshot, commit,
+    evaluate, evaluate_all)
 
 
 def initialized_engine(service):
@@ -104,6 +107,82 @@ def test_commit_rejects_second_candidate_for_same_owner(service):
     assert sum(row['outcome'] == 'started' for row in decisions) == 1
     assert any(row['outcome'] == 'rejected' and 'уже имеет проект' in row['reason']
                for row in decisions)
+
+
+class LoggingMapping:
+    def __init__(self, values):
+        self.values = values
+        self.requested = set()
+
+    def __getitem__(self, key):
+        self.requested.add(key)
+        return self.values[key]
+
+
+def test_sparse_index_covers_every_evaluate_all_lookup(service):
+    engine = initialized_engine(service)
+    snapshot, _sells = prepared_snapshot(engine)
+    index = snapshot.evaluation_index
+    logged = {name: LoggingMapping(getattr(index, name))
+              for name in ('history', 'customer_rows', 'demand_groups', 'offer_curves',
+                           'supplier_economics')}
+    logged_snapshot = replace(snapshot, evaluation_index=replace(index, **logged))
+
+    evaluate_all(logged_snapshot)
+
+    for name, mapping in logged.items():
+        assert mapping.requested
+        assert mapping.requested <= set(getattr(index, name))
+
+
+def test_sparse_index_is_smaller_than_full_goods_tiles_product(service):
+    engine = initialized_engine(service)
+    snapshot, _sells = prepared_snapshot(engine)
+    tiles = {investor.tile_id for investor in snapshot.investors.values()}
+    tiles.update(offer.tile_id for rows in snapshot.offers.values() for offer in rows)
+    tiles.update(order.tile_id for rows in snapshot.orders.values() for order in rows)
+    tiles.update(firm.tile_id for rows in snapshot.suppliers.values() for firm in rows)
+    tiles.update(dict(candidate.location)['tile_id'] for candidate in snapshot.candidates)
+    full_product_size = len(snapshot.recipes)*len(tiles)
+
+    index = snapshot.evaluation_index
+    assert len(index.customer_rows) < full_product_size
+    assert len(index.demand_groups) < full_product_size
+    assert len(index.offer_curves) < full_product_size
+
+
+def test_dense_and_sparse_indices_produce_identical_evaluations(service):
+    engine = initialized_engine(service)
+    sparse_snapshot, _sells = prepared_snapshot(engine)
+    source_tiles = {dict(candidate.location)['tile_id'] for candidate in sparse_snapshot.candidates}
+    source_tiles.update(firm.tile_id for rows in sparse_snapshot.suppliers.values() for firm in rows)
+    buyer_tiles = {investor.tile_id for investor in sparse_snapshot.investors.values()}
+    buyer_tiles.update(source_tiles)
+    buyer_tiles.update(order.tile_id for rows in sparse_snapshot.orders.values() for order in rows)
+    dense_required = RequiredMarketKeys(
+        customer=tuple((good, tile) for good in sparse_snapshot.recipes for tile in source_tiles),
+        offers=tuple((good, tile) for good in sparse_snapshot.recipes for tile in buyer_tiles),
+        history=_required_market_keys(sparse_snapshot).history)
+    without_index = replace(sparse_snapshot, evaluation_index=None)
+    dense_snapshot = replace(without_index,
+        evaluation_index=_build_evaluation_index(without_index, dense_required))
+
+    assert evaluate_all(sparse_snapshot) == evaluate_all(dense_snapshot)
+
+
+def test_missing_required_market_key_is_an_error(service):
+    engine = initialized_engine(service)
+    snapshot, _sells = prepared_snapshot(engine)
+    candidate = snapshot.candidates[0]
+    key = (candidate.good, dict(candidate.location)['tile_id'])
+    index = snapshot.evaluation_index
+    customer_rows = dict(index.customer_rows)
+    del customer_rows[key]
+    broken = replace(snapshot, evaluation_index=replace(index,
+        customer_rows=MappingProxyType(customer_rows)))
+
+    with pytest.raises(KeyError):
+        evaluate(broken, candidate)
 
 
 def test_twelve_months_snapshot_batch_reproducible_and_valid(tmp_path):
