@@ -57,6 +57,49 @@ def test_demand_groups_keep_rows_at_the_price_border_and_drop_the_rest(engine):
     assert {row[0] for row in engine.customer_demand_groups(bakery)} == set()
 
 
+def test_reachable_demand_sees_a_cancelled_order_after_the_rows_cache_is_warm(engine):
+    """Отмена покупательской заявки обязана убить кэш строк спроса.
+
+    Отмена меняет `reserved` и `status`, но не трогает версию книги: она растит
+    только `_demand_revision`. Ключ строк смотрит на ревизию, иначе прогретый
+    кэш возвращал отменённую заявку со старым резервом, и спрос не падал.
+    """
+    clear(engine)
+    bakery = firm(engine)
+    bakery.update(price=2.0, tile_id='t')
+    order = engine.order('h', 'bread', 10, 'buy', 5.0, 'Базовые нужды')
+    order['reserved'] = 1000
+
+    assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(10)
+    assert engine._customer_demand_rows_cache
+
+    engine.cancel_order(order, 'Тестовая отмена')
+    assert order['status'] == 'cancelled' and order['reserved'] == 0
+
+    assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(0)
+
+
+def test_reachable_demand_sees_a_partial_fill_after_the_rows_cache_is_warm(engine):
+    """Сделка обязана обновить оставшийся спрос, а не только версию книги."""
+    clear(engine)
+    bakery = firm(engine)
+    bakery.update(price=2.0, tile_id='t')
+    engine.add_stock('private:s', 'bread', 4, 4)
+    sell = engine.order('private:s', 'bread', 4, 'sell', 1.0, 'Продажа')
+    buy = engine.order('h', 'bread', 10, 'buy', 5.0, 'Базовые нужды')
+    buy['reserved'] = 1000
+
+    # Без предложений спрос равен всей заявке: так прогрев виден явно.
+    assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(10)
+    assert engine._customer_demand_rows_cache
+
+    engine.match(buy, {'bread': [sell]})
+    # Четыре единицы куплены, шесть остались необеспеченными.
+    assert buy['remaining'] == pytest.approx(6)
+
+    assert engine.reachable_demand(bakery, {'bread': []}) == pytest.approx(6)
+
+
 def test_investment_customer_limit_reuses_market_and_excludes_investor(engine):
     clear(engine)
     candidate = firm(engine)
