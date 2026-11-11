@@ -12,8 +12,8 @@ from core.events import EventBus
 from core.world_service import WorldService
 from loader import load_world
 from shadow.investment_batch import (AsyncInvestmentPlanner, OrderSnapshot, RequiredMarketKeys,
-    _build_evaluation_index, _customer_limit, _required_market_keys, build_snapshot, commit,
-    evaluate, evaluate_all)
+    _build_evaluation_index, _customer_limit, _required_market_keys, _required_route_pairs,
+    build_snapshot, commit, evaluate, evaluate_all)
 
 
 def initialized_engine(service):
@@ -60,6 +60,19 @@ def test_customer_limit_uses_each_buy_order_price(service):
     freight = 2.0*snapshot.recipes[good].weight*snapshot.transport_rate
     assert result == 20.0-freight
     assert result != 10.0-freight
+
+
+def test_customer_leader_index_matches_original_for_every_candidate(service):
+    engine = initialized_engine(service)
+    snapshot, _sells = prepared_snapshot(engine)
+    original = replace(snapshot, evaluation_index=None)
+
+    indexed_results = [_customer_limit(snapshot, candidate, dict(candidate.location)['tile_id'],
+                                       candidate.good) for candidate in snapshot.candidates]
+    original_results = [_customer_limit(original, candidate, dict(candidate.location)['tile_id'],
+                                        candidate.good) for candidate in snapshot.candidates]
+
+    assert indexed_results == original_results
 
 
 def test_evaluate_is_pure_and_repeatable(service):
@@ -137,7 +150,7 @@ def test_sparse_index_covers_every_evaluate_all_lookup(service):
     snapshot, _sells = prepared_snapshot(engine)
     index = snapshot.evaluation_index
     logged = {name: LoggingMapping(getattr(index, name))
-              for name in ('history', 'customer_rows', 'demand_groups', 'offer_curves',
+              for name in ('history', 'customer_rows', 'customer_leaders', 'demand_groups', 'offer_curves',
                            'supplier_economics')}
     logged_snapshot = replace(snapshot, evaluation_index=replace(index, **logged))
 
@@ -162,6 +175,45 @@ def test_sparse_index_is_smaller_than_full_goods_tiles_product(service):
     assert len(index.customer_rows) < full_product_size
     assert len(index.demand_groups) < full_product_size
     assert len(index.offer_curves) < full_product_size
+
+
+def original_route_pairs(snapshot):
+    route_pairs = set()
+    for good in snapshot.recipes:
+        orders = snapshot.orders[good]
+        offers = snapshot.offers[good]
+        for order in orders:
+            route_pairs.update((offer.tile_id, order.tile_id) for offer in offers)
+        for candidate in snapshot.candidates:
+            if candidate.good == good:
+                tile = dict(candidate.location)['tile_id']
+                route_pairs.update((tile, order.tile_id) for order in orders)
+                route_pairs.update((offer.tile_id, tile) for offer in offers)
+        for supplier in snapshot.suppliers[good]:
+            route_pairs.update((supplier.tile_id, order.tile_id) for order in orders)
+            route_pairs.update((offer.tile_id, supplier.tile_id) for offer in offers)
+    for candidate in snapshot.candidates:
+        investor = snapshot.investors[candidate.investor_id]
+        tile = dict(candidate.location)['tile_id']
+        route_pairs.add((investor.tile_id, tile))
+        for good, _quantity in snapshot.construction:
+            route_pairs.update((offer.tile_id, investor.tile_id) for offer in snapshot.offers[good])
+        for good, _ratio in snapshot.recipes[candidate.good].equipment:
+            route_pairs.update((offer.tile_id, investor.tile_id) for offer in snapshot.offers[good])
+        for rows in snapshot.recovery_quotes.values():
+            route_pairs.update((source, tile) for _firm, source, _price in rows)
+    return route_pairs
+
+
+def test_required_route_pairs_exactly_match_original(service):
+    engine = initialized_engine(service)
+    snapshot, _sells = prepared_snapshot(engine)
+
+    optimized = _required_route_pairs(snapshot.recipes, snapshot.offers, snapshot.orders,
+        snapshot.candidates, snapshot.suppliers, snapshot.investors, snapshot.construction,
+        snapshot.recipes, snapshot.recovery_quotes)
+
+    assert optimized == original_route_pairs(snapshot)
 
 
 def test_dense_and_sparse_indices_produce_identical_evaluations(service):
@@ -189,10 +241,10 @@ def test_missing_required_market_key_is_an_error(service):
     candidate = snapshot.candidates[0]
     key = (candidate.good, dict(candidate.location)['tile_id'])
     index = snapshot.evaluation_index
-    customer_rows = dict(index.customer_rows)
-    del customer_rows[key]
+    customer_leaders = dict(index.customer_leaders)
+    del customer_leaders[key]
     broken = replace(snapshot, evaluation_index=replace(index,
-        customer_rows=MappingProxyType(customer_rows)))
+        customer_leaders=MappingProxyType(customer_leaders)))
 
     with pytest.raises(KeyError):
         evaluate(broken, candidate)

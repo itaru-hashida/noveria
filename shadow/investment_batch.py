@@ -130,6 +130,7 @@ class RequiredMarketKeys:
 class EvaluationIndex:
     history: MappingProxyType
     customer_rows: MappingProxyType
+    customer_leaders: MappingProxyType
     demand_groups: MappingProxyType
     offer_curves: MappingProxyType
     supplier_economics: MappingProxyType
@@ -293,14 +294,18 @@ def _net_price(snapshot, good, price, tile_id):
 
 
 def _customer_limit(snapshot, candidate, tile_id, good):
-    by_participant = {}
-    for order, freight, limit in _customer_rows(snapshot, tile_id, good):
-        # Предел задаёт конкретная заявка покупателя, а не цена кандидата.
-        limit = order.price-freight
-        by_participant[order.participant] = max(
-            limit, by_participant.get(order.participant, float('-inf')))
-    leaders = sorted(((limit, participant) for participant, limit in by_participant.items()),
-                     reverse=True)[:2]
+    index = snapshot.evaluation_index
+    if index is not None:
+        leaders = index.customer_leaders[good, tile_id]
+    else:
+        by_participant = {}
+        for order, freight, limit in _customer_rows(snapshot, tile_id, good):
+            # Предел задаёт конкретная заявка покупателя, а не цена кандидата.
+            limit = order.price-freight
+            by_participant[order.participant] = max(
+                limit, by_participant.get(order.participant, float('-inf')))
+        leaders = sorted(((limit, participant) for participant, limit in by_participant.items()),
+                         reverse=True)[:2]
     return next((limit for limit, participant in leaders
                  if participant != candidate.investor_id and limit > 0), None)
 
@@ -461,7 +466,8 @@ def _spawn_snapshot(snapshot):
     if index is not None:
         mappings['evaluation_index'] = replace(index, **{
             name: dict(getattr(index, name)) for name in (
-                'history', 'customer_rows', 'demand_groups', 'offer_curves', 'supplier_economics')})
+                'history', 'customer_rows', 'customer_leaders', 'demand_groups', 'offer_curves',
+                'supplier_economics')})
     return replace(snapshot, **mappings)
 
 
@@ -474,7 +480,8 @@ def _init_evaluation_worker(snapshot):
     if index is not None:
         mappings['evaluation_index'] = replace(index, **{
             name: MappingProxyType(getattr(index, name)) for name in (
-                'history', 'customer_rows', 'demand_groups', 'offer_curves', 'supplier_economics')})
+                'history', 'customer_rows', 'customer_leaders', 'demand_groups', 'offer_curves',
+                'supplier_economics')})
     _WORKER_SNAPSHOT = replace(snapshot, **mappings)
 
 
@@ -563,6 +570,15 @@ def _build_evaluation_index(snapshot, required=None):
             sum(row.limit_value for row in rows)/requested if requested else None)
     customer_rows = {(good, tile): _customer_rows(snapshot, tile, good)
                      for good, tile in required.customer}
+    customer_leaders = {}
+    for key, rows in customer_rows.items():
+        by_participant = {}
+        for order, freight, limit in rows:
+            limit = order.price-freight
+            by_participant[order.participant] = max(
+                limit, by_participant.get(order.participant, float('-inf')))
+        customer_leaders[key] = tuple(sorted(
+            ((limit, participant) for participant, limit in by_participant.items()), reverse=True)[:2])
     demand_groups = {}
     for key, rows in customer_rows.items():
         grouped = {}
@@ -577,7 +593,8 @@ def _build_evaluation_index(snapshot, required=None):
     offer_curves = {(good, tile): _offers(snapshot, good, '', tile)
                     for good, tile in required.offers}
     partial = EvaluationIndex(MappingProxyType(history_values), MappingProxyType(customer_rows),
-        MappingProxyType(demand_groups), MappingProxyType(offer_curves), MappingProxyType({}))
+        MappingProxyType(customer_leaders), MappingProxyType(demand_groups),
+        MappingProxyType(offer_curves), MappingProxyType({}))
     indexed = replace(snapshot, evaluation_index=partial)
     economics = {}
     for good, firms in indexed.suppliers.items():
@@ -593,6 +610,47 @@ def _build_evaluation_index(snapshot, required=None):
             economics[firm.id] = SupplierEvaluation(cost, price, capacity,
                 viable and firm.funds > EPS)
     return replace(partial, supplier_economics=MappingProxyType(economics))
+
+
+def _required_route_pairs(goods, offer_rows, order_rows, candidates, supplier_rows,
+                          investor_rows, construction, recipes, recovery):
+    """Построить необходимые маршруты через уникальные площадки каждого товара."""
+    offer_tiles = {good: {offer.tile_id for offer in offer_rows[good]} for good in goods}
+    order_tiles = {good: {order.tile_id for order in order_rows[good]} for good in goods}
+    candidate_tiles = {good: set() for good in goods}
+    supplier_tiles = {good: {firm.tile_id for firm in supplier_rows[good]} for good in goods}
+    investor_tiles = set()
+    equipment_investors = {good: set() for good in goods}
+    route_pairs = set()
+    for candidate in candidates:
+        tile_id = _location(candidate)['tile_id']
+        investor_tile = investor_rows[candidate.investor_id].tile_id
+        candidate_tiles[candidate.good].add(tile_id)
+        investor_tiles.add(investor_tile)
+        route_pairs.add((investor_tile, tile_id))
+        for equipment, _ratio in recipes[candidate.good].equipment:
+            equipment_investors[equipment].add(investor_tile)
+    for good in goods:
+        route_pairs.update((source, target) for source in offer_tiles[good]
+                           for target in order_tiles[good])
+        route_pairs.update((source, target) for source in candidate_tiles[good]
+                           for target in order_tiles[good])
+        route_pairs.update((source, target) for source in offer_tiles[good]
+                           for target in candidate_tiles[good])
+        route_pairs.update((source, target) for source in supplier_tiles[good]
+                           for target in order_tiles[good])
+        route_pairs.update((source, target) for source in offer_tiles[good]
+                           for target in supplier_tiles[good])
+    for good, _quantity in construction:
+        route_pairs.update((source, target) for source in offer_tiles[good]
+                           for target in investor_tiles)
+    for good, targets in equipment_investors.items():
+        route_pairs.update((source, target) for source in offer_tiles[good] for target in targets)
+    recovery_sources = {source for rows in recovery.values() for _firm, source, _price in rows}
+    all_candidate_tiles = set().union(*candidate_tiles.values())
+    route_pairs.update((source, target) for source in recovery_sources
+                       for target in all_candidate_tiles)
+    return route_pairs
 
 
 def build_snapshot(engine, sells, allowed_goods=None, timings=None):
@@ -677,30 +735,8 @@ def build_snapshot(engine, sells, allowed_goods=None, timings=None):
         for firm, price in getattr(engine, '_recovery_quotes', {}).get(good, ()))
         for good in engine.goods}
 
-    route_pairs = set()
-    for good in engine.goods:
-        orders = order_rows[good]
-        offers = offer_rows[good]
-        for order in orders:
-            route_pairs.update((offer.tile_id, order.tile_id) for offer in offers)
-        for candidate in candidates:
-            if candidate.good == good:
-                tile = _location(candidate)['tile_id']
-                route_pairs.update((tile, order.tile_id) for order in orders)
-                route_pairs.update((offer.tile_id, tile) for offer in offers)
-        for supplier in supplier_rows[good]:
-            route_pairs.update((supplier.tile_id, order.tile_id) for order in orders)
-            route_pairs.update((offer.tile_id, supplier.tile_id) for offer in offers)
-    for candidate in candidates:
-        investor = investor_rows[candidate.investor_id]
-        tile = _location(candidate)['tile_id']
-        route_pairs.add((investor.tile_id, tile))
-        for good, _quantity in engine.cfg['construction'].items():
-            route_pairs.update((offer.tile_id, investor.tile_id) for offer in offer_rows[good])
-        for good, _ratio in recipes[candidate.good].equipment:
-            route_pairs.update((offer.tile_id, investor.tile_id) for offer in offer_rows[good])
-        for rows in recovery.values():
-            route_pairs.update((source, tile) for _firm, source, _price in rows)
+    route_pairs = _required_route_pairs(engine.goods, offer_rows, order_rows, candidates,
+        supplier_rows, investor_rows, engine.cfg['construction'].items(), recipes, recovery)
     distances = {}
     for source, target in sorted(route_pairs):
         distance, _path = engine.path(source, target)
