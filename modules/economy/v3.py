@@ -15,6 +15,19 @@ OWNER_CONSUMPTION = 'Личное потребление собственник�
 CONSUMPTION_PURPOSES = ('Базовые нужды', 'Дополнительные нужды', OWNER_CONSUMPTION)
 
 
+def project_finances(capacity, available, startup, material, delivery,
+                     unit, fixed_unit, equipment_capital, margin, expansion):
+    """Чистый расчёт финансирования кандидата после рыночных котировок."""
+    capacity = min(capacity, max(0, available-startup)
+                   / max(material+delivery+unit+equipment_capital, EPS))
+    working = capacity*equipment_capital
+    if not expansion:
+        working += max(startup, capacity*(unit+fixed_unit))
+    investment = capacity*(material+delivery)+working
+    profit = capacity*margin
+    return capacity, working, investment, profit
+
+
 class OfferView:
     """Ленивое представление единой книги без копирования её офферов."""
 
@@ -2940,18 +2953,15 @@ class Economy(EconomyServices):
                 for equipment, ratio in recipe.get('equipment', {}).items())
             available = self.free_cash(investor['id'])
             startup = 0 if expansion else self.cfg['startup_cash']
-            capacity = min(capacity, max(0, available-startup)/max(material+delivery+unit+equipment_capital, EPS))
+            capacity, working, investment, profit = project_finances(
+                capacity, available, startup, material, delivery, unit,
+                fixed_unit, equipment_capital, margin, bool(expansion))
             if capacity < self.cfg['minimum_capacity']:
                 if diagnostics is not None:
                     diagnostics.append(dict(investor=investor['id'], good=good,
                         province_id=pid, stage='funding_capacity', capacity=capacity,
                         minimum=self.cfg['minimum_capacity']))
                 continue
-            working = capacity*equipment_capital
-            if not expansion:
-                working += max(startup, capacity*(unit+fixed_unit))
-            investment = capacity*(material+delivery)+working
-            profit = capacity*margin
             self.profile(investor)
             horizon = self.cfg['investment_payback_months']*(0.5+investor['risk_tolerance'])
             if investment > available+EPS or profit*horizon < investment:
@@ -3088,9 +3098,11 @@ class Economy(EconomyServices):
                     else:
                         self.limit_project_capacity(project, sustainable_capacity)
                 feasible = True
+                available_inputs = {}
                 for input_good, ratio in self.goods[project['good']]['inputs'].items() if project else ():
                     required = project['capacity']*ratio
                     available = sum(sell['remaining'] for _, sell, _ in self.offers(a, input_good, sells))
+                    available_inputs[input_good] = available
                     free = available-self._investment_input_reserved[input_good]
                     if required > free+EPS:
                         feasible = False
@@ -3145,7 +3157,7 @@ class Economy(EconomyServices):
                 evidence = {}
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
                     required = project['capacity']*ratio
-                    available = sum(sell['remaining'] for _, sell, _ in self.offers(a, input_good, sells))
+                    available = available_inputs[input_good]
                     signal = self.market_signal(self.meta.get('market_history', []), a['state_id'],
                                                 project['location']['province_id'], input_good)
                     evidence[input_good] = dict(required=round(required, 6),
