@@ -3468,9 +3468,9 @@ class Economy(EconomyServices):
     def step(self, enterprise_planner=None, planning_mode='v3', investment_mode='v3', investment_workers=1):
         if planning_mode not in ('v3', 'lagged_batch'):
             raise ValueError('Неизвестный режим планирования: '+str(planning_mode))
-        if investment_mode not in ('v3', 'snapshot_batch'):
+        if investment_mode not in ('v3', 'snapshot_batch', 'async_snapshot_batch'):
             raise ValueError('Неизвестный инвестиционный режим: '+str(investment_mode))
-        if investment_mode == 'snapshot_batch' and planning_mode != 'v3':
+        if investment_mode in ('snapshot_batch', 'async_snapshot_batch') and planning_mode != 'v3':
             raise ValueError('snapshot_batch пока совместим только с планированием v3')
         if planning_mode == 'lagged_batch' and enterprise_planner is not None:
             raise ValueError('lagged_batch несовместим с enterprise_planner')
@@ -3533,6 +3533,10 @@ class Economy(EconomyServices):
             from shadow.investment_batch import run_snapshot_batch
             investment_timings = run_snapshot_batch(self, sells, workers=investment_workers)
             timings.update(investment_timings)
+            self.report['investment_mode'] = investment_mode
+        elif investment_mode == 'async_snapshot_batch':
+            from shadow.investment_batch import run_async_snapshot_batch
+            async_snapshot = run_async_snapshot_batch(self, sells)
             self.report['investment_mode'] = investment_mode
         else:
             self.project_requests(sells)
@@ -3668,6 +3672,9 @@ class Economy(EconomyServices):
             self.report['events'] = []
             for order in self.report['orders']:
                 order.pop('match_observation', None)
+        if investment_mode == 'async_snapshot_batch':
+            from shadow.investment_batch import schedule_async_investment
+            schedule_async_investment(self, async_snapshot)
         timings['report'] = time.perf_counter()-phase_started
         timings['wall'] = time.perf_counter()-started
         self.phase_timings = timings

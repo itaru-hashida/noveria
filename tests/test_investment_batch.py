@@ -1,6 +1,7 @@
 """Регрессии независимой инвестиционной оценки и последовательного commit."""
 import copy
 from collections import defaultdict
+from concurrent.futures import Future
 from dataclasses import replace
 from types import MappingProxyType
 
@@ -10,7 +11,7 @@ from core.db import WorldDB
 from core.events import EventBus
 from core.world_service import WorldService
 from loader import load_world
-from shadow.investment_batch import (OrderSnapshot, RequiredMarketKeys,
+from shadow.investment_batch import (AsyncInvestmentPlanner, OrderSnapshot, RequiredMarketKeys,
     _build_evaluation_index, _customer_limit, _required_market_keys, build_snapshot, commit,
     evaluate, evaluate_all)
 
@@ -213,6 +214,128 @@ def test_snapshot_batch_step_with_two_spawn_workers(tmp_path):
         engine.validate()
     finally:
         db.close()
+
+
+class ImmediateExecutor:
+    def submit(self, function, *args):
+        future = Future()
+        try:
+            future.set_result(function(*args))
+        except Exception as error:
+            future.set_exception(error)
+        return future
+
+
+class BlockingExecutor:
+    def __init__(self):
+        self.calls = []
+
+    def submit(self, function, *args):
+        future = Future()
+        self.calls.append((future, function, args))
+        return future
+
+    def complete(self, index=0):
+        future, function, args = self.calls[index]
+        future.set_result(function(*args))
+
+
+class FailingExecutor(ImmediateExecutor):
+    def submit(self, function, *args):
+        future = Future()
+        future.set_exception(RuntimeError('worker failure'))
+        return future
+
+
+def async_engine(tmp_path, executor, tag='world'):
+    directory = tmp_path/tag
+    directory.mkdir()
+    db = WorldDB(directory/'world.lbug')
+    load_world(db)
+    service = WorldService(db, EventBus())
+    engine = initialized_engine(service)
+    engine.meta['report_detail'] = 'none'
+    engine._async_investment_planner = AsyncInvestmentPlanner(executor=executor)
+    return db, engine
+
+
+def test_async_step_does_not_wait_for_slow_worker(tmp_path):
+    db, engine = async_engine(tmp_path, BlockingExecutor())
+    try:
+        engine.step(investment_mode='async_snapshot_batch')
+        report = engine.step(investment_mode='async_snapshot_batch')
+
+        assert report['investment_async'] == 'pending'
+        assert not engine._async_investment_planner._future.done()
+        assert all(report['invariants'].values())
+    finally:
+        db.close()
+
+
+def test_async_ready_result_is_committed_next_step(tmp_path):
+    db, engine = async_engine(tmp_path, ImmediateExecutor())
+    try:
+        engine.step(investment_mode='async_snapshot_batch')
+        report = engine.step(investment_mode='async_snapshot_batch')
+
+        assert report['investment_async'] == 'accepted'
+        assert any(row['outcome'] == 'started' for row in report['investment_decisions'])
+        assert all(report['invariants'].values())
+    finally:
+        db.close()
+
+
+def test_async_stale_snapshot_is_rejected_without_double_project(tmp_path):
+    executor = BlockingExecutor()
+    db, engine = async_engine(tmp_path, executor)
+    try:
+        engine.step(investment_mode='async_snapshot_batch')
+        engine.step(investment_mode='async_snapshot_batch')
+        executor.complete()
+        report = engine.step(investment_mode='async_snapshot_batch')
+
+        assert report['investment_async'] == 'stale'
+        assert not any(row['outcome'] == 'started' for row in report['investment_decisions'])
+        assert any(row['outcome'] == 'rejected' and row['reason'] == 'Устаревший инвестиционный снимок'
+                   for row in report['investment_decisions'])
+        assert all(report['invariants'].values())
+    finally:
+        db.close()
+
+
+def test_async_worker_failure_does_not_break_next_step(tmp_path):
+    db, engine = async_engine(tmp_path, FailingExecutor())
+    try:
+        engine.step(investment_mode='async_snapshot_batch')
+        report = engine.step(investment_mode='async_snapshot_batch')
+
+        assert report['investment_async'] == 'failed'
+        assert any(row.get('kind') == 'investment_async_error' for row in report['diagnostics'])
+        assert all(report['invariants'].values())
+    finally:
+        db.close()
+
+
+def test_twelve_months_async_snapshot_batch_reproducible_and_valid(tmp_path):
+    databases = []
+    engines = []
+    try:
+        for tag in ('async-a', 'async-b'):
+            db, engine = async_engine(tmp_path, ImmediateExecutor(), tag)
+            databases.append(db)
+            engines.append(engine)
+        for expected_month in range(1, 13):
+            reports = [engine.step(investment_mode='async_snapshot_batch') for engine in engines]
+            assert all(report['month'] == expected_month for report in reports)
+            assert all(report['investment_async'] == ('skipped' if expected_month == 1 else 'accepted')
+                       for report in reports)
+            assert engine_state(engines[0]) == engine_state(engines[1])
+            for engine, report in zip(engines, reports):
+                assert all(report['invariants'].values())
+                engine.validate()
+    finally:
+        for db in databases:
+            db.close()
 
 
 def test_twelve_months_snapshot_batch_reproducible_and_valid(tmp_path):

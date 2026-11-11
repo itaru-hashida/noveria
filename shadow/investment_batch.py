@@ -2,7 +2,7 @@
 import copy
 import multiprocessing
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 
@@ -482,6 +482,13 @@ def _evaluate_chunk(candidates):
     return tuple(evaluate(_WORKER_SNAPSHOT, candidate) for candidate in candidates)
 
 
+def _evaluate_snapshot_task(snapshot):
+    """Полностью обработать один снимок в постоянном worker."""
+    _init_evaluation_worker(snapshot)
+    candidates = tuple(sorted(_WORKER_SNAPSHOT.candidates, key=lambda row: row.key))
+    return _WORKER_SNAPSHOT.month, evaluate_all(_WORKER_SNAPSHOT, candidates)
+
+
 def evaluate_all(snapshot, candidates=None, workers=1):
     rows = snapshot.candidates if candidates is None else tuple(candidates)
     if workers < 1:
@@ -774,7 +781,7 @@ def _resume_queue(engine, sells):
     queue[:] = waiting
 
 
-def commit(engine, evaluations, sells, flow_balances=None):
+def commit(engine, evaluations, sells, flow_balances=None, stale=False):
     """Канонически применить оценки с повторной проверкой живых ограничений."""
     state = engine.build_investment_state()
     _set_build_caches(engine, state)
@@ -787,6 +794,9 @@ def commit(engine, evaluations, sells, flow_balances=None):
             if not evaluation.accepted:
                 continue
             candidate = evaluation.candidate
+            if stale:
+                _reject(engine, evaluation, 'Устаревший инвестиционный снимок')
+                continue
             account = engine.accounts[candidate.investor_id]
             if account.get('project'):
                 _reject(engine, evaluation, 'Владелец уже имеет проект после раннего commit')
@@ -859,6 +869,108 @@ def commit(engine, evaluations, sells, flow_balances=None):
                 **copy.deepcopy(project)))
     finally:
         _clear_build_caches(engine)
+
+
+class AsyncInvestmentPlanner:
+    """Один active future и не более одного свежего pending snapshot."""
+
+    def __init__(self, executor=None):
+        self.executor = executor or ProcessPoolExecutor(max_workers=1,
+            mp_context=multiprocessing.get_context('spawn'))
+        self._future = None
+        self._pending = None
+
+    def _start_pending(self):
+        if self._future is not None or self._pending is None:
+            return
+        snapshot, self._pending = self._pending, None
+        try:
+            self._future = self.executor.submit(_evaluate_snapshot_task, _spawn_snapshot(snapshot))
+        except Exception as error:
+            self._future = Future()
+            self._future.set_exception(error)
+
+    def submit(self, snapshot):
+        self._pending = snapshot
+        self._start_pending()
+
+    def poll(self, revision):
+        """Забрать только готовый результат; незавершённый worker не ждать."""
+        self._start_pending()
+        if self._future is None:
+            return ('pending' if self._pending is not None else 'skipped'), None, None
+        if not self._future.done():
+            return 'pending', None, None
+        future, self._future = self._future, None
+        try:
+            result_revision, evaluations = future.result()
+        except Exception as error:
+            self._start_pending()
+            return 'failed', None, f'{type(error).__name__}: {error}'
+        self._start_pending()
+        status = 'accepted' if result_revision == revision else 'stale'
+        return status, evaluations, None
+
+    def close(self):
+        self.executor.shutdown(wait=True)
+
+
+def _async_planner(engine):
+    planner = getattr(engine, '_async_investment_planner', None)
+    if planner is None:
+        planner = engine._async_investment_planner = AsyncInvestmentPlanner()
+    return planner
+
+
+def run_async_snapshot_batch(engine, sells):
+    """Применить готовый обзор прошлого месяца без ожидания worker."""
+    planner = _async_planner(engine)
+    status, evaluations, error = planner.poll(engine.meta['month']-1)
+    engine.report['investment_async'] = status
+    engine.report['investment_review'] = dict(mode='async', revision=engine.meta['month']-1)
+    if error is not None:
+        engine.report['diagnostics'].append(dict(kind='investment_async_error', error=error))
+    evaluations = evaluations or ()
+    best = {}
+    for evaluation in evaluations:
+        current = best.get(evaluation.candidate.investor_id)
+        if evaluation.accepted and (current is None or evaluation.score > current.score):
+            best[evaluation.candidate.investor_id] = evaluation
+    selected = tuple(best[key] for key in sorted(best))
+    for evaluation in selected:
+        project = evaluation.project
+        engine.report['investment_candidates'].append(dict(
+            state_id=engine.accounts[evaluation.candidate.investor_id]['state_id'],
+            good=project['good'], quantity=project['capacity'],
+            decision_id=project['project_id'], project_id=project['project_id'],
+            investor=evaluation.candidate.investor_id, province_id=project['location']['province_id']))
+    due = engine.meta['month'] % engine.cfg['investment_interval'] == 0
+    flow_balances = None
+    if due:
+        state_ids = sorted({a['state_id'] for a in engine.accounts.values() if a.get('state_id')})
+        flow_balances = engine.investment_flow_balances(state_ids)
+    commit(engine, selected, sells, flow_balances, stale=status == 'stale')
+    investors = [a for a in engine.accounts.values()
+        if a['kind'] in ('private', 'merchant', 'treasury', 'municipal') or a['kind'] == 'enterprise']
+    if evaluations:
+        engine.report['expansion_intents'] = engine.investment_expansion_intents(
+            engine.report['investment_candidates'], flow_balances)
+        engine.report['expansion_intent_diagnostics'] = engine.investment_expansion_diagnostics(
+            engine.report['expansion_intents'])
+        engine.report['investment_candidate_statuses'] = engine.investment_candidate_statuses(
+            engine.report['investment_candidates'], engine.report['expansion_intents'],
+            engine.report['expansion_intent_diagnostics'])
+        engine.report['investment_shadow_gate'] = engine.investment_shadow_gate(
+            engine.report['investment_candidate_statuses'], engine.report['investment_decisions'])
+        engine.report['investment_candidate_capacity_limits'] =             engine.investment_candidate_capacity_limits(
+                engine.report['investment_candidates'], flow_balances)
+    engine.project_material_requests(sells, due, investors)
+    return build_snapshot(engine, sells)
+
+
+def schedule_async_investment(engine, snapshot):
+    """После завершения месяца передать его независимый снимок в worker."""
+    _async_planner(engine).submit(snapshot)
 
 
 def run_snapshot_batch(engine, sells, workers=1):
