@@ -1,12 +1,15 @@
 """Регрессии независимой инвестиционной оценки и последовательного commit."""
 import copy
 from collections import defaultdict
+from dataclasses import replace
+from types import MappingProxyType
 
 from core.db import WorldDB
 from core.events import EventBus
 from core.world_service import WorldService
 from loader import load_world
-from shadow.investment_batch import build_snapshot, commit, evaluate, evaluate_all
+from shadow.investment_batch import (OrderSnapshot, _customer_limit, build_snapshot,
+    commit, evaluate, evaluate_all)
 
 
 def initialized_engine(service):
@@ -30,6 +33,29 @@ def prepared_snapshot(engine):
 def engine_state(engine):
     return (copy.deepcopy(engine.accounts), copy.deepcopy(engine.enterprises),
             copy.deepcopy(engine.meta), copy.deepcopy(engine.report), engine.rng.getstate())
+
+
+def test_customer_limit_uses_each_buy_order_price(service):
+    engine = initialized_engine(service)
+    snapshot, _sells = prepared_snapshot(engine)
+    candidate = snapshot.candidates[0]
+    good = candidate.good
+    source = dict(candidate.location)['tile_id']
+    orders = (
+        OrderSnapshot('buyer-cheap', 'tile-cheap', 10.0, 1.0, 100.0, True),
+        OrderSnapshot('buyer-expensive', 'tile-expensive', 20.0, 1.0, 100.0, True),
+    )
+    distances = dict(snapshot.distances)
+    distances[source, 'tile-cheap'] = 2.0
+    distances[source, 'tile-expensive'] = 2.0
+    isolated = replace(snapshot, orders=MappingProxyType({good: orders}),
+        distances=MappingProxyType(distances), evaluation_index=None)
+
+    result = _customer_limit(isolated, candidate, source, good)
+
+    freight = 2.0*snapshot.recipes[good].weight*snapshot.transport_rate
+    assert result == 20.0-freight
+    assert result != 10.0-freight
 
 
 def test_evaluate_is_pure_and_repeatable(service):

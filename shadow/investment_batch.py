@@ -1,7 +1,7 @@
 """Чистая рыночная оценка инвестиций и последовательный commit."""
 import copy
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 
 from modules.economy.support import EPS
@@ -100,6 +100,33 @@ class InvestmentCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class DemandGroupSnapshot:
+    participant: str
+    tile_id: str
+    order_price: float
+    limit: float
+    freight: float
+    orders: tuple
+
+
+@dataclass(frozen=True, slots=True)
+class SupplierEvaluation:
+    unit_cost: float
+    price: float
+    capacity: float
+    available: bool
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationIndex:
+    history: MappingProxyType
+    customer_rows: MappingProxyType
+    demand_groups: MappingProxyType
+    offer_curves: MappingProxyType
+    supplier_economics: MappingProxyType
+
+
+@dataclass(frozen=True, slots=True)
 class MarketInvestmentSnapshot:
     month: int
     minimum_capacity: float
@@ -127,6 +154,7 @@ class MarketInvestmentSnapshot:
     distances: MappingProxyType
     candidates: tuple
     investor_ids: tuple
+    evaluation_index: EvaluationIndex | None = None
 
 
 InvestmentSnapshot = MarketInvestmentSnapshot
@@ -153,6 +181,10 @@ def _freight(snapshot, source, target, good):
 
 
 def _offers(snapshot, good, buyer_id, buyer_tile):
+    index = snapshot.evaluation_index
+    if index is not None:
+        return [(price, offer) for price, offer in index.offer_curves.get((good, buyer_tile), ())
+                if offer.participant != buyer_id]
     result = []
     for offer in snapshot.offers.get(good, ()):
         if offer.participant == buyer_id or offer.remaining <= EPS:
@@ -165,6 +197,13 @@ def _offers(snapshot, good, buyer_id, buyer_tile):
 
 
 def _market_signal(snapshot, state_id, province_id, good):
+    index = snapshot.evaluation_index
+    if index is not None:
+        values = index.history.get((state_id, province_id, good))
+        if values is None:
+            return dict(volume=0.0, unmet=0.0, price=None, landed_price=None, limit_price=None)
+        volume, unmet, price, landed, limit = values
+        return dict(volume=volume, unmet=unmet, price=price, landed_price=landed, limit_price=limit)
     rows = [row for row in snapshot.history if row.state_id == state_id
             and row.province_id == province_id and row.good == good]
     if not rows:
@@ -222,6 +261,9 @@ def _unit_cost(snapshot, good, buyer_id, buyer_tile, state_id, province_id):
 
 
 def _customer_rows(snapshot, tile_id, good):
+    index = snapshot.evaluation_index
+    if index is not None:
+        return index.customer_rows.get((good, tile_id), ())
     rows = []
     for order in snapshot.orders.get(good, ()):
         freight = _freight(snapshot, tile_id, order.tile_id, good)
@@ -243,10 +285,11 @@ def _net_price(snapshot, good, price, tile_id):
     return price*(1-snapshot.consumption_tax*share)
 
 
-def _customer_limit(snapshot, candidate, tile_id, good, price):
+def _customer_limit(snapshot, candidate, tile_id, good):
     by_participant = {}
-    for order, freight, _limit in _customer_rows(snapshot, tile_id, good):
-        limit = price-freight
+    for order, freight, limit in _customer_rows(snapshot, tile_id, good):
+        # Предел задаёт конкретная заявка покупателя, а не цена кандидата.
+        limit = order.price-freight
         by_participant[order.participant] = max(
             limit, by_participant.get(order.participant, float('-inf')))
     leaders = sorted(((limit, participant) for participant, limit in by_participant.items()),
@@ -256,6 +299,17 @@ def _customer_limit(snapshot, candidate, tile_id, good, price):
 
 
 def _demand_groups(snapshot, good, tile_id, price):
+    index = snapshot.evaluation_index
+    if index is not None:
+        result = []
+        for group in index.demand_groups.get((good, tile_id), ()):
+            if group.limit+EPS < price:
+                continue
+            volume = sum(min(remaining, reserved/max(price+group.freight, EPS))
+                         for remaining, reserved in group.orders)
+            result.append((group.participant, group.tile_id, group.order_price,
+                           group.limit, group.freight, volume))
+        return tuple(result)
     grouped = {}
     for order, freight, limit in _customer_rows(snapshot, tile_id, good):
         if limit+EPS < price:
@@ -274,18 +328,10 @@ def _investment_demand(snapshot, candidate, price):
     tile_id = _location(candidate)['tile_id']
     suppliers = []
     for firm in snapshot.suppliers.get(good, ()):
-        cost = _unit_cost(snapshot, good, firm.id, firm.tile_id, firm.state_id, firm.province_id)
-        price_firm = firm.price
-        if _net_price(snapshot, good, price_firm, firm.tile_id)+EPS < cost:
-            price_firm = firm.production_price
-        if _net_price(snapshot, good, price_firm, firm.tile_id)+EPS < cost:
+        economics = snapshot.evaluation_index.supplier_economics[firm.id]
+        if not economics.available:
             continue
-        if firm.funds <= EPS:
-            continue
-        capacity = min(firm.capacity, firm.labor_available/snapshot.recipes[good].labor)
-        if firm.resource_limit is not None:
-            capacity = min(capacity, firm.resource_limit)
-        suppliers.append([firm.tile_id, price_firm, capacity])
+        suppliers.append([firm.tile_id, economics.price, economics.capacity])
     suppliers.extend([list(project) for project in snapshot.projects.get(good, ())])
     cheap = {offer.id: offer.remaining for offer in snapshot.offers.get(good, ())}
     residual = 0.0
@@ -338,7 +384,7 @@ def evaluate(snapshot, candidate):
         initial_price = firm.price
     else:
         initial_price = recipe.price
-    limit = _customer_limit(snapshot, candidate, tile_id, candidate.good, initial_price)
+    limit = _customer_limit(snapshot, candidate, tile_id, candidate.good)
     signal = _market_signal(snapshot, investor.state_id, candidate.province_id, candidate.good)
     price = limit if limit is not None else signal['price'] or recipe.price
     demand = _investment_demand(snapshot, candidate, price)
@@ -401,7 +447,60 @@ def evaluate_all(snapshot, candidates=None):
     return tuple(evaluate(snapshot, candidate) for candidate in rows)
 
 
-def build_snapshot(engine, sells, allowed_goods=None):
+def _build_evaluation_index(snapshot):
+    """Построить общие lookup-структуры один раз на инвестиционный снимок."""
+    history_values = {}
+    for key in {(row.state_id, row.province_id, row.good) for row in snapshot.history}:
+        rows = [row for row in snapshot.history
+                if (row.state_id, row.province_id, row.good) == key]
+        volume = sum(row.volume for row in rows)
+        requested = sum(row.requested for row in rows)
+        count = snapshot.history_months
+        history_values[key] = (volume/count,
+            sum(row.unmet for row in rows)/count,
+            sum(row.trade_gold for row in rows)/volume if volume else None,
+            sum(row.trade_gold+row.freight for row in rows)/volume if volume else None,
+            sum(row.limit_value for row in rows)/requested if requested else None)
+    source_tiles = {_location(candidate)['tile_id'] for candidate in snapshot.candidates}
+    source_tiles.update(firm.tile_id for rows in snapshot.suppliers.values() for firm in rows)
+    customer_rows = {(good, tile): _customer_rows(snapshot, tile, good)
+                     for good in snapshot.recipes for tile in source_tiles}
+    demand_groups = {}
+    for key, rows in customer_rows.items():
+        grouped = {}
+        for order, freight, limit in rows:
+            group_key = (order.participant, order.tile_id, order.price)
+            if group_key not in grouped:
+                grouped[group_key] = [order.participant, order.tile_id, order.price,
+                                      limit, freight, []]
+            grouped[group_key][5].append((order.remaining, order.reserved))
+        demand_groups[key] = tuple(DemandGroupSnapshot(*row[:5], tuple(row[5]))
+                                   for row in grouped.values())
+    buyer_tiles = {investor.tile_id for investor in snapshot.investors.values()}
+    buyer_tiles.update(source_tiles)
+    buyer_tiles.update(order.tile_id for rows in snapshot.orders.values() for order in rows)
+    offer_curves = {(good, tile): _offers(snapshot, good, '', tile)
+                    for good in snapshot.recipes for tile in buyer_tiles}
+    partial = EvaluationIndex(MappingProxyType(history_values), MappingProxyType(customer_rows),
+        MappingProxyType(demand_groups), MappingProxyType(offer_curves), MappingProxyType({}))
+    indexed = replace(snapshot, evaluation_index=partial)
+    economics = {}
+    for good, firms in indexed.suppliers.items():
+        for firm in firms:
+            cost = _unit_cost(indexed, good, firm.id, firm.tile_id, firm.state_id, firm.province_id)
+            price = firm.price
+            if _net_price(indexed, good, price, firm.tile_id)+EPS < cost:
+                price = firm.production_price
+            viable = _net_price(indexed, good, price, firm.tile_id)+EPS >= cost
+            capacity = min(firm.capacity, firm.labor_available/indexed.recipes[good].labor)
+            if firm.resource_limit is not None:
+                capacity = min(capacity, firm.resource_limit)
+            economics[firm.id] = SupplierEvaluation(cost, price, capacity,
+                viable and firm.funds > EPS)
+    return replace(partial, supplier_economics=MappingProxyType(economics))
+
+
+def build_snapshot(engine, sells, allowed_goods=None, timings=None):
     """Собрать общие данные; кандидатная экономика выполняется только в evaluate."""
     investors = sorted((a for a in engine.accounts.values()
         if a['kind'] in ('private', 'merchant', 'treasury', 'municipal')
@@ -511,7 +610,7 @@ def build_snapshot(engine, sells, allowed_goods=None):
         distance, _path = engine.path(source, target)
         if distance is not None:
             distances[source, target] = distance
-    return MarketInvestmentSnapshot(
+    snapshot = MarketInvestmentSnapshot(
         month=engine.meta['month'], minimum_capacity=engine.cfg['minimum_capacity'],
         investment_payback_months=engine.cfg['investment_payback_months'],
         project_stall_months=engine.cfg['project_stall_months'],
@@ -530,6 +629,12 @@ def build_snapshot(engine, sells, allowed_goods=None):
         resource_limits=MappingProxyType(dict(engine.resource_limits)),
         recovery_quotes=MappingProxyType(recovery), distances=MappingProxyType(distances),
         candidates=tuple(candidates), investor_ids=tuple(a['id'] for a in investors))
+    started = time.perf_counter()
+    snapshot = replace(snapshot, evaluation_index=_build_evaluation_index(snapshot))
+    if timings is not None:
+        timings['evaluation_index'] = time.perf_counter()-started
+    return snapshot
+
 
 def _set_build_caches(engine, state):
     engine._investment_state = state
@@ -680,8 +785,9 @@ def run_snapshot_batch(engine, sells):
         mode='full' if due else 'targeted' if should_evaluate else 'skipped',
         dirty_goods=sorted(dirty_goods), month=engine.meta['month'])
 
+    index_timings = {}
     started = time.perf_counter()
-    snapshot = build_snapshot(engine, sells, allowed_goods) if should_evaluate else None
+    snapshot = build_snapshot(engine, sells, allowed_goods, index_timings) if should_evaluate else None
     build_seconds = time.perf_counter()-started
     started = time.perf_counter()
     evaluations = evaluate_all(snapshot) if snapshot is not None else ()
@@ -725,4 +831,5 @@ def run_snapshot_batch(engine, sells):
                 engine.report['investment_candidates'], flow_balances)
     engine.project_material_requests(sells, due, investors)
     return dict(investment_snapshot_build=build_seconds,
+        investment_evaluation_index=index_timings.get('evaluation_index', 0.0),
         investment_evaluate_all=evaluate_seconds, investment_sequential_commit=commit_seconds)
