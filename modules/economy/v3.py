@@ -2190,13 +2190,17 @@ class Economy(EconomyServices):
             observation['stock_holders_after_match'] = self.physical_stock_summary(
                 buy['participant'], buy['good'])
 
-    def sell_orders(self):
+    def sell_orders(self, exclude=()):
         # Новый набор предложений начинается с каждого торгового прохода.
+        # exclude использует только lagged_batch, чтобы не продать склад фирмы
+        # одновременно старым sell_orders и её новым FirmPlan.
+        excluded = set(exclude) if exclude else None
         self.invalidate_market_books()
         result = defaultdict(list)
         for a in self.shuffled(self.accounts.values()):
             e = self.enterprises.get(a['id'])
-            if a['kind'] == 'household' or (e and e.get('suspended')):
+            if (excluded is not None and a['id'] in excluded) or a['kind'] == 'household' \
+                    or (e and e.get('suspended')):
                 continue
             for good in sorted(a['stock']):
                 quantity = self.free_stock(a['id'], good)
@@ -3457,7 +3461,11 @@ class Economy(EconomyServices):
             if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
                 self.input_requests(e, sells)
 
-    def step(self, enterprise_planner=None):
+    def step(self, enterprise_planner=None, planning_mode='v3'):
+        if planning_mode not in ('v3', 'lagged_batch'):
+            raise ValueError('Неизвестный режим планирования: '+str(planning_mode))
+        if planning_mode == 'lagged_batch' and enterprise_planner is not None:
+            raise ValueError('lagged_batch несовместим с enterprise_planner')
         started = time.perf_counter()
         timings = {}
         self.__dict__.pop('_planning_orders', None)
@@ -3486,21 +3494,38 @@ class Economy(EconomyServices):
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0,
                 equipment_wear={})
         self.update_prices()
-        self.prepare_recovery_quotes()
-        sells = self.sell_orders()
+        lagged_plans = None
+        lagged_firms = ()
+        if planning_mode == 'lagged_batch':
+            from shadow.lagged_batch import apply_plans, build_snapshot, plan_all
+            phase_started = time.perf_counter()
+            snapshot = build_snapshot(self)
+            lagged_plans = plan_all(snapshot)
+            lagged_firms = snapshot.eligible
+            timings['lagged_snapshot_planning'] = time.perf_counter()-phase_started
+            self.report['planning_mode'] = planning_mode
+        else:
+            self.prepare_recovery_quotes()
+        # В lagged_batch стартовые склады фирм публикуются их intents ровно один
+        # раз; заявки остальных участников и сам sell_orders не меняются.
+        sells = self.sell_orders(exclude=lagged_firms)
         households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')
         detail = self.report_detail()
         food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS and detail == 'deep' else None
         self.household_requests(households, self.cfg['basic_needs'], 'Базовые нужды', sells)
         self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
         self.owner_requests(sells)
-        self.recover_enterprises(sells)
+        if planning_mode != 'lagged_batch':
+            self.recover_enterprises(sells)
         self.public_project_requests(sells)
         # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
         self.project_requests(sells)
         timings['preparation'] = time.perf_counter()-started
         phase_started = time.perf_counter()
-        if enterprise_planner is None:
+        if planning_mode == 'lagged_batch':
+            apply_plans(self, lagged_plans, sells)
+            timings['lagged_apply'] = time.perf_counter()-phase_started
+        elif enterprise_planner is None:
             self.plan_enterprises(existing, sells)
         else:
             enterprise_planner(self, existing, sells)

@@ -342,8 +342,8 @@ class EconomyState:
     def commit_turn(self):
         self._undo = None
 
-    def step(self):
-        report = self.engine.step()
+    def step(self, planning_mode='v3'):
+        report = self.engine.step(planning_mode=planning_mode)
         self.month = self.engine.meta.get('month', 0)
         self.last_report = report
         if self.keep_reports:
