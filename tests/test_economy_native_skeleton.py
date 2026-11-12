@@ -23,13 +23,3 @@ def test_requested_native_mode_never_falls_back_to_v3(monkeypatch):
     engine = object.__new__(Economy)
     with pytest.raises(RuntimeError, match='не собрано'):
         engine.step(native_mode='cython')
-
-
-def test_native_skeleton_stops_before_state_mutation(monkeypatch):
-    import modules.economy.native as native
-
-    monkeypatch.setattr(native, 'load_serial_step', lambda: object())
-    engine = object.__new__(Economy)
-    with pytest.raises(NotImplementedError, match='ещё не согласован'):
-        engine.step(native_mode='cython')
-    assert not engine.__dict__

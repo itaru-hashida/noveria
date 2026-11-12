@@ -3470,11 +3470,9 @@ class Economy(EconomyServices):
         if native_mode not in ('off', 'cython'):
             raise ValueError('Неизвестный native-режим: '+str(native_mode))
         if native_mode == 'cython':
-            # До контрольной остановки 2 режим только проверяет доступность сборки.
-            # Останавливаемся до любой мутации состояния: молча выполнить V3 нельзя.
+            # Ошибка сборки возникает до мутации пролога; fallback на V3 запрещён.
             from .native import load_serial_step
             load_serial_step()
-            raise NotImplementedError('Cython-перенос игровой логики ещё не согласован')
         if planning_mode not in ('v3', 'lagged_batch'):
             raise ValueError('Неизвестный режим планирования: '+str(planning_mode))
         if investment_mode not in ('v3', 'snapshot_batch', 'async_snapshot_batch'):
@@ -3510,7 +3508,11 @@ class Economy(EconomyServices):
                 production_cost=0, input_limited=False, fixed_cost_due=0, fixed_cost_paid=0,
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0,
                 equipment_wear={})
-        self.update_prices()
+        if native_mode == 'cython':
+            from .native.update_prices_boundary import run_update_prices
+            run_update_prices(self)
+        else:
+            self.update_prices()
         lagged_plans = None
         lagged_firms = ()
         if planning_mode == 'lagged_batch':
