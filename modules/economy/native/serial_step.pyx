@@ -22,12 +22,25 @@ cdef int _decimal_digits(int value) noexcept nogil:
 
 
 cdef bint _order_id_less(int left, int right) noexcept nogil:
-    """Сравнение числовых suffix при одинаковом month-prefix заявки."""
+    """Лексикографическое сравнение decimal suffix без создания строк."""
     cdef int left_digits = _decimal_digits(left)
     cdef int right_digits = _decimal_digits(right)
-    if left_digits != right_digits:
-        return left_digits < right_digits
-    return left < right
+    cdef int left_divisor = 1, right_divisor = 1, i
+    cdef int left_digit, right_digit
+    for i in range(left_digits-1):
+        left_divisor *= 10
+    for i in range(right_digits-1):
+        right_divisor *= 10
+    while left_divisor and right_divisor:
+        left_digit = left//left_divisor
+        right_digit = right//right_divisor
+        if left_digit != right_digit:
+            return left_digit < right_digit
+        left %= left_divisor
+        right %= right_divisor
+        left_divisor //= 10
+        right_divisor //= 10
+    return left_digits < right_digits
 
 
 cdef double _household_ceiling(
@@ -40,7 +53,8 @@ cdef double _household_ceiling(
         double[::1] market_landed, int history_len, double default_price,
         int[::1] quote_count, int[:, ::1] quote_enterprise,
         double[:, ::1] quote_price, int[::1] enterprise_tile,
-        int[::1] offer_index, double[::1] offer_landed, double eps) noexcept nogil:
+        int[::1] offer_index, double[::1] offer_landed, double eps,
+        int buyer_enterprise, int buyer_account, unsigned char[::1] sell_active) noexcept nogil:
     """Тот же quoted_cost ceiling: offers, market signal и recovery fallback."""
     cdef int i, j, position, count = 0
     cdef double distance, landed, left = quantity, q, ceiling = 0.0
@@ -48,7 +62,7 @@ cdef double _household_ceiling(
     cdef double volume_hi = 0.0, volume_lo = 0.0
     cdef double landed_hi = 0.0, landed_lo = 0.0, item, next_hi
     for i in range(sell_count):
-        if sell_good[i] != good:
+        if sell_good[i] != good or not sell_active[i] or sell_account[i] == buyer_account:
             continue
         distance = distances[account_tile[sell_account[i]], buyer_tile]
         if distance != distance:
@@ -99,6 +113,8 @@ cdef double _household_ceiling(
         minimum_quote = 0.0
         j = 0
         for i in range(quote_count[good]):
+            if quote_enterprise[good, i] == buyer_enterprise:
+                continue
             distance = distances[enterprise_tile[quote_enterprise[good, i]], buyer_tile]
             if distance != distance:
                 continue
@@ -401,6 +417,7 @@ def sell_orders(dict data, object rng):
     cdef double[::1] output_price = data['sell_order_price']
     cdef int[::1] output_index = data['sell_order_index']
     cdef int[::1] output_seq = data['sell_execution_seq']
+    cdef int[::1] market_version_work = data['recovery_market_version_work']
     cdef double input_buffer = data['input_buffer']
     cdef double eps = data['eps']
     cdef int initial_order_count = data['initial_order_count']
@@ -453,6 +470,7 @@ def sell_orders(dict data, object rng):
                 output_price[count] = price
                 output_index[count] = initial_order_count+count
                 output_seq[count] = count
+                market_version_work[good] += 1
                 count += 1
     data['sell_order_count'] = count
     return count
@@ -491,6 +509,7 @@ def household_requests(dict data, object rng):
     cdef double[::1] sell_quantity = data['sell_order_quantity']
     cdef double[::1] sell_price = data['sell_order_price']
     cdef int[::1] sell_order_index = data['sell_order_index']
+    cdef unsigned char[::1] sell_active = data['sell_active']
     cdef int[::1] account_tile = data['account_tile']
     cdef int[::1] account_state = data['account_state']
     cdef int[::1] account_province = data['account_province']
@@ -513,6 +532,16 @@ def household_requests(dict data, object rng):
     cdef int history_len = data['market_history_len']
     cdef int sell_count = data['sell_order_count']
     cdef int initial_order_count = data['initial_order_count']
+    cdef int[::1] demand_good = data['demand_order_good']
+    cdef int[::1] demand_participant = data['demand_order_participant']
+    cdef int[::1] demand_tile = data['demand_order_tile']
+    cdef double[::1] demand_price = data['demand_order_price']
+    cdef double[::1] demand_remaining = data['demand_order_remaining']
+    cdef double[::1] demand_reserved = data['demand_order_reserved']
+    cdef unsigned char[::1] demand_active = data['demand_order_active']
+    cdef unsigned char[::1] demand_final = data['demand_order_final']
+    cdef unsigned char[::1] demand_construction = data['demand_order_construction']
+    cdef int demand_count = data['demand_order_count']
     cdef bint budget_revision = data['basic_budget_revision']
     cdef Py_ssize_t household_count = households.shape[0]
     cdef Py_ssize_t basic_count = basic_good.shape[0]
@@ -540,7 +569,7 @@ def household_requests(dict data, object rng):
                     sell_order_index, account_tile, distances, good_weight, transport_rate,
                     market_state, market_province, market_good, market_volume, market_landed,
                     history_len, default_price[good], quote_count, quote_enterprise,
-                    quote_price, enterprise_tile, offer_index, offer_landed, eps)
+                    quote_price, enterprise_tile, offer_index, offer_landed, eps, -1, account, sell_active)
                 sort_good[i] = good
             if budget_revision:
                 for i in range(1, basic_count):
@@ -579,6 +608,16 @@ def household_requests(dict data, object rng):
                         output_order_reserved[request_count] = quantity*price
                         output_order_index[request_count] = initial_order_count+sell_count+order_count
                         output_seq[request_count] = sell_count+order_count
+                        demand_good[demand_count] = good
+                        demand_participant[demand_count] = account
+                        demand_tile[demand_count] = account_tile[account]
+                        demand_price[demand_count] = price
+                        demand_remaining[demand_count] = quantity
+                        demand_reserved[demand_count] = quantity*price
+                        demand_active[demand_count] = True
+                        demand_final[demand_count] = True
+                        demand_construction[demand_count] = False
+                        demand_count += 1
                         order_count += 1
                     request_count += 1
             else:
@@ -618,6 +657,16 @@ def household_requests(dict data, object rng):
                         output_order_reserved[request_count] = quantity*price
                         output_order_index[request_count] = initial_order_count+sell_count+order_count
                         output_seq[request_count] = sell_count+order_count
+                        demand_good[demand_count] = good
+                        demand_participant[demand_count] = account
+                        demand_tile[demand_count] = account_tile[account]
+                        demand_price[demand_count] = price
+                        demand_remaining[demand_count] = quantity
+                        demand_reserved[demand_count] = quantity*price
+                        demand_active[demand_count] = True
+                        demand_final[demand_count] = True
+                        demand_construction[demand_count] = False
+                        demand_count += 1
                         order_count += 1
                     request_count += 1
 
@@ -636,7 +685,7 @@ def household_requests(dict data, object rng):
                     account_tile, distances, good_weight, transport_rate, market_state,
                     market_province, market_good, market_volume, market_landed, history_len,
                     default_price[good], quote_count, quote_enterprise, quote_price,
-                    enterprise_tile, offer_index, offer_landed, eps)
+                    enterprise_tile, offer_index, offer_landed, eps, -1, account, sell_active)
                 ceilings[account, good] = price
                 item = missing*price
                 next_hi = total_hi+item
@@ -670,8 +719,19 @@ def household_requests(dict data, object rng):
                     output_order_reserved[request_count] = quantity*price
                     output_order_index[request_count] = initial_order_count+sell_count+order_count
                     output_seq[request_count] = sell_count+order_count
+                    demand_good[demand_count] = good
+                    demand_participant[demand_count] = account
+                    demand_tile[demand_count] = account_tile[account]
+                    demand_price[demand_count] = price
+                    demand_remaining[demand_count] = quantity
+                    demand_reserved[demand_count] = quantity*price
+                    demand_active[demand_count] = True
+                    demand_final[demand_count] = True
+                    demand_construction[demand_count] = False
+                    demand_count += 1
                     order_count += 1
                 request_count += 1
+    data['demand_order_count'] = demand_count
     data['household_request_count'] = request_count
     data['household_order_count_created'] = order_count
     return request_count
@@ -721,15 +781,19 @@ def owner_requests(dict data, object rng):
     cdef double[::1] construction_ratio = data['construction_ratio']
     cdef int[::1] demand_good = data['demand_order_good']
     cdef int[::1] demand_participant = data['demand_order_participant']
+    cdef int[::1] demand_tile = data['demand_order_tile']
+    cdef double[::1] demand_price = data['demand_order_price']
     cdef double[::1] demand_remaining = data['demand_order_remaining']
     cdef double[::1] demand_reserved = data['demand_order_reserved']
     cdef unsigned char[::1] demand_active = data['demand_order_active']
     cdef unsigned char[::1] demand_construction = data['demand_order_construction']
+    cdef unsigned char[::1] demand_final = data['demand_order_final']
     cdef double[::1] sell_price = data['sell_order_price']
     cdef double[::1] sell_quantity = data['sell_order_quantity']
     cdef int[::1] sell_good = data['sell_order_good']
     cdef int[::1] sell_account = data['sell_order_account']
     cdef int[::1] sell_index = data['sell_order_index']
+    cdef unsigned char[::1] sell_active = data['sell_active']
     cdef int[::1] account_tile = data['account_tile']
     cdef int[::1] account_state = data['account_state']
     cdef int[::1] account_province = data['account_province']
@@ -765,6 +829,7 @@ def owner_requests(dict data, object rng):
     cdef int history_len = data['market_history_len']
     cdef int sell_count = data['sell_order_count']
     cdef int next_order = data['initial_order_count']+sell_count+data['household_order_count_created']
+    cdef int demand_count = data['demand_order_count']
     cdef int i, j, k, account, good, request = 0
     cdef double project, available, budget, share, reference, quantity, ceiling, distance
     cdef double ordered, missing, item, next_hi, weight_hi, weight_lo
@@ -811,7 +876,7 @@ def owner_requests(dict data, object rng):
                         account_tile, distances, weight, transport_rate, market_state,
                         market_province, market_good, market_volume, market_landed, history_len,
                         default_price[good], quote_count, quote_enterprise, quote_price,
-                        enterprise_tile, offer_index, offer_landed, eps)
+                        enterprise_tile, offer_index, offer_landed, eps, -1, account, sell_active)
                     project += missing*ceiling
             available = max(0.0, balance[account]-reserved[account]-max(protected[account], project))
             budget = rate*available
@@ -845,7 +910,7 @@ def owner_requests(dict data, object rng):
                     account_tile, distances, weight, transport_rate, market_state,
                     market_province, market_good, market_volume, market_landed, history_len,
                     default_price[good], quote_count, quote_enterprise, quote_price,
-                    enterprise_tile, offer_index, offer_landed, eps)
+                    enterprise_tile, offer_index, offer_landed, eps, -1, account, sell_active)
                 output_good[request] = good
                 quantity = min(share/ceiling,
                     max(0.0, balance[account]-reserved[account]-protected[account])/ceiling)
@@ -856,8 +921,19 @@ def owner_requests(dict data, object rng):
                     output_index[request] = next_order
                     output_seq[request] = request
                     reserved[account] += quantity*ceiling
+                    demand_good[demand_count] = good
+                    demand_participant[demand_count] = account
+                    demand_tile[demand_count] = account_tile[account]
+                    demand_price[demand_count] = ceiling
+                    demand_remaining[demand_count] = quantity
+                    demand_reserved[demand_count] = quantity*ceiling
+                    demand_active[demand_count] = True
+                    demand_final[demand_count] = True
+                    demand_construction[demand_count] = False
+                    demand_count += 1
                     next_order += 1
                 request += 1
+    data['demand_order_count'] = demand_count
     data['owner_request_count'] = request
     return request
 
@@ -881,3 +957,463 @@ def owner_preparation(dict data, object rng):
     """Шесть последовательных фаз до recover_enterprises."""
     household_preparation(data, rng)
     owner_requests(data, rng)
+
+
+cdef double _reference_price(int good, int buyer_account, int buyer_tile, int state, int province,
+        int sell_count, int[::1] sell_good, int[::1] sell_account,
+        double[::1] sell_price, unsigned char[::1] sell_active,
+        int[::1] account_tile, double[:, ::1] distances, double[::1] weight,
+        double transport_rate, int[::1] market_state, int[::1] market_province,
+        int[::1] market_good, double[::1] market_volume, double[::1] market_landed,
+        double default_price) noexcept nogil:
+    cdef int i
+    cdef double result = 0.0, distance, landed
+    for i in range(sell_count):
+        if sell_good[i] != good or not sell_active[i] or sell_account[i] == buyer_account:
+            continue
+        distance = distances[account_tile[sell_account[i]], buyer_tile]
+        if distance != distance:
+            continue
+        landed = sell_price[i]+distance*weight[good]*transport_rate
+        if result <= 0.0 or landed < result:
+            result = landed
+    if result > 0.0:
+        return result
+    return _market_reference(good, state, province, market_state, market_province,
+        market_good, market_volume, market_landed, default_price)
+
+
+cdef double _reachable_demand(int enterprise, int account, int good, int tile, double price,
+        int demand_count, int[::1] order_good, int[::1] order_participant,
+        int[::1] order_tile, double[::1] order_price, double[::1] order_remaining,
+        double[::1] order_reserved, unsigned char[::1] order_active,
+        int sell_count, int[::1] sell_good, int[::1] sell_account,
+        double[::1] sell_quantity, double[::1] sell_price, int[::1] sell_order_index,
+        unsigned char[::1] sell_active, double[::1] sell_remaining,
+        int[::1] account_tile, double[:, ::1] distances, double[::1] weight,
+        double transport_rate, int[::1] group_participant, int[::1] group_tile,
+        double[::1] group_price, double[::1] group_limit, double[::1] group_freight,
+        double[::1] group_volume, int[::1] offer_index, double[::1] offer_landed,
+        double eps) noexcept nogil:
+    cdef int i, j, g = 0, position, count
+    cdef int participant, buyer_tile
+    cdef double freight, limit, volume, distance, landed, covered, demand = 0.0
+    for i in range(demand_count):
+        if (order_good[i] != good or not order_active[i] or order_remaining[i] <= eps
+                or order_participant[i] == account):
+            continue
+        distance = distances[tile, order_tile[i]]
+        if distance != distance:
+            continue
+        freight = distance*weight[good]*transport_rate
+        limit = order_price[i]-freight
+        if limit+eps < price:
+            continue
+        participant = order_participant[i]
+        buyer_tile = order_tile[i]
+        for j in range(g):
+            if (group_participant[j] == participant and group_tile[j] == buyer_tile
+                    and group_price[j] == order_price[i]):
+                break
+        else:
+            j = g
+            group_participant[j] = participant
+            group_tile[j] = buyer_tile
+            group_price[j] = order_price[i]
+            group_limit[j] = limit
+            group_freight[j] = freight
+            group_volume[j] = 0.0
+            g += 1
+        group_volume[j] += min(order_remaining[i], order_reserved[i]/max(price+freight, eps))
+    for i in range(sell_count):
+        sell_remaining[i] = sell_quantity[i]
+    for i in range(g):
+        count = 0
+        for j in range(sell_count):
+            if sell_good[j] != good or not sell_active[j]:
+                continue
+            distance = distances[account_tile[sell_account[j]], group_tile[i]]
+            if distance != distance:
+                continue
+            landed = sell_price[j]+distance*weight[good]*transport_rate
+            position = count
+            while position > 0:
+                if (offer_landed[position-1] < landed
+                        or (offer_landed[position-1] == landed
+                            and not _order_id_less(sell_order_index[j],
+                                                   sell_order_index[offer_index[position-1]]))):
+                    break
+                offer_index[position] = offer_index[position-1]
+                offer_landed[position] = offer_landed[position-1]
+                position -= 1
+            offer_index[position] = j
+            offer_landed[position] = landed
+            count += 1
+        volume = group_volume[i]
+        landed = price+group_freight[i]
+        for j in range(count):
+            if offer_landed[j] > group_price[i]+eps or offer_landed[j] >= landed-eps:
+                break
+            if sell_account[offer_index[j]] == account:
+                continue
+            covered = min(volume, sell_remaining[offer_index[j]])
+            volume -= covered
+            sell_remaining[offer_index[j]] -= covered
+        demand += volume
+    return demand
+
+
+def recover_enterprises(dict data, object rng):
+    """Прогноз, финансирование, reopen и отмены в исходном порядке фирм."""
+    cdef int enterprise_count = data['enterprise_good'].shape[0]
+    cdef list shuffled = list(range(enterprise_count))
+    rng.shuffle(shuffled)
+    cdef int[::1] recovery_order = data['enterprise_recovery_order']
+    cdef int i
+    for i in range(enterprise_count):
+        recovery_order[i] = shuffled[i]
+    cdef int[::1] enterprise_good = data['enterprise_good']
+    cdef int[::1] enterprise_tile = data['enterprise_tile']
+    cdef int[::1] enterprise_owner = data['enterprise_owner']
+    cdef int[::1] enterprise_account = data['enterprise_account']
+    cdef double[::1] enterprise_price = data['enterprise_price']
+    cdef double[::1] production_price = data['recovery_production_price']
+    cdef double[::1] capacity = data['enterprise_capacity']
+    cdef double[::1] previous_output = data['enterprise_previous_output']
+    cdef double[::1] sales_forecast = data['enterprise_sales_forecast']
+    cdef double[::1] sold_now = data['enterprise_sold_now']
+    cdef int[::1] history_count = data['enterprise_history_count']
+    cdef double[:, ::1] history_sold = data['enterprise_history_sold']
+    cdef unsigned char[::1] suspended = data['enterprise_suspended']
+    cdef unsigned char[::1] closed = data['enterprise_closed']
+    cdef int[::1] available_from = data['enterprise_available_from']
+    cdef double[:, ::1] stock = data['account_stock']
+    cdef double[:, ::1] stock_reserved = data['account_stock_reserved']
+    cdef double[:, ::1] locked = data['account_locked']
+    cdef double[::1] balance = data['account_balance']
+    cdef double[::1] money_reserved = data['account_money_reserved']
+    cdef double[::1] protected = data['account_protected']
+    cdef int[::1] input_offset = data['recovery_input_offset']
+    cdef int[::1] input_good = data['recovery_input_good']
+    cdef double[::1] input_value = data['recovery_input_value']
+    cdef int[::1] wear_offset = data['recovery_wear_offset']
+    cdef int[::1] wear_good = data['recovery_wear_good']
+    cdef double[::1] wear_value = data['recovery_wear_value']
+    cdef int[::1] equipment_offset = data['recovery_equipment_offset']
+    cdef int[::1] equipment_good = data['recovery_equipment_good']
+    cdef double[::1] equipment_value = data['recovery_equipment_value']
+    cdef double[::1] labor = data['good_labor']
+    cdef double[::1] default_price = data['good_default_price']
+    cdef double[::1] weight = data['good_weight']
+    cdef unsigned char[::1] consumer = data['good_consumer']
+    cdef double[:, ::1] distances = data['distances']
+    cdef int[::1] account_tile = data['account_tile']
+    cdef int[::1] account_state = data['account_state']
+    cdef int[::1] account_province = data['account_province']
+    cdef int[::1] market_state = data['market_state']
+    cdef int[::1] market_province = data['market_province']
+    cdef int[::1] market_good = data['market_good']
+    cdef double[::1] market_volume = data['market_volume']
+    cdef double[::1] market_landed = data['market_landed_component']
+    cdef int sell_count = data['sell_order_count']
+    cdef int[::1] sell_good = data['sell_order_good']
+    cdef int[::1] sell_account = data['sell_order_account']
+    cdef double[::1] sell_quantity = data['sell_order_quantity']
+    cdef double[::1] sell_price = data['sell_order_price']
+    cdef int[::1] sell_index = data['sell_order_index']
+    cdef unsigned char[::1] sell_active = data['sell_active']
+    cdef double[::1] sell_remaining = data['sell_remaining']
+    cdef int demand_count = data['demand_order_count']
+    cdef int[::1] demand_good = data['demand_order_good']
+    cdef int[::1] demand_participant = data['demand_order_participant']
+    cdef int[::1] demand_tile = data['demand_order_tile']
+    cdef double[::1] demand_price = data['demand_order_price']
+    cdef double[::1] demand_remaining = data['demand_order_remaining']
+    cdef double[::1] demand_reserved = data['demand_order_reserved']
+    cdef unsigned char[::1] demand_active = data['demand_order_active']
+    cdef unsigned char[::1] demand_final = data['demand_order_final']
+    cdef unsigned char[::1] demand_construction = data['demand_order_construction']
+    cdef int[::1] group_participant = data['demand_group_participant']
+    cdef int[::1] group_tile = data['demand_group_tile']
+    cdef double[::1] group_price = data['demand_group_price']
+    cdef double[::1] group_limit = data['demand_group_limit']
+    cdef double[::1] group_freight = data['demand_group_freight']
+    cdef double[::1] group_volume = data['demand_group_volume']
+    cdef int[::1] offer_index = data['household_offer_index']
+    cdef double[::1] offer_landed = data['household_offer_landed']
+    cdef int[::1] quote_count = data['recovery_quote_count']
+    cdef int[:, ::1] quote_enterprise = data['recovery_quote_enterprise']
+    cdef double[:, ::1] quote_price = data['recovery_quote_price']
+    cdef double[::1] project_capacity = data['project_capacity']
+    cdef double[::1] project_working = data['project_working']
+    cdef double[::1] project_delivery = data['project_delivery']
+    cdef int[::1] project_tile = data['project_tile']
+    cdef int[::1] construction_good = data['construction_good']
+    cdef double[::1] construction_ratio = data['construction_ratio']
+    cdef int[::1] output_enterprise = data['recovery_enterprise']
+    cdef double[::1] output_transfer = data['recovery_transfer']
+    cdef double[::1] output_hold = data['recovery_hold']
+    cdef unsigned char[::1] output_reopened = data['recovery_reopened']
+    cdef int[:, ::1] output_cancel = data['recovery_cancel_sell']
+    cdef int[::1] output_cancel_count = data['recovery_cancel_count']
+    cdef double[::1] debug_target = data['recovery_debug_target']
+    cdef double[::1] debug_demand = data['recovery_debug_demand']
+    cdef double[::1] debug_margin = data['recovery_debug_margin']
+    cdef double[::1] debug_required = data['recovery_debug_required']
+    cdef double[::1] debug_forecast = data['recovery_debug_forecast']
+    cdef double[::1] debug_expected = data['recovery_debug_expected']
+    cdef unsigned char[::1] stock_cache_set = data['recovery_stock_cache_set']
+    cdef int[:, ::1] outlook_market_version = data['recovery_market_version']
+    cdef int[::1] market_version_work = data['recovery_market_version_work']
+    cdef double[::1] outlook_cost = data['recovery_expected_cost']
+    cdef double[::1] outlook_price = data['recovery_expected_price']
+    cdef double[::1] outlook_planned_price = data['recovery_planned_price']
+    cdef double[::1] outlook_fixed = data['recovery_fixed_cost']
+    cdef double[::1] outlook_fixed_unit = data['recovery_fixed_unit']
+    cdef int[::1] outlook_limit = data['recovery_production_limit']
+    cdef unsigned char[::1] outlook_valid = data['recovery_outlook_valid']
+    cdef double wage = data['wage'], tax = data['consumption_tax']
+    cdef double transport_rate = data['transport_rate'], eps = data['eps']
+    cdef double overhead_rate = data['enterprise_overhead_rate']
+    cdef double overstock = data['output_overstock_factor']
+    cdef double decline = data['output_decline_rate']
+    cdef int stock_revision = data['stock_planning_revision']
+    cdef int month = data['current_month'], history_len = data['market_history_len']
+    cdef int j, k, e, account, owner, good, input_g, cancel_count, out = 0
+    cdef double cost, raw_hi, raw_lo, wear_hi, wear_lo, item, next_hi
+    cdef double reference, base_net, quote_net, price, quantity, final_quantity
+    cdef double landed, volume, share, own, demand, stock_demand, forecast, offered, average
+    cdef double expected, projected, target, previous, fixed, margin, required
+    cdef double missing, free, project, available, amount, hold, distance, ordered
+    cdef double weight_hi, weight_lo, limit
+    with nogil:
+        for i in range(enterprise_count):
+            e = recovery_order[i]
+            if suspended[e] or available_from[e] > month:
+                continue
+            account = enterprise_account[e]
+            good = enterprise_good[e]
+            outlook_valid[e] = True
+            for j in range(market_version_work.shape[0]):
+                outlook_market_version[e, j] = market_version_work[j]
+            raw_hi = 0.0; raw_lo = 0.0; wear_hi = 0.0; wear_lo = 0.0
+            for k in range(input_offset[good], input_offset[good+1]):
+                input_g = input_good[k]
+                reference = _reference_price(input_g, account, enterprise_tile[e],
+                    account_state[account], account_province[account], sell_count,
+                    sell_good, sell_account, sell_price, sell_active, account_tile,
+                    distances, weight, transport_rate, market_state, market_province,
+                    market_good, market_volume, market_landed, default_price[input_g])
+                item = input_value[k]*reference
+                next_hi = raw_hi+item
+                if abs(raw_hi) >= abs(item): raw_lo += (raw_hi-next_hi)+item
+                else: raw_lo += (item-next_hi)+raw_hi
+                raw_hi = next_hi
+            for k in range(wear_offset[good], wear_offset[good+1]):
+                input_g = wear_good[k]
+                reference = _reference_price(input_g, account, enterprise_tile[e],
+                    account_state[account], account_province[account], sell_count,
+                    sell_good, sell_account, sell_price, sell_active, account_tile,
+                    distances, weight, transport_rate, market_state, market_province,
+                    market_good, market_volume, market_landed, default_price[input_g])
+                item = wear_value[k]*reference
+                next_hi = wear_hi+item
+                if abs(wear_hi) >= abs(item): wear_lo += (wear_hi-next_hi)+item
+                else: wear_lo += (item-next_hi)+wear_hi
+                wear_hi = next_hi
+            cost = labor[good]*wage+(raw_hi+raw_lo)+(wear_hi+wear_lo)
+            quantity = 0.0; final_quantity = 0.0
+            for j in range(demand_count):
+                if (demand_good[j] != good or not demand_active[j]
+                        or demand_remaining[j] <= eps or demand_participant[j] == account):
+                    continue
+                distance = distances[enterprise_tile[e], demand_tile[j]]
+                if distance != distance: continue
+                limit = demand_price[j]-distance*weight[good]*transport_rate
+                if limit+eps < enterprise_price[e]: continue
+                landed = enterprise_price[e]+(demand_price[j]-limit)
+                volume = min(demand_remaining[j], demand_reserved[j]/max(landed, eps))
+                quantity += volume
+                if demand_final[j]: final_quantity += volume
+            share = final_quantity/quantity if quantity > eps else (1.0 if consumer[good] else 0.0)
+            base_net = enterprise_price[e]*(1-tax*share)
+            price = enterprise_price[e] if base_net+eps >= cost else production_price[e]
+            if price == enterprise_price[e]:
+                quote_net = base_net
+            else:
+                quantity = 0.0; final_quantity = 0.0
+                for j in range(demand_count):
+                    if (demand_good[j] != good or not demand_active[j]
+                            or demand_remaining[j] <= eps or demand_participant[j] == account):
+                        continue
+                    distance = distances[enterprise_tile[e], demand_tile[j]]
+                    if distance != distance: continue
+                    limit = demand_price[j]-distance*weight[good]*transport_rate
+                    if limit+eps < price: continue
+                    landed = price+(demand_price[j]-limit)
+                    volume = min(demand_remaining[j], demand_reserved[j]/max(landed, eps))
+                    quantity += volume
+                    if demand_final[j]: final_quantity += volume
+                share = final_quantity/quantity if quantity > eps else (1.0 if consumer[good] else 0.0)
+                quote_net = price*(1-tax*share)
+            if history_count[e]:
+                raw_hi = 0.0; raw_lo = 0.0
+                for k in range(history_count[e]):
+                    item = history_sold[e, k]
+                    next_hi = raw_hi+item
+                    if abs(raw_hi) >= abs(item): raw_lo += (raw_hi-next_hi)+item
+                    else: raw_lo += (item-next_hi)+raw_hi
+                    raw_hi = next_hi
+                own = (raw_hi+raw_lo)/history_count[e]
+            else:
+                own = sales_forecast[e]
+            demand = _reachable_demand(e, account, good, enterprise_tile[e], price,
+                demand_count, demand_good, demand_participant, demand_tile, demand_price,
+                demand_remaining, demand_reserved, demand_active, sell_count, sell_good,
+                sell_account, sell_quantity, sell_price, sell_index, sell_active,
+                sell_remaining, account_tile, distances, weight, transport_rate,
+                group_participant, group_tile, group_price, group_limit, group_freight,
+                group_volume, offer_index, offer_landed, eps)
+            forecast = max(own, sold_now[e]+demand)
+            offered = 0.0
+            for j in range(sell_count):
+                if sell_good[j] == good and sell_account[j] == account and sell_active[j]:
+                    offered += sell_quantity[j]
+            expected = 0.0
+            if stock_revision and offered > eps:
+                average = own if history_count[e] else 0.0
+                stock_demand = demand
+                if price != enterprise_price[e]:
+                    stock_demand = _reachable_demand(e, account, good, enterprise_tile[e],
+                        enterprise_price[e], demand_count, demand_good, demand_participant,
+                        demand_tile, demand_price, demand_remaining, demand_reserved,
+                        demand_active, sell_count, sell_good, sell_account, sell_quantity,
+                        sell_price, sell_index, sell_active, sell_remaining, account_tile,
+                        distances, weight, transport_rate, group_participant, group_tile,
+                        group_price, group_limit, group_freight, group_volume, offer_index,
+                        offer_landed, eps)
+                expected = min(stock[account, good], offered, max(stock_demand, average))
+                stock_cache_set[e] = True
+            debug_forecast[e] = forecast
+            debug_expected[e] = expected
+            projected = max(0.0, stock[account, good]-expected)
+            target = max(0.0, min(capacity[e], forecast-projected))
+            previous = previous_output[e]
+            if (stock_revision >= 2 and target < previous-eps
+                    and not stock[account, good] > forecast*overstock):
+                target = previous-decline*(previous-target)
+                target = max(0.0, min(capacity[e], target))
+            fixed = capacity[e]*labor[good]*wage*overhead_rate
+            limit = fixed/target if target > eps else 0.0
+            margin = quote_net-cost-limit
+            outlook_limit[e] = (0 if projected >= forecast and forecast > eps
+                else 1 if forecast <= eps else 2)
+            if margin < -eps:
+                target = 0.0
+                outlook_limit[e] = 3
+            outlook_cost[e] = cost
+            outlook_price[e] = quote_net
+            outlook_planned_price[e] = price
+            outlook_fixed[e] = fixed
+            outlook_fixed_unit[e] = limit
+            debug_target[e] = target
+            debug_demand[e] = demand
+            debug_margin[e] = margin
+            if target <= eps or margin <= eps or demand <= eps:
+                continue
+            required = target*labor[good]*wage
+            for k in range(input_offset[good], input_offset[good+1]):
+                input_g = input_good[k]
+                free = max(0.0, stock[account, input_g]-stock_reserved[account, input_g]
+                           -locked[account, input_g])
+                missing = max(0.0, target*input_value[k]-free)
+                reference = _household_ceiling(input_g, missing, account_tile[account],
+                    account_state[account], account_province[account], sell_count,
+                    sell_good, sell_account, sell_quantity, sell_price, sell_index,
+                    account_tile, distances, weight, transport_rate, market_state,
+                    market_province, market_good, market_volume, market_landed, history_len,
+                    default_price[input_g], quote_count, quote_enterprise, quote_price,
+                    enterprise_tile, offer_index, offer_landed, eps, e, account, sell_active)
+                required += missing*reference
+            for k in range(equipment_offset[good], equipment_offset[good+1]):
+                input_g = equipment_good[k]
+                free = max(0.0, stock[account, input_g]-stock_reserved[account, input_g]
+                           -locked[account, input_g])
+                missing = max(0.0, target*equipment_value[k]-free)
+                reference = _household_ceiling(input_g, missing, account_tile[account],
+                    account_state[account], account_province[account], sell_count,
+                    sell_good, sell_account, sell_quantity, sell_price, sell_index,
+                    account_tile, distances, weight, transport_rate, market_state,
+                    market_province, market_good, market_volume, market_landed, history_len,
+                    default_price[input_g], quote_count, quote_enterprise, quote_price,
+                    enterprise_tile, offer_index, offer_landed, eps, e, account, sell_active)
+                required += missing*reference
+            debug_required[e] = required
+            owner = enterprise_owner[e]
+            project = 0.0
+            if project_tile[owner] >= 0:
+                distance = distances[account_tile[owner], project_tile[owner]]
+                project = project_working[owner]
+                if distance == distance:
+                    weight_hi = 0.0; weight_lo = 0.0
+                    for k in range(construction_good.shape[0]):
+                        item = construction_ratio[k]*project_capacity[owner]*weight[construction_good[k]]
+                        next_hi = weight_hi+item
+                        if abs(weight_hi) >= abs(item): weight_lo += (weight_hi-next_hi)+item
+                        else: weight_lo += (item-next_hi)+weight_hi
+                        weight_hi = next_hi
+                    project += (weight_hi+weight_lo)*distance*transport_rate
+                else:
+                    project += project_delivery[owner]
+                for k in range(construction_good.shape[0]):
+                    input_g = construction_good[k]
+                    ordered = 0.0
+                    for j in range(demand_count):
+                        if (demand_participant[j] == owner and demand_construction[j]
+                                and demand_good[j] == input_g and demand_active[j]
+                                and demand_reserved[j] > eps):
+                            ordered += demand_remaining[j]
+                    missing = max(0.0, construction_ratio[k]*project_capacity[owner]
+                                  -stock[owner, input_g]-ordered)
+                    reference = _household_ceiling(input_g, missing, account_tile[owner],
+                        account_state[owner], account_province[owner], sell_count,
+                        sell_good, sell_account, sell_quantity, sell_price, sell_index,
+                        account_tile, distances, weight, transport_rate, market_state,
+                        market_province, market_good, market_volume, market_landed, history_len,
+                        default_price[input_g], quote_count, quote_enterprise, quote_price,
+                        enterprise_tile, offer_index, offer_landed, eps, -1, owner, sell_active)
+                    project += missing*reference
+            available = max(0.0, balance[owner]-money_reserved[owner]-max(protected[owner], project))
+            free = max(0.0, balance[account]-money_reserved[account]-protected[account])
+            amount = min(max(0.0, required-free), available)
+            if amount > 0.0:
+                balance[owner] -= amount
+                balance[account] += amount
+            if closed[e] and max(0.0, balance[account]-money_reserved[account]-protected[account]) > eps:
+                closed[e] = False
+                cancel_count = 0
+                for j in range(sell_count):
+                    if sell_account[j] == account and sell_good[j] != good and sell_active[j]:
+                        sell_active[j] = False
+                        market_version_work[sell_good[j]] += 1
+                        stock_reserved[account, sell_good[j]] = max(0.0,
+                            stock_reserved[account, sell_good[j]]-sell_quantity[j])
+                        output_cancel[out, cancel_count] = j
+                        cancel_count += 1
+                output_cancel_count[out] = cancel_count
+                output_reopened[out] = True
+            if not closed[e]:
+                hold = min(max(0.0, balance[account]-money_reserved[account]-protected[account]), required)
+                protected[account] += hold
+                output_hold[out] = hold
+            output_enterprise[out] = e
+            output_transfer[out] = amount
+            out += 1
+    data['recovery_outlook_count'] = out
+    return out
+
+
+def recovery_preparation(dict data, object rng):
+    """Семь последовательных фаз через recovery в одном native state."""
+    owner_preparation(data, rng)
+    recover_enterprises(data, rng)

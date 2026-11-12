@@ -1,4 +1,4 @@
-"""Точность и стоимость native boundary через household requests без cProfile.
+"""Точность и стоимость native boundary через recover_enterprises без cProfile.
 
     python audit/native_update_prices.py --seed 73129 --months 12
     python audit/native_update_prices.py --seed 73129 --benchmark --abba 4
@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'audit'))
 
 import scenario_runner as sr
-from modules.economy.native.update_prices_boundary import run_native_owners
+from modules.economy.native.update_prices_boundary import run_native_recovery
 
 
 def assert_same(reference, native, month):
@@ -27,6 +27,16 @@ def assert_same(reference, native, month):
             if isinstance(left, dict):
                 for key in left.keys() | right.keys():
                     if left.get(key) != right.get(key):
+                        if name in ('accounts', 'enterprises'):
+                            for field in left[key].keys() | right[key].keys():
+                                if left[key].get(field) != right[key].get(field):
+                                    print(f'{name} diff:', key, field,
+                                          repr(left[key].get(field)), repr(right[key].get(field)))
+                                    if name == 'enterprises' and field == 'reachable_demand':
+                                        print('reference firm cache:', [(k, v) for k, v in
+                                            getattr(reference, '_production_outlook_cache', {}).items() if k[1] == key])
+                                        print('native firm cache:', [(k, v) for k, v in
+                                            getattr(native, '_production_outlook_cache', {}).items() if k[1] == key])
                         raise AssertionError(f'месяц {month}: {name}.{key}')
             raise AssertionError(f'месяц {month}: {name}')
     if reference._recovery_quotes != native._recovery_quotes:
@@ -46,6 +56,9 @@ def verify(engine, months):
     for month in range(1, months+1):
         # Отдельная проверка границы на одном и том же входном состоянии.
         direct_reference, direct_native = copy.deepcopy(reference), copy.deepcopy(reference)
+        for name in ('_planning_orders', '_stock_sales_cache', '_production_outlook_cache'):
+            direct_reference.__dict__.pop(name, None)
+            direct_native.__dict__.pop(name, None)
         direct_reference.update_prices()
         direct_reference.prepare_recovery_quotes()
         reference_sells = direct_reference.sell_orders()
@@ -56,8 +69,25 @@ def verify(engine, months):
         direct_reference.household_requests(reference_households,
             direct_reference.cfg['extra_needs'], 'Дополнительные нужды', reference_sells)
         direct_reference.owner_requests(reference_sells)
-        run_native_owners(direct_native)
+        direct_reference.recover_enterprises(reference_sells)
+        run_native_recovery(direct_native)
         assert_same(direct_reference, direct_native, month)
+        left_cache = {(None,)+key[1:]: value for key, value in
+                      getattr(direct_reference, '_production_outlook_cache', {}).items()}
+        right_cache = {(None,)+key[1:]: value for key, value in
+                       getattr(direct_native, '_production_outlook_cache', {}).items()}
+        if left_cache != right_cache:
+            for key in left_cache.keys() | right_cache.keys():
+                if left_cache.get(key) != right_cache.get(key):
+                    print('outlook cache diff:', key, left_cache.get(key), right_cache.get(key))
+                    print('native firm entries:', [(k, v) for k, v in right_cache.items()
+                                                   if k[1] == key[1]])
+                    print('stock cache firm:', getattr(direct_reference, '_stock_sales_cache', {}).get(key[1]),
+                          getattr(direct_native, '_stock_sales_cache', {}).get(key[1]))
+                    break
+            raise AssertionError(f'месяц {month}: production outlook cache')
+        if getattr(direct_reference, '_stock_sales_cache', {}) != getattr(direct_native, '_stock_sales_cache', {}):
+            raise AssertionError(f'месяц {month}: stock sales cache')
         if reference_sells != direct_native.native_households['sells']:
             raise AssertionError(f'месяц {month}: sells')
         if [a['id'] for a in reference_households] != [
@@ -77,6 +107,8 @@ def measured_v3(checkpoint):
     original_recovery = engine.prepare_recovery_quotes
     original_sell = engine.sell_orders
     original_household = engine.household_requests
+    original_owner = engine.owner_requests
+    original_enterprise_recovery = engine.recover_enterprises
     elapsed = []
     def timed_update(self):
         started = time.perf_counter()
@@ -100,8 +132,21 @@ def measured_v3(checkpoint):
         result = original_household(households, needs, purpose, sells)
         elapsed.append(time.perf_counter()-started)
         return result
+    def timed_owner(self, sells):
+        started = time.perf_counter()
+        result = original_owner(sells)
+        elapsed.append(time.perf_counter()-started)
+        return result
+    def timed_enterprise_recovery(self, sells, enterprises=None):
+        started = time.perf_counter()
+        result = original_enterprise_recovery(sells, enterprises=enterprises)
+        if enterprises is None:
+            elapsed.append(time.perf_counter()-started)
+        return result
     engine.sell_orders = types.MethodType(timed_sell, engine)
     engine.household_requests = types.MethodType(timed_household, engine)
+    engine.owner_requests = types.MethodType(timed_owner, engine)
+    engine.recover_enterprises = types.MethodType(timed_enterprise_recovery, engine)
     started = time.perf_counter()
     engine.step()
     return time.perf_counter()-started, sum(elapsed)
@@ -119,14 +164,14 @@ def measured_native(checkpoint):
 def benchmark(engine, pairs):
     # Прогрев checkpoint не входит ни в один замер.
     checkpoint = copy.deepcopy(engine)
-    rows = {'v3_step': [], 'v3_five_phases': [], 'native_step': [],
+    rows = {'v3_step': [], 'v3_seven_phases': [], 'native_step': [],
             'pack': [], 'native': [], 'apply': []}
     for pair in range(pairs):
         for mode in ('v3', 'native', 'native', 'v3'):
             if mode == 'v3':
-                wall, five_phases = measured_v3(checkpoint)
+                wall, seven_phases = measured_v3(checkpoint)
                 rows['v3_step'].append(wall)
-                rows['v3_five_phases'].append(five_phases)
+                rows['v3_seven_phases'].append(seven_phases)
             else:
                 wall, timings = measured_native(checkpoint)
                 rows['native_step'].append(wall)

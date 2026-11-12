@@ -190,6 +190,16 @@ def pack_update_prices(engine):
     if any(o['tile_id'] not in tile_index for o in demand_orders):
         raise ValueError('Маршрутная матрица не содержит площадку заявки')
     owner_basket = [good_index[g] for g in ('bread', 'fish', 'cloth')]
+    demand_capacity = len(demand_orders)+household_capacity+owner_capacity
+    def demand_field(name, default=0):
+        return [o.get(name, default) for o in demand_orders] + [default]*(demand_capacity-len(demand_orders))
+    equipment_offsets = [0]
+    equipment_goods, equipment_values = [], []
+    for product in goods:
+        for good, ratio in engine.goods[product].get('equipment', {}).items():
+            equipment_goods.append(good_index[good])
+            equipment_values.append(ratio)
+        equipment_offsets.append(len(equipment_goods))
 
     data = dict(
         subject_enterprise=_int32(subject_enterprise),
@@ -236,6 +246,8 @@ def pack_update_prices(engine):
         maximum_price=float(engine.rules['maximum_price']),
         eps=float(EPS),
         recovery_order=_int32(recovery_order),
+        enterprise_recovery_order=_int32(sorted(range(len(enterprises)),
+            key=lambda i: enterprises[i]['id'])),
         recovery_had_price=_uint8(['production_price' in e for e in enterprises]),
         recovery_production_price=np.full(len(enterprises), np.nan, dtype=np.float64),
         recovery_quote_count=np.zeros(len(goods), dtype=np.int32),
@@ -318,12 +330,17 @@ def pack_update_prices(engine):
         household_execution_seq=np.full(household_capacity, -1, dtype=np.int32),
         household_request_count=0,
         household_order_count_created=household_capacity,
-        demand_order_good=_int32([good_index[o['good']] for o in demand_orders]),
-        demand_order_participant=_int32([account_index[o['participant']] for o in demand_orders]),
-        demand_order_remaining=_float64([o['remaining'] for o in demand_orders]),
-        demand_order_reserved=_float64([o['reserved'] for o in demand_orders]),
-        demand_order_active=_uint8([o['status'] not in ('cancelled', 'expired') for o in demand_orders]),
-        demand_order_construction=_uint8([o['purpose'] == 'Строительные материалы' for o in demand_orders]),
+        demand_order_good=_int32([good_index[o['good']] for o in demand_orders]
+                                 +[0]*(demand_capacity-len(demand_orders))),
+        demand_order_participant=_int32([account_index[o['participant']] for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
+        demand_order_tile=_int32([tile_index[o['tile_id']] for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
+        demand_order_price=_float64(demand_field('price')),
+        demand_order_remaining=_float64(demand_field('remaining')),
+        demand_order_reserved=_float64(demand_field('reserved')),
+        demand_order_active=_uint8([o['status'] not in ('cancelled', 'expired') for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
+        demand_order_final=_uint8(demand_field('final_consumption', False)),
+        demand_order_construction=_uint8([o['purpose'] == 'Строительные материалы' for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
+        demand_order_count=len(demand_orders),
         project_capacity=_float64(project_capacity),
         project_working=_float64(project_working),
         project_delivery=_float64(project_delivery),
@@ -346,6 +363,60 @@ def pack_update_prices(engine):
         owner_order_index=np.full(owner_capacity, -1, dtype=np.int32),
         owner_execution_seq=np.full(owner_capacity, -1, dtype=np.int32),
         owner_request_count=0,
+        recovery_equipment_offset=_int32(equipment_offsets),
+        recovery_equipment_good=_int32(equipment_goods),
+        recovery_equipment_value=_float64(equipment_values),
+        enterprise_owner=_int32([account_index[e['owner_id']] for e in enterprises]),
+        enterprise_account=_int32([account_index[e['id']] for e in enterprises]),
+        enterprise_available_from=_int32([e['available_from'] for e in enterprises]),
+        enterprise_sales_forecast=_float64([e['sales_forecast'] for e in enterprises]),
+        enterprise_sold_now=_float64([sum(t['quantity'] for t in engine.report['trades']
+            if t['seller'] == e['id'] and t['good'] == e['good']) for e in enterprises]),
+        enterprise_history_count=_int32([min(3, len(e.get('sales_history', []))) for e in enterprises]),
+        enterprise_history_sold=_float64([[h.get('sold', 0) for h in e.get('sales_history', [])[-3:]]+[0]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
+        enterprise_history_output=_float64([[h.get('output', 0) for h in e.get('sales_history', [])[-3:]]+[0]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
+        enterprise_previous_output=_float64([e.get('planned_output', 0) for e in enterprises]),
+        enterprise_overhead_rate=float(engine.cfg.get('enterprise_overhead_rate', 0)),
+        output_overstock_factor=float(engine.cfg['output_overstock_factor']),
+        output_decline_rate=float(engine.cfg['output_decline_rate']),
+        stock_planning_revision=int(engine.STOCK_PLANNING_REVISION),
+        current_month=int(engine.meta['month']),
+        sell_active=np.ones(sell_capacity, dtype=np.uint8),
+        sell_remaining=np.zeros(sell_capacity, dtype=np.float64),
+        demand_group_participant=np.zeros(demand_capacity, dtype=np.int32),
+        demand_group_tile=np.zeros(demand_capacity, dtype=np.int32),
+        demand_group_price=np.zeros(demand_capacity, dtype=np.float64),
+        demand_group_limit=np.zeros(demand_capacity, dtype=np.float64),
+        demand_group_freight=np.zeros(demand_capacity, dtype=np.float64),
+        demand_group_volume=np.zeros(demand_capacity, dtype=np.float64),
+        recovery_enterprise=np.full(len(enterprises), -1, dtype=np.int32),
+        recovery_transfer=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_hold=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_reopened=np.zeros(len(enterprises), dtype=np.uint8),
+        recovery_cancel_sell=np.full((len(enterprises), sell_capacity), -1, dtype=np.int32),
+        recovery_cancel_count=np.zeros(len(enterprises), dtype=np.int32),
+        recovery_outlook_count=0,
+        recovery_debug_target=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_debug_demand=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_debug_margin=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_debug_required=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_debug_forecast=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_debug_expected=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_stock_cache_set=np.zeros(len(enterprises), dtype=np.uint8),
+        recovery_market_version=np.zeros((len(enterprises), len(goods)), dtype=np.int32),
+        recovery_market_version_work=_int32([
+            getattr(engine, '_market_quote_versions', {}).get(g, 0) for g in goods]),
+        recovery_expected_cost=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_expected_price=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_planned_price=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_fixed_cost=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_fixed_unit=np.zeros(len(enterprises), dtype=np.float64),
+        recovery_production_limit=np.zeros(len(enterprises), dtype=np.int32),
+        recovery_outlook_valid=np.zeros(len(enterprises), dtype=np.uint8),
+        enterprise_history_input_limited=_uint8([[bool(h.get('input_limited')) for h in e.get('sales_history', [])[-3:]]
+            +[False]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
+        enterprise_trades_version=_int32([getattr(engine, '_trades_by_seller', {}).get(e['id'], 0)
+                                          for e in enterprises]),
     )
     meta = dict(subjects=subjects, ask_updates=ask_updates,
                 account_index=account_index, enterprise_index=enterprise_index,
@@ -533,15 +604,107 @@ def apply_owners(engine, data, meta, sells):
     return journal
 
 
+def apply_recovery(engine, data, meta, sells):
+    """Применить готовые переводы, reopen, отмены и операционные резервы."""
+    accounts = list(engine.accounts.values())
+    enterprises = list(engine.enterprises.values())
+    goods = list(engine.goods)
+    journal = []
+    # Восстанавливаем именно те cache entries, которые V3 создал во время recovery.
+    # Все поля и версии книг взяты из journal: повторный production_outlook здесь
+    # увидел бы уже отменённые offers и мог бы вернуть другой план.
+    outlook_cache = getattr(engine, '_production_outlook_cache', {})
+    stock_cache = {}
+    limits = ('Готовые запасы', 'Нет обеспеченного спроса', 'План',
+              'Отрицательная ожидаемая маржа')
+    for index, e in enumerate(enterprises):
+        if not data['recovery_outlook_valid'][index]:
+            continue
+        if data['recovery_stock_cache_set'][index]:
+            stock_cache[e['id']] = float(data['recovery_debug_expected'][index])
+        history = tuple((float(data['enterprise_history_sold'][index, k]),
+                         float(data['enterprise_history_output'][index, k]),
+                         bool(data['enterprise_history_input_limited'][index, k]))
+                        for k in range(data['enterprise_history_count'][index]))
+        outlook_goods = engine.__dict__.setdefault('_outlook_goods', {}).get(e['good'])
+        if outlook_goods is None:
+            recipe = engine.goods[e['good']]
+            outlook_goods = tuple(sorted(set(recipe['inputs'])
+                | set(engine.equipment_requirements(recipe, 1)) | {e['good']}))
+            engine._outlook_goods[e['good']] = outlook_goods
+        quote_versions = (getattr(engine, '_market_quotes_epoch', 0),
+            tuple(int(data['recovery_market_version'][index, meta['good_index'][good]])
+                  for good in outlook_goods))
+        key = (id(sells), e['id'], e['tile_id'], e['good'], e['price'],
+            e.get('production_price'), e['capacity'], e.get('planned_output', 0),
+            accounts[int(data['enterprise_account'][index])]['stock'].get(e['good'], 0),
+            history, engine._demand_revision[e['good']], quote_versions,
+            int(data['enterprise_trades_version'][index]))
+        target = float(data['recovery_debug_target'][index])
+        outlook_cache[key] = dict(
+            sales_forecast=float(data['recovery_debug_forecast'][index]),
+            reachable_demand=float(data['recovery_debug_demand'][index]),
+            expected_unit_cost=float(data['recovery_expected_cost'][index]),
+            expected_price=float(data['recovery_expected_price'][index]),
+            expected_margin=float(data['recovery_debug_margin'][index]),
+            production_limit=limits[int(data['recovery_production_limit'][index])],
+            planned_output=target,
+            input_target_output=target,
+            planned_price=float(data['recovery_planned_price'][index]),
+            expected_fixed_cost=float(data['recovery_fixed_cost'][index]),
+            expected_fixed_unit=float(data['recovery_fixed_unit'][index]))
+    engine._production_outlook_cache = outlook_cache
+    engine._stock_sales_cache = stock_cache
+    # defaultdict V3 материализует нулевую ревизию для каждого оценённого товара.
+    for index, e in enumerate(enterprises):
+        if data['recovery_outlook_valid'][index]:
+            engine._demand_revision[e['good']]
+    for i in range(data['recovery_outlook_count']):
+        index = int(data['recovery_enterprise'][i])
+        e = enterprises[index]
+        firm = accounts[int(data['enterprise_account'][index])]
+        owner = accounts[int(data['enterprise_owner'][index])]
+        amount = float(data['recovery_transfer'][i])
+        if amount > 0:
+            owner['balance'] -= amount
+            firm['balance'] += amount
+            engine.report['flows'].append(dict(sender=owner['id'], recipient=firm['id'],
+                gold=amount, reason='Восстановление оборотного капитала'))
+            journal.append(('recovery_transfer', i, owner['id'], firm['id'], amount))
+        if data['recovery_reopened'][i]:
+            e.update(status='idle', closed=None, unviable_months=0)
+            for j in range(data['recovery_cancel_count'][i]):
+                sell_index = int(data['recovery_cancel_sell'][i, j])
+                order_id = f'{meta["month"]}-{int(data["sell_order_index"][sell_index])}'
+                order = next(o for o in engine.report['orders'] if o['id'] == order_id)
+                good = order['good']
+                firm['stock_reserved'][good] = max(0, firm['stock_reserved'].get(good, 0)
+                                                   -order['remaining'])
+                order.update(status='cancelled', reason='Сырьё возвращено в производство')
+                engine.mark_market_quotes_dirty(good)
+                journal.append(('recovery_cancel', i, order_id))
+            engine.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'],
+                action='reopened', reason='Восстановлен обеспеченный рентабельный спрос'))
+            journal.append(('recovery_reopen', i, e['id']))
+        hold = float(data['recovery_hold'][i])
+        if e['status'] != 'closed':
+            firm['operating_protected'] = hold
+            firm['protected'] += hold
+            journal.append(('recovery_hold', i, e['id'], hold))
+    return journal
+
+
 def _run(engine, include_recovery, include_sells=False, include_households=False,
-         include_owners=False):
+         include_owners=False, include_enterprise_recovery=False):
     timings = {}
     started = time.perf_counter()
     data, meta = pack_update_prices(engine)
     timings['pack'] = time.perf_counter()-started
     native = load_serial_step()
     started = time.perf_counter()
-    if include_owners:
+    if include_enterprise_recovery:
+        native.recovery_preparation(data, engine.rng)
+    elif include_owners:
         native.owner_preparation(data, engine.rng)
     elif include_households:
         native.household_preparation(data, engine.rng)
@@ -569,6 +732,8 @@ def _run(engine, include_recovery, include_sells=False, include_households=False
         journal.extend(household_journal)
     if include_owners:
         journal.extend(apply_owners(engine, data, meta, sells))
+    if include_enterprise_recovery:
+        journal.extend(apply_recovery(engine, data, meta, sells))
     timings['apply'] = time.perf_counter()-started
     result = dict(timings=timings, data=data, meta=meta, journal=journal, sells=sells,
                   households=households, food_trace=food_trace)
@@ -580,6 +745,8 @@ def _run(engine, include_recovery, include_sells=False, include_households=False
         engine.native_households = result
     if include_owners:
         engine.native_owners = result
+    if include_enterprise_recovery:
+        engine.native_recovery = result
     return journal
 
 
@@ -607,3 +774,9 @@ def run_native_owners(engine):
     """Общий native boundary до конца owner_requests."""
     return _run(engine, include_recovery=True, include_sells=True, include_households=True,
                 include_owners=True)
+
+
+def run_native_recovery(engine):
+    """Общий native boundary до конца recover_enterprises."""
+    return _run(engine, include_recovery=True, include_sells=True, include_households=True,
+                include_owners=True, include_enterprise_recovery=True)
