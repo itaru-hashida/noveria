@@ -1,4 +1,4 @@
-"""Точность и стоимость native update_prices без cProfile.
+"""Точность и стоимость native update_prices + recovery quotes без cProfile.
 
     python audit/native_update_prices.py --seed 73129 --months 12
     python audit/native_update_prices.py --seed 73129 --benchmark --abba 4
@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'audit'))
 
 import scenario_runner as sr
-from modules.economy.native.update_prices_boundary import run_update_prices
+from modules.economy.native.update_prices_boundary import run_native_preparation
 
 
 def assert_same(reference, native, month):
@@ -29,6 +29,8 @@ def assert_same(reference, native, month):
                     if left.get(key) != right.get(key):
                         raise AssertionError(f'месяц {month}: {name}.{key}')
             raise AssertionError(f'месяц {month}: {name}')
+    if reference._recovery_quotes != native._recovery_quotes:
+        raise AssertionError(f'месяц {month}: recovery quotes')
     if reference.rng.getstate() != native.rng.getstate():
         raise AssertionError(f'месяц {month}: RNG')
     reference.validate()
@@ -41,7 +43,8 @@ def verify(engine, months):
         # Отдельная проверка границы на одном и том же входном состоянии.
         direct_reference, direct_native = copy.deepcopy(reference), copy.deepcopy(reference)
         direct_reference.update_prices()
-        run_update_prices(direct_native)
+        direct_reference.prepare_recovery_quotes()
+        run_native_preparation(direct_native)
         assert_same(direct_reference, direct_native, month)
         reference.step()
         native.step(native_mode='cython')
@@ -53,17 +56,24 @@ def verify(engine, months):
 
 def measured_v3(checkpoint):
     engine = copy.deepcopy(checkpoint)
-    original = engine.update_prices
+    original_update = engine.update_prices
+    original_recovery = engine.prepare_recovery_quotes
     elapsed = []
-    def timed(self):
+    def timed_update(self):
         started = time.perf_counter()
-        result = original()
+        result = original_update()
         elapsed.append(time.perf_counter()-started)
         return result
-    engine.update_prices = types.MethodType(timed, engine)
+    def timed_recovery(self):
+        started = time.perf_counter()
+        result = original_recovery()
+        elapsed.append(time.perf_counter()-started)
+        return result
+    engine.update_prices = types.MethodType(timed_update, engine)
+    engine.prepare_recovery_quotes = types.MethodType(timed_recovery, engine)
     started = time.perf_counter()
     engine.step()
-    return time.perf_counter()-started, elapsed[0]
+    return time.perf_counter()-started, sum(elapsed)
 
 
 def measured_native(checkpoint):
@@ -78,14 +88,14 @@ def measured_native(checkpoint):
 def benchmark(engine, pairs):
     # Прогрев checkpoint не входит ни в один замер.
     checkpoint = copy.deepcopy(engine)
-    rows = {'v3_step': [], 'v3_update': [], 'native_step': [],
+    rows = {'v3_step': [], 'v3_preparation': [], 'native_step': [],
             'pack': [], 'native': [], 'apply': []}
     for pair in range(pairs):
         for mode in ('v3', 'native', 'native', 'v3'):
             if mode == 'v3':
-                wall, update = measured_v3(checkpoint)
+                wall, preparation = measured_v3(checkpoint)
                 rows['v3_step'].append(wall)
-                rows['v3_update'].append(update)
+                rows['v3_preparation'].append(preparation)
             else:
                 wall, timings = measured_native(checkpoint)
                 rows['native_step'].append(wall)

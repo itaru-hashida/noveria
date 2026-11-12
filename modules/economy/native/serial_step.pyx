@@ -175,3 +175,99 @@ def update_prices(dict data):
             if not subject_is_stock[s]:
                 enterprise_price[subject_enterprise[s]] = price
     return subject_count
+
+
+def prepare_recovery_quotes(dict data):
+    """Построить V3 recovery-котировки снизу вверх после новых цен."""
+    cdef int[::1] recovery_order = data['recovery_order']
+    cdef double[::1] production_price = data['recovery_production_price']
+    cdef int[::1] quote_count = data['recovery_quote_count']
+    cdef int[:, ::1] quote_enterprise = data['recovery_quote_enterprise']
+    cdef double[:, ::1] quote_price = data['recovery_quote_price']
+    cdef int[::1] enterprise_good = data['enterprise_good']
+    cdef int[::1] enterprise_tile = data['enterprise_tile']
+    cdef double[::1] enterprise_price = data['enterprise_price']
+    cdef unsigned char[::1] enterprise_suspended = data['enterprise_suspended']
+    cdef unsigned char[::1] enterprise_resource_ok = data['enterprise_resource_ok']
+    cdef int[::1] input_offset = data['recovery_input_offset']
+    cdef int[::1] input_goods = data['recovery_input_good']
+    cdef double[::1] input_values = data['recovery_input_value']
+    cdef int[::1] wear_offset = data['recovery_wear_offset']
+    cdef int[::1] wear_goods = data['recovery_wear_good']
+    cdef double[::1] wear_values = data['recovery_wear_value']
+    cdef double[:, ::1] distances = data['distances']
+    cdef double[::1] good_weight = data['good_weight']
+    cdef double[::1] good_default_price = data['good_default_price']
+    cdef double[::1] good_labor = data['good_labor']
+    cdef unsigned char[::1] good_consumer = data['good_consumer']
+    cdef double transport_rate = data['transport_rate']
+    cdef double wage = data['wage']
+    cdef double markup = data['markup']
+    cdef double consumption_tax = data['consumption_tax']
+    cdef double maximum_price = data['maximum_price']
+    cdef double eps = data['eps']
+    cdef Py_ssize_t order_size = recovery_order.shape[0]
+    cdef Py_ssize_t i, j, k, q
+    cdef Py_ssize_t enterprise, good, input_good, tile, count
+    cdef double cost, ratio, net, price, quote, distance, freight
+    cdef bint found
+
+    with nogil:
+        for i in range(order_size):
+            enterprise = recovery_order[i]
+            good = enterprise_good[enterprise]
+            if enterprise_suspended[enterprise] or not enterprise_resource_ok[enterprise]:
+                continue
+            cost = good_labor[good]*wage
+            for k in range(input_offset[good], input_offset[good+1]):
+                input_good = input_goods[k]
+                ratio = input_values[k]
+                found = False
+                quote = 0.0
+                for q in range(quote_count[input_good]):
+                    j = quote_enterprise[input_good, q]
+                    distance = distances[enterprise_tile[j], enterprise_tile[enterprise]]
+                    if distance != distance:
+                        continue
+                    freight = distance*good_weight[input_good]*transport_rate
+                    price = quote_price[input_good, q]+freight
+                    if not found or price < quote:
+                        quote = price
+                    found = True
+                if not found:
+                    quote = good_default_price[input_good]
+                cost += ratio*quote
+            for k in range(wear_offset[good], wear_offset[good+1]):
+                input_good = wear_goods[k]
+                ratio = wear_values[k]
+                found = False
+                quote = 0.0
+                for q in range(quote_count[input_good]):
+                    j = quote_enterprise[input_good, q]
+                    distance = distances[enterprise_tile[j], enterprise_tile[enterprise]]
+                    if distance != distance:
+                        continue
+                    freight = distance*good_weight[input_good]*transport_rate
+                    price = quote_price[input_good, q]+freight
+                    if not found or price < quote:
+                        quote = price
+                    found = True
+                if not found:
+                    quote = good_default_price[input_good]
+                cost += ratio*quote
+            net = 1-consumption_tax if good_consumer[good] else 1
+            price = (cost*(1+markup)/net
+                     if enterprise_price[enterprise]*net < cost-eps
+                     else enterprise_price[enterprise])
+            production_price[enterprise] = min(maximum_price, price)
+            count = quote_count[good]
+            quote_enterprise[good, count] = enterprise
+            quote_price[good, count] = production_price[enterprise]
+            quote_count[good] = count+1
+    return order_size
+
+
+def preparation(dict data):
+    """Один вход: цены и recovery видят одно последовательное состояние."""
+    update_prices(data)
+    prepare_recovery_quotes(data)

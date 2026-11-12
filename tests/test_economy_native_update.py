@@ -7,7 +7,7 @@ import pytest
 from modules.economy import Economy
 
 pytest.importorskip('modules.economy.native.serial_step')
-from modules.economy.native.update_prices_boundary import run_update_prices
+from modules.economy.native.update_prices_boundary import run_native_preparation, run_update_prices
 
 
 def engine():
@@ -48,6 +48,27 @@ def test_update_prices_native_journal_and_full_step_match_v3():
     journal = run_update_prices(native)
     assert journal
     assert_same_state(reference, native)
+
+
+def test_recovery_quotes_native_journal_matches_v3_and_preserves_recipe_order():
+    reference = engine()
+    reference.step()
+    native = copy.deepcopy(reference)
+
+    reference.update_prices()
+    reference.prepare_recovery_quotes()
+    journal = run_native_preparation(native)
+
+    assert journal
+    assert reference._recovery_quotes == native._recovery_quotes
+    assert_same_state(reference, native)
+    data = native.native_preparation['data']
+    goods = list(native.goods)
+    for product, recipe in native.goods.items():
+        index = goods.index(product)
+        start, stop = data['recovery_input_offset'][index:index+2]
+        assert list(data['recovery_input_good'][start:stop]) == [
+            goods.index(good) for good in recipe['inputs']]
 
 
 def test_two_complete_native_steps_match_v3():

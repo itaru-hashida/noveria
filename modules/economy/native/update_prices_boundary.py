@@ -1,4 +1,4 @@
-"""Flat pack/journal/apply для первого native-участка update_prices."""
+"""Flat pack/journal/apply для native update_prices и recovery quotes."""
 import time
 
 import numpy as np
@@ -102,6 +102,29 @@ def pack_update_prices(engine):
         for good, quantity in stock.items():
             enterprise_stock[enterprise_index[enterprise['id']], good_index[good]] = quantity
 
+    recovery_order = sorted(range(len(enterprises)),
+        key=lambda i: (engine.depth(enterprises[i]['good']), enterprises[i]['id']))
+    # Порядок сложения cost должен совпадать с dict/recipe V3, а не с общим goods index.
+    input_offsets = [0]
+    input_goods, input_values = [], []
+    wear_offsets = [0]
+    wear_goods, wear_values = [], []
+    for product in goods:
+        recipe = engine.goods[product]
+        for good, ratio in recipe['inputs'].items():
+            input_goods.append(good_index[good])
+            input_values.append(ratio)
+        input_offsets.append(len(input_goods))
+        for good, ratio in engine.equipment_wear(recipe, 1).items():
+            wear_goods.append(good_index[good])
+            wear_values.append(ratio)
+        wear_offsets.append(len(wear_goods))
+    resource_ok = []
+    for enterprise in enterprises:
+        resource = engine.goods[enterprise['good']]['resource']
+        resource_ok.append(not resource or any(t['province_id'] == enterprise['province_id']
+            and resource in t['resources'] for t in engine.tiles.values()))
+
     data = dict(
         subject_enterprise=_int32(subject_enterprise),
         subject_account=_int32(subject_account),
@@ -145,6 +168,27 @@ def pack_update_prices(engine):
         minimum_price=float(engine.rules['minimum_price']),
         maximum_price=float(engine.rules['maximum_price']),
         eps=float(EPS),
+        recovery_order=_int32(recovery_order),
+        recovery_had_price=_uint8(['production_price' in e for e in enterprises]),
+        recovery_production_price=np.full(len(enterprises), np.nan, dtype=np.float64),
+        recovery_quote_count=np.zeros(len(goods), dtype=np.int32),
+        recovery_quote_enterprise=np.zeros((len(goods), len(enterprises)), dtype=np.int32),
+        recovery_quote_price=np.zeros((len(goods), len(enterprises)), dtype=np.float64),
+        enterprise_suspended=_uint8([bool(e.get('suspended')) for e in enterprises]),
+        enterprise_resource_ok=_uint8(resource_ok),
+        recovery_input_offset=_int32(input_offsets),
+        recovery_input_good=_int32(input_goods),
+        recovery_input_value=_float64(input_values),
+        recovery_wear_offset=_int32(wear_offsets),
+        recovery_wear_good=_int32(wear_goods),
+        recovery_wear_value=_float64(wear_values),
+        good_default_price=_float64([engine.goods[g]['price'] for g in goods]),
+        good_labor=_float64([engine.goods[g]['labor'] for g in goods]),
+        good_consumer=_uint8([g in (engine.cfg['basic_needs'] | engine.cfg['extra_needs'])
+                              for g in goods]),
+        wage=float(engine.cfg['wage']),
+        markup=float(engine.cfg['markup']),
+        consumption_tax=float(engine.cfg['consumption_tax']),
     )
     meta = dict(subjects=subjects, ask_updates=ask_updates,
                 account_index=account_index, enterprise_index=enterprise_index,
@@ -174,18 +218,55 @@ def apply_update_prices(engine, data, meta):
     return journal
 
 
-def run_update_prices(engine):
-    """Выполнить один полный native-переход и сохранить его реальную цену."""
+def apply_recovery_quotes(engine, data, meta):
+    """Применить production_price и восстановить семантический recovery-кэш."""
+    from collections import defaultdict
+
+    enterprises = list(engine.enterprises.values())
+    journal = []
+    quotes = defaultdict(list)
+    for enterprise in data['recovery_order']:
+        enterprise = int(enterprise)
+        if data['recovery_had_price'][enterprise]:
+            enterprises[enterprise].pop('production_price', None)
+            journal.append(('production_price_clear', enterprise))
+        price = float(data['recovery_production_price'][enterprise])
+        if np.isfinite(price):
+            enterprises[enterprise]['production_price'] = price
+            quotes[enterprises[enterprise]['good']].append((enterprises[enterprise], price))
+            journal.append(('production_price_set', enterprise, price))
+    engine._recovery_quotes = quotes
+    return journal
+
+
+def _run(engine, include_recovery):
     timings = {}
     started = time.perf_counter()
     data, meta = pack_update_prices(engine)
     timings['pack'] = time.perf_counter()-started
     native = load_serial_step()
     started = time.perf_counter()
-    native.update_prices(data)
+    if include_recovery:
+        native.preparation(data)
+    else:
+        native.update_prices(data)
     timings['native'] = time.perf_counter()-started
     started = time.perf_counter()
     journal = apply_update_prices(engine, data, meta)
+    if include_recovery:
+        journal.extend(apply_recovery_quotes(engine, data, meta))
     timings['apply'] = time.perf_counter()-started
-    engine.native_update_prices = dict(timings=timings, data=data, meta=meta, journal=journal)
+    result = dict(timings=timings, data=data, meta=meta, journal=journal)
+    engine.native_update_prices = result
+    engine.native_preparation = result
     return journal
+
+
+def run_update_prices(engine):
+    """Изолированная диагностика первого участка."""
+    return _run(engine, include_recovery=False)
+
+
+def run_native_preparation(engine):
+    """Один pack/call/apply для update_prices и prepare_recovery_quotes."""
+    return _run(engine, include_recovery=True)

@@ -3509,8 +3509,11 @@ class Economy(EconomyServices):
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0,
                 equipment_wear={})
         if native_mode == 'cython':
-            from .native.update_prices_boundary import run_update_prices
-            run_update_prices(self)
+            from .native.update_prices_boundary import run_native_preparation, run_update_prices
+            if planning_mode == 'lagged_batch':
+                run_update_prices(self)
+            else:
+                run_native_preparation(self)
         else:
             self.update_prices()
         lagged_plans = None
@@ -3523,7 +3526,7 @@ class Economy(EconomyServices):
             lagged_firms = snapshot.eligible
             timings['lagged_snapshot_planning'] = time.perf_counter()-phase_started
             self.report['planning_mode'] = planning_mode
-        else:
+        elif native_mode != 'cython':
             self.prepare_recovery_quotes()
         # В lagged_batch стартовые склады фирм публикуются их intents ровно один
         # раз; заявки остальных участников и сам sell_orders не меняются.
