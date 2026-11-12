@@ -8,7 +8,7 @@ from modules.economy import Economy
 
 pytest.importorskip('modules.economy.native.serial_step')
 from modules.economy.native.update_prices_boundary import (
-    run_native_households, run_native_market, run_native_preparation, run_native_public_projects,
+    pack_update_prices, run_native_households, run_native_market, run_native_preparation, run_native_public_projects,
     run_native_recovery, run_update_prices)
 
 
@@ -85,6 +85,18 @@ def test_update_prices_native_journal_and_full_step_match_v3():
     journal = run_update_prices(native)
     assert journal
     assert_same_state(reference, native)
+
+
+def test_native_construction_bill_keeps_v3_multiply_then_divide_order():
+    native = engine()
+    capacity = 396.85080317460313
+    data, _ = pack_update_prices(native)
+    goods = list(native.goods)
+    for index, good_index in enumerate(data['construction_good']):
+        good = goods[int(good_index)]
+        native_value = (float(data['construction_amount'][index])*capacity
+                        /float(data['minimum_capacity']))
+        assert native_value == native.construction_bill(capacity)[good]
 
 
 def test_recovery_quotes_native_journal_matches_v3_and_preserves_recipe_order():
