@@ -11,6 +11,11 @@ tmp/
 *.tmp
 *.temp
 *.py[cod]
+# Локальные продукты сборки Cython.
+modules/economy/native/build/
+modules/economy/native/serial_step.c
+modules/economy/native/*.so
+modules/economy/native/*.pyd
 # Бинарные профили cProfile: воспроизводятся прогоном, в репозиторий не нужны.
 *.prof
 audit_results/

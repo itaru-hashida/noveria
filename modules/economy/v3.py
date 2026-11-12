@@ -3465,7 +3465,16 @@ class Economy(EconomyServices):
             if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
                 self.input_requests(e, sells)
 
-    def step(self, enterprise_planner=None, planning_mode='v3', investment_mode='v3', investment_workers=1):
+    def step(self, enterprise_planner=None, planning_mode='v3', investment_mode='v3', investment_workers=1,
+             native_mode='off'):
+        if native_mode not in ('off', 'cython'):
+            raise ValueError('Неизвестный native-режим: '+str(native_mode))
+        if native_mode == 'cython':
+            # До контрольной остановки 2 режим только проверяет доступность сборки.
+            # Останавливаемся до любой мутации состояния: молча выполнить V3 нельзя.
+            from .native import load_serial_step
+            load_serial_step()
+            raise NotImplementedError('Cython-перенос игровой логики ещё не согласован')
         if planning_mode not in ('v3', 'lagged_batch'):
             raise ValueError('Неизвестный режим планирования: '+str(planning_mode))
         if investment_mode not in ('v3', 'snapshot_batch', 'async_snapshot_batch'):
