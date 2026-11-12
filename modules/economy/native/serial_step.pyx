@@ -1,5 +1,5 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
-"""Техническая проверка сборки; игровая логика сюда ещё не перенесена."""
+"""Последовательные native-фазы V3 над одним изменяемым flat state."""
 
 
 def weighted_sum(double[::1] values, double[::1] weights):
@@ -271,3 +271,96 @@ def preparation(dict data):
     """Один вход: цены и recovery видят одно последовательное состояние."""
     update_prices(data)
     prepare_recovery_quotes(data)
+
+
+def sell_orders(dict data, object rng):
+    """Создать sell intents после исходного shuffle канонических account ID."""
+    cdef int[::1] seller_order = data['seller_order']
+    cdef int[::1] account_enterprise = data['account_enterprise']
+    cdef unsigned char[::1] account_household = data['account_household']
+    cdef double[:, ::1] account_stock = data['account_stock']
+    cdef double[:, ::1] account_reserved = data['account_stock_reserved']
+    cdef double[:, ::1] account_locked = data['account_locked']
+    cdef int[::1] enterprise_good = data['enterprise_good']
+    cdef unsigned char[::1] enterprise_suspended = data['enterprise_suspended']
+    cdef unsigned char[::1] enterprise_closed = data['enterprise_closed']
+    cdef double[::1] enterprise_capacity = data['enterprise_capacity']
+    cdef double[::1] enterprise_planned = data['enterprise_planned']
+    cdef double[::1] enterprise_recent = data['enterprise_recent']
+    cdef double[::1] enterprise_price = data['enterprise_price']
+    cdef int[::1] sell_offset = data['sell_offset']
+    cdef int[::1] sell_good = data['sell_good']
+    cdef double[::1] sell_ask_price = data['sell_ask_price']
+    cdef int[::1] sell_subject = data['sell_subject']
+    cdef double[::1] new_prices = data['new_prices']
+    cdef double[::1] sell_input_ratio = data['sell_input_ratio']
+    cdef double[::1] sell_equipment_ratio = data['sell_equipment_ratio']
+    cdef int[::1] output_account = data['sell_order_account']
+    cdef int[::1] output_entry = data['sell_order_entry']
+    cdef int[::1] output_good = data['sell_order_good']
+    cdef double[::1] output_quantity = data['sell_order_quantity']
+    cdef double[::1] output_price = data['sell_order_price']
+    cdef int[::1] output_index = data['sell_order_index']
+    cdef int[::1] output_seq = data['sell_execution_seq']
+    cdef double input_buffer = data['input_buffer']
+    cdef double eps = data['eps']
+    cdef int initial_order_count = data['initial_order_count']
+    cdef Py_ssize_t account_count = seller_order.shape[0]
+    cdef Py_ssize_t i, k, account, enterprise, good
+    cdef Py_ssize_t count = 0
+    cdef double quantity, free, reserve, deployed, price
+    cdef list shuffled = [seller_order[i] for i in range(account_count)]
+
+    # Единственный RNG-вызов остаётся в исходном месте, после invalidation и до
+    # расчёта intents. Дальше работают только числовые массивы без GIL.
+    rng.shuffle(shuffled)
+    for i in range(account_count):
+        seller_order[i] = shuffled[i]
+    with nogil:
+        for i in range(account_count):
+            account = seller_order[i]
+            enterprise = account_enterprise[account]
+            if account_household[account] or (enterprise >= 0 and enterprise_suspended[enterprise]):
+                continue
+            for k in range(sell_offset[account], sell_offset[account+1]):
+                good = sell_good[k]
+                free = account_stock[account, good]-account_reserved[account, good] \
+                    -account_locked[account, good]
+                if free < 0:
+                    free = 0
+                quantity = free
+                if enterprise >= 0 and not enterprise_closed[enterprise] and good != enterprise_good[enterprise]:
+                    deployed = min(enterprise_capacity[enterprise],
+                                   max(enterprise_planned[enterprise], enterprise_recent[enterprise]))
+                    reserve = deployed*input_buffer
+                    quantity = max(0, quantity-reserve*sell_input_ratio[k])
+                    deployed = min(enterprise_capacity[enterprise],
+                                   max(enterprise_planned[enterprise], enterprise_recent[enterprise]))
+                    quantity = max(0, quantity-sell_equipment_ratio[k]*deployed)
+                price = (enterprise_price[enterprise]
+                         if enterprise >= 0 and good == enterprise_good[enterprise]
+                         else sell_ask_price[k])
+                if sell_subject[k] >= 0:
+                    price = new_prices[sell_subject[k]]
+                    sell_ask_price[k] = price
+                quantity = min(quantity, free)
+                if quantity <= eps:
+                    continue
+                account_reserved[account, good] += quantity
+                output_account[count] = account
+                output_entry[count] = k
+                output_good[count] = good
+                output_quantity[count] = quantity
+                output_price[count] = price
+                output_index[count] = initial_order_count+count
+                output_seq[count] = count
+                count += 1
+    data['sell_order_count'] = count
+    return count
+
+
+def market_preparation(dict data, object rng):
+    """Цены, recovery и sell orders видят одно последовательное состояние."""
+    update_prices(data)
+    prepare_recovery_quotes(data)
+    sell_orders(data, rng)

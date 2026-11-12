@@ -1,4 +1,4 @@
-"""Точность и стоимость native update_prices + recovery quotes без cProfile.
+"""Точность и стоимость native prices + recovery + sell_orders без cProfile.
 
     python audit/native_update_prices.py --seed 73129 --months 12
     python audit/native_update_prices.py --seed 73129 --benchmark --abba 4
@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'audit'))
 
 import scenario_runner as sr
-from modules.economy.native.update_prices_boundary import run_native_preparation
+from modules.economy.native.update_prices_boundary import run_native_market
 
 
 def assert_same(reference, native, month):
@@ -31,6 +31,9 @@ def assert_same(reference, native, month):
             raise AssertionError(f'месяц {month}: {name}')
     if reference._recovery_quotes != native._recovery_quotes:
         raise AssertionError(f'месяц {month}: recovery quotes')
+    for name in ('_market_quote_version', '_market_quote_versions', '_market_quotes_epoch'):
+        if getattr(reference, name) != getattr(native, name):
+            raise AssertionError(f'месяц {month}: {name}')
     if reference.rng.getstate() != native.rng.getstate():
         raise AssertionError(f'месяц {month}: RNG')
     reference.validate()
@@ -44,8 +47,11 @@ def verify(engine, months):
         direct_reference, direct_native = copy.deepcopy(reference), copy.deepcopy(reference)
         direct_reference.update_prices()
         direct_reference.prepare_recovery_quotes()
-        run_native_preparation(direct_native)
+        reference_sells = direct_reference.sell_orders()
+        run_native_market(direct_native)
         assert_same(direct_reference, direct_native, month)
+        if reference_sells != direct_native.native_market['sells']:
+            raise AssertionError(f'месяц {month}: sells')
         reference.step()
         native.step(native_mode='cython')
         assert_same(reference, native, month)
@@ -58,6 +64,7 @@ def measured_v3(checkpoint):
     engine = copy.deepcopy(checkpoint)
     original_update = engine.update_prices
     original_recovery = engine.prepare_recovery_quotes
+    original_sell = engine.sell_orders
     elapsed = []
     def timed_update(self):
         started = time.perf_counter()
@@ -69,8 +76,14 @@ def measured_v3(checkpoint):
         result = original_recovery()
         elapsed.append(time.perf_counter()-started)
         return result
+    def timed_sell(self, exclude=()):
+        started = time.perf_counter()
+        result = original_sell(exclude=exclude)
+        elapsed.append(time.perf_counter()-started)
+        return result
     engine.update_prices = types.MethodType(timed_update, engine)
     engine.prepare_recovery_quotes = types.MethodType(timed_recovery, engine)
+    engine.sell_orders = types.MethodType(timed_sell, engine)
     started = time.perf_counter()
     engine.step()
     return time.perf_counter()-started, sum(elapsed)
@@ -88,14 +101,14 @@ def measured_native(checkpoint):
 def benchmark(engine, pairs):
     # Прогрев checkpoint не входит ни в один замер.
     checkpoint = copy.deepcopy(engine)
-    rows = {'v3_step': [], 'v3_preparation': [], 'native_step': [],
+    rows = {'v3_step': [], 'v3_market_phases': [], 'native_step': [],
             'pack': [], 'native': [], 'apply': []}
     for pair in range(pairs):
         for mode in ('v3', 'native', 'native', 'v3'):
             if mode == 'v3':
-                wall, preparation = measured_v3(checkpoint)
+                wall, market_phases = measured_v3(checkpoint)
                 rows['v3_step'].append(wall)
-                rows['v3_preparation'].append(preparation)
+                rows['v3_market_phases'].append(market_phases)
             else:
                 wall, timings = measured_native(checkpoint)
                 rows['native_step'].append(wall)

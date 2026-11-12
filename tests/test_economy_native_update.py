@@ -7,7 +7,8 @@ import pytest
 from modules.economy import Economy
 
 pytest.importorskip('modules.economy.native.serial_step')
-from modules.economy.native.update_prices_boundary import run_native_preparation, run_update_prices
+from modules.economy.native.update_prices_boundary import (
+    run_native_market, run_native_preparation, run_update_prices)
 
 
 def engine():
@@ -69,6 +70,25 @@ def test_recovery_quotes_native_journal_matches_v3_and_preserves_recipe_order():
         start, stop = data['recovery_input_offset'][index:index+2]
         assert list(data['recovery_input_good'][start:stop]) == [
             goods.index(good) for good in recipe['inputs']]
+
+
+def test_sell_orders_native_ids_reserves_sells_caches_and_rng_match_v3():
+    reference = engine()
+    reference.step()
+    native = copy.deepcopy(reference)
+
+    reference.update_prices()
+    reference.prepare_recovery_quotes()
+    expected_sells = reference.sell_orders()
+    run_native_market(native)
+
+    assert expected_sells == native.native_market['sells']
+    assert_same_state(reference, native)
+    for name in ('_market_quote_version', '_market_quote_versions', '_market_quotes_epoch'):
+        assert getattr(reference, name) == getattr(native, name)
+    for name in ('_market_books', '_quoted_cost_cache', '_reference_price_cache'):
+        assert name not in reference.__dict__
+        assert name not in native.__dict__
 
 
 def test_two_complete_native_steps_match_v3():

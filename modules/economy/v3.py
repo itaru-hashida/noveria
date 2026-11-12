@@ -3509,11 +3509,11 @@ class Economy(EconomyServices):
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0,
                 equipment_wear={})
         if native_mode == 'cython':
-            from .native.update_prices_boundary import run_native_preparation, run_update_prices
+            from .native.update_prices_boundary import run_native_market, run_update_prices
             if planning_mode == 'lagged_batch':
                 run_update_prices(self)
             else:
-                run_native_preparation(self)
+                run_native_market(self)
         else:
             self.update_prices()
         lagged_plans = None
@@ -3530,7 +3530,10 @@ class Economy(EconomyServices):
             self.prepare_recovery_quotes()
         # В lagged_batch стартовые склады фирм публикуются их intents ровно один
         # раз; заявки остальных участников и сам sell_orders не меняются.
-        sells = self.sell_orders(exclude=lagged_firms)
+        if native_mode == 'cython' and planning_mode != 'lagged_batch':
+            sells = self.native_market['sells']
+        else:
+            sells = self.sell_orders(exclude=lagged_firms)
         if planning_mode == 'lagged_batch':
             publish_sales(self, lagged_plans, sells)
         households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')

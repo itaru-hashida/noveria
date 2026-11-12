@@ -1,54 +1,60 @@
-# Рабочие Cython-участки: update_prices и prepare_recovery_quotes
+# Рабочие Cython-участки: prices, recovery quotes и sell_orders
 
-Дата: 12.11.2026. База переноса recovery: `766e25a`.
+Дата: 12.11.2026. Последняя база: `eb656a4`.
 
 ## Реализация
 
-В Cython последовательно исполняются все ветви `update_prices()`:
+Один `pack → Cython → apply` последовательно выполняет:
 
-- спрос из `meta.public_orders` и пределы цен покупателей;
-- повышение и снижение по прошлым продажам;
-- обзор конкурентов с учётом уже обновлённых цен ранних фирм;
-- рыночный сигнал с компенсированным суммированием Python 3.12;
-- ветвь `price_feedback`;
-- ограничения minimum/maximum price.
+```text
+update_prices → prepare_recovery_quotes → sell_orders
+```
 
-Сразу после этого в том же изменяемом flat state выполняется
-`prepare_recovery_quotes()`: порядок `(depth(good), enterprise.id)`, очистка
-старой `production_price`, фильтры suspended/resource, landed-котировки уже
-обработанных производителей, inputs, equipment wear, consumption tax, markup и
-maximum price. Apply записывает готовые цены и восстанавливает обязательный
-`_recovery_quotes`; повторных решений и RNG в apply нет.
+Все фазы используют одно изменяемое flat state. В вычислительных циклах нет
+engine, объектов фирм, dict или callback. Маршрутные расстояния получены исходным
+Python `path()` во время pack. Inputs и equipment wear упаковываются в исходном
+порядке ключей рецепта, чтобы сохранить побитовое сложение float64.
 
-Native-вход состоит из плоских массивов. В вычислительных циклах нет engine,
-объектов фирм, dict, callback или RNG. Маршрутные расстояния получены исходным
-Python `path()` во время pack. Inputs и equipment wear упаковываются отдельными
-упорядоченными списками: порядок сложения `cost` соответствует ключам рецепта V3,
-а не общему индексу товара. Это необходимо для побитового равенства float64.
+`prepare_recovery_quotes()` сохраняет порядок `(depth(good), enterprise.id)`,
+очистку `production_price`, фильтры suspended/resource, landed-котировки уже
+обработанных производителей, inputs, equipment wear, tax/markup и maximum price.
+Apply восстанавливает обязательный `_recovery_quotes`.
 
-Версии и игровые кэши участки не меняют; производные Python-кэши не имитируются
-и при последующем обращении перестраиваются старым кодом. В `lagged_batch`
-native по-прежнему выполняет только `update_prices`, как и V3.
+`sell_orders()` перенесён целиком:
+
+- полная инвалидация market books находится перед RNG;
+- исходный `random.Random.shuffle` вызывается один раз с GIL над канонически
+  отсортированными числовыми account index; дальше цикл работает без GIL;
+- household и suspended пропускаются, товары обходятся в `sorted(stock)`;
+- free stock вычитает stock reserved и private/public locked materials;
+- input buffer и equipment reserve используют исходные planned/recent/capacity;
+- складские ask prices видят результат уже выполненного `update_prices`;
+- native создаёт готовые quantity/price/order index/execution sequence и сразу
+  меняет flat `stock_reserved`;
+- apply материализует реальные заявки и `sells[good]` строго по журналу, без
+  повторного `order()` или пересчёта quantity, price, reserve и порядка;
+- начальная и каждая последующая точечная инвалидация котировок сохраняются.
+
+Обычный `step()` остаётся V3. В `lagged_batch` native по-прежнему выполняет только
+`update_prices`, а исходный отдельный `sell_orders(exclude=...)` не меняется.
 
 ## Проверка точности
 
-На одинаковых независимых копиях сравнивались Python
-`update_prices() + prepare_recovery_quotes()` и `pack → Cython → apply`, затем
-полный старый V3 против native-режима. После каждого месяца проверялись accounts,
-enterprises, meta, report, `_recovery_quotes`, RNG и `validate()`, включая заявки,
-сделки, проекты, склады и резервы.
+На независимых копиях сравнивались три исходные Python-фазы и общий native boundary,
+затем полный старый V3 против native-режима. Сразу после `sell_orders` проверялись:
+
+- ID, порядок и все поля заявок, включая quantity, price, reserved, backing, status;
+- `stock_reserved`, `ask_prices`, состав и порядок `sells`;
+- `_market_quote_version`, `_market_quote_versions`, `_market_quotes_epoch` и
+  удаление производных market/cost/reference caches;
+- accounts, enterprises, meta, report, `_recovery_quotes`, RNG и `validate()`.
+
+Полные ходы дополнительно проверяют сделки, проекты, склады и денежные резервы.
 
 - 1 месяц, seed `73129`: совпало;
 - 12 месяцев, seed `73129`: совпало;
 - 12 месяцев, seed `17`: совпало;
-- первое расхождение после исправления порядка сложения: отсутствует.
-
-До исправления месяц 10 seed `73129` выявил один ULP у `firm-00172`: native
-сложил wood до iron и получил `cost=4.014116`, тогда как порядок рецепта V3 даёт
-`cost=4.0141160000000005`. Упорядоченная упаковка устранила причину без допусков
-и изменения формул.
-
-Команды повторной проверки:
+- первое расхождение после исправлений: отсутствует.
 
 ```bash
 python audit/native_update_prices.py --seed 73129 --months 12 --warmup 0
@@ -59,28 +65,28 @@ python audit/native_update_prices.py --seed 17 --months 12 --warmup 0
 
 Seed `73129`, `detail=none`, два прогретых месяца, четыре пары ABBA на одном
 checkpoint. Создание checkpoint не входит в замер; pack/apply входят. Старая
-строка объединяет `update_prices + prepare_recovery_quotes`.
+строка объединяет `update_prices + prepare_recovery_quotes + sell_orders`.
 
 | Участок | Медиана | Диапазон |
 |---|---:|---:|
-| старые обе фазы | 20,993 мс | 19,718–21,331 мс |
-| pack | 7,640 мс | 7,309–8,462 мс |
-| Cython call | 0,171 мс | 0,158–0,195 мс |
-| apply | 0,479 мс | 0,447–0,519 мс |
-| полный V3 step | 456,196 мс | 299,209–467,916 мс |
-| полный native step | 370,811 мс | 284,758–462,358 мс |
+| старые три фазы | 23,742 мс | 23,090–25,353 мс |
+| pack | 10,181 мс | 9,570–10,346 мс |
+| Cython call | 0,318 мс | 0,311–0,347 мс |
+| apply | 2,101 мс | 2,047–2,168 мс |
+| полный V3 step | 464,380 мс | 293,518–488,961 мс |
+| полный native step | 457,952 мс | 279,803–473,521 мс |
 
-Разность медиан полного хода: 85,386 мс в пользу native. Диапазоны полного хода
-широкие, поэтому это результат именно данного ABBA-замера, а не гарантированная
-постоянная экономия. Основная цена границы остаётся pack/apply, а не вычисление.
+Локальная разность по медианам: 11,142 мс. Полный ход: 6,428 мс в пользу native,
+что меньше локальной разницы. Это результат данного ABBA-замера, а не постоянная
+гарантированная экономия.
 
 ## Тесты
 
-- native/economy: `157 passed`;
-- полный набор: `372 passed, 1 failed`;
+- native/economy: `158 passed`;
+- полный набор: `373 passed, 1 failed`;
 - единственный сбой: предсуществующий
   `tests/test_lab.py::test_reproducible_isolated_runs_and_optional_journal`;
-  он воспроизводился отдельно и на неизменённом HEAD до этих изменений.
+  он воспроизводился отдельно и на неизменённом HEAD до native-изменений.
 
 ## Сборка
 
@@ -92,6 +98,5 @@ cd modules/economy/native
 python setup.py build_ext --inplace
 ```
 
-Импорт и вызовы обеих фаз с typed arrays прошли. Windows/MSVC в доступной среде
-отсутствуют, поэтому Windows-сборка не выполнялась и не считается проверенной.
-Платформенно специфичные GCC-флаги в setup.py отсутствуют.
+Windows/MSVC в доступной среде отсутствуют, поэтому Windows-сборка не выполнялась
+и не считается проверенной. Платформенно специфичные GCC-флаги отсутствуют.
