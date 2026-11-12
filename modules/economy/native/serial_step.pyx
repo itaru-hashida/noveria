@@ -13,6 +13,105 @@ def weighted_sum(double[::1] values, double[::1] weights):
     return total
 
 
+cdef int _decimal_digits(int value) noexcept nogil:
+    cdef int result = 1
+    while value >= 10:
+        value //= 10
+        result += 1
+    return result
+
+
+cdef bint _order_id_less(int left, int right) noexcept nogil:
+    """Сравнение числовых suffix при одинаковом month-prefix заявки."""
+    cdef int left_digits = _decimal_digits(left)
+    cdef int right_digits = _decimal_digits(right)
+    if left_digits != right_digits:
+        return left_digits < right_digits
+    return left < right
+
+
+cdef double _household_ceiling(
+        int good, double quantity, int buyer_tile, int state, int province,
+        int sell_count, int[::1] sell_good, int[::1] sell_account,
+        double[::1] sell_quantity, double[::1] sell_price, int[::1] sell_order_index,
+        int[::1] account_tile, double[:, ::1] distances, double[::1] good_weight,
+        double transport_rate, int[::1] market_state, int[::1] market_province,
+        int[::1] market_good, double[::1] market_volume,
+        double[::1] market_landed, int history_len, double default_price,
+        int[::1] quote_count, int[:, ::1] quote_enterprise,
+        double[:, ::1] quote_price, int[::1] enterprise_tile,
+        int[::1] offer_index, double[::1] offer_landed, double eps) noexcept nogil:
+    """Тот же quoted_cost ceiling: offers, market signal и recovery fallback."""
+    cdef int i, j, position, count = 0
+    cdef double distance, landed, left = quantity, q, ceiling = 0.0
+    cdef double reference, minimum_quote
+    cdef double volume_hi = 0.0, volume_lo = 0.0
+    cdef double landed_hi = 0.0, landed_lo = 0.0, item, next_hi
+    for i in range(sell_count):
+        if sell_good[i] != good:
+            continue
+        distance = distances[account_tile[sell_account[i]], buyer_tile]
+        if distance != distance:
+            continue
+        landed = sell_price[i]+distance*good_weight[good]*transport_rate
+        position = count
+        while position > 0:
+            j = offer_index[position-1]
+            if offer_landed[position-1] < landed or (offer_landed[position-1] == landed
+                    and not _order_id_less(sell_order_index[i], sell_order_index[j])):
+                break
+            offer_index[position] = j
+            offer_landed[position] = offer_landed[position-1]
+            position -= 1
+        offer_index[position] = i
+        offer_landed[position] = landed
+        count += 1
+    for i in range(count):
+        q = min(left, sell_quantity[offer_index[i]])
+        ceiling = max(ceiling, offer_landed[i])
+        left -= q
+        if left <= eps:
+            break
+    if left > eps:
+        if count:
+            reference = offer_landed[0]
+        else:
+            for i in range(market_good.shape[0]):
+                if (market_good[i] != good or market_state[i] != state
+                        or market_province[i] != province):
+                    continue
+                item = market_volume[i]
+                next_hi = volume_hi+item
+                if abs(volume_hi) >= abs(item):
+                    volume_lo += (volume_hi-next_hi)+item
+                else:
+                    volume_lo += (item-next_hi)+volume_hi
+                volume_hi = next_hi
+                item = market_landed[i]
+                next_hi = landed_hi+item
+                if abs(landed_hi) >= abs(item):
+                    landed_lo += (landed_hi-next_hi)+item
+                else:
+                    landed_lo += (item-next_hi)+landed_hi
+                landed_hi = next_hi
+            reference = ((landed_hi+landed_lo)/(volume_hi+volume_lo)
+                         if volume_hi+volume_lo != 0 else default_price)
+        minimum_quote = 0.0
+        j = 0
+        for i in range(quote_count[good]):
+            distance = distances[enterprise_tile[quote_enterprise[good, i]], buyer_tile]
+            if distance != distance:
+                continue
+            landed = quote_price[good, i]+distance*good_weight[good]*transport_rate
+            if j == 0 or landed < minimum_quote:
+                minimum_quote = landed
+            j += 1
+        if j:
+            reference = max(reference, minimum_quote)
+        ceiling = max(ceiling, reference)
+    return max(ceiling, eps)
+
+
 def update_prices(dict data):
     """Последовательный V3 update_prices над плоским числовым состоянием."""
     cdef int[::1] subject_enterprise = data['subject_enterprise']
@@ -359,8 +458,233 @@ def sell_orders(dict data, object rng):
     return count
 
 
+def household_requests(dict data, object rng):
+    """Basic для всех households, затем extra для всех в исходном RNG-порядке."""
+    cdef int[::1] households = data['household_order']
+    cdef double[::1] population = data['account_population']
+    cdef double[:, ::1] stock = data['account_stock']
+    cdef double[::1] balance = data['account_balance']
+    cdef double[::1] reserved = data['account_money_reserved']
+    cdef double[::1] protected = data['account_protected']
+    cdef int[::1] basic_good = data['household_basic_good']
+    cdef double[::1] basic_rate = data['household_basic_rate']
+    cdef double[::1] basic_rate_by_good = data['household_basic_rate_by_good']
+    cdef int[::1] extra_good = data['household_extra_good']
+    cdef double[::1] extra_rate = data['household_extra_rate']
+    cdef double[:, ::1] ceilings = data['household_quote_ceiling']
+    cdef int[::1] sort_good = data['household_sort_good']
+    cdef int[::1] output_account = data['household_request_account']
+    cdef int[::1] output_good = data['household_request_good']
+    cdef double[::1] output_needed = data['household_request_needed']
+    cdef double[::1] output_missing = data['household_request_missing']
+    cdef double[::1] output_price = data['household_request_price']
+    cdef double[::1] output_fraction = data['household_request_fraction']
+    cdef unsigned char[::1] output_basic = data['household_request_basic']
+    cdef double[::1] output_order_quantity = data['household_order_quantity']
+    cdef double[::1] output_order_reserved = data['household_order_reserved']
+    cdef double[::1] output_budget_price = data['household_budget_price']
+    cdef unsigned char[::1] output_unfunded = data['household_unfunded']
+    cdef int[::1] output_order_index = data['household_order_index']
+    cdef int[::1] output_seq = data['household_execution_seq']
+    cdef int[::1] sell_good = data['sell_order_good']
+    cdef int[::1] sell_account = data['sell_order_account']
+    cdef double[::1] sell_quantity = data['sell_order_quantity']
+    cdef double[::1] sell_price = data['sell_order_price']
+    cdef int[::1] sell_order_index = data['sell_order_index']
+    cdef int[::1] account_tile = data['account_tile']
+    cdef int[::1] account_state = data['account_state']
+    cdef int[::1] account_province = data['account_province']
+    cdef double[:, ::1] distances = data['distances']
+    cdef double[::1] good_weight = data['good_weight']
+    cdef int[::1] market_state = data['market_state']
+    cdef int[::1] market_province = data['market_province']
+    cdef int[::1] market_good = data['market_good']
+    cdef double[::1] market_volume = data['market_volume']
+    cdef double[::1] market_landed = data['market_landed_component']
+    cdef double[::1] default_price = data['good_default_price']
+    cdef int[::1] quote_count = data['recovery_quote_count']
+    cdef int[:, ::1] quote_enterprise = data['recovery_quote_enterprise']
+    cdef double[:, ::1] quote_price = data['recovery_quote_price']
+    cdef int[::1] enterprise_tile = data['enterprise_tile']
+    cdef int[::1] offer_index = data['household_offer_index']
+    cdef double[::1] offer_landed = data['household_offer_landed']
+    cdef double transport_rate = data['transport_rate']
+    cdef double eps = data['eps']
+    cdef int history_len = data['market_history_len']
+    cdef int sell_count = data['sell_order_count']
+    cdef int initial_order_count = data['initial_order_count']
+    cdef bint budget_revision = data['basic_budget_revision']
+    cdef Py_ssize_t household_count = households.shape[0]
+    cdef Py_ssize_t basic_count = basic_good.shape[0]
+    cdef Py_ssize_t extra_count = extra_good.shape[0]
+    cdef Py_ssize_t h, i, account, good, position
+    cdef Py_ssize_t request_count = 0, order_count = 0
+    cdef double needed, missing, price, fraction, quantity, free_cash
+    cdef double total_hi, total_lo, item, next_hi, key
+    cdef list shuffled = [households[i] for i in range(household_count)]
+    rng.shuffle(shuffled)
+    for i in range(household_count):
+        households[i] = shuffled[i]
+
+    with nogil:
+        # Первый проход: только базовые нужды всех households.
+        for h in range(household_count):
+            account = households[h]
+            for i in range(basic_count):
+                good = basic_good[i]
+                needed = population[account]*basic_rate[i]
+                missing = max(0, needed-stock[account, good])
+                ceilings[account, good] = _household_ceiling(good, missing,
+                    account_tile[account], account_state[account], account_province[account],
+                    sell_count, sell_good, sell_account, sell_quantity, sell_price,
+                    sell_order_index, account_tile, distances, good_weight, transport_rate,
+                    market_state, market_province, market_good, market_volume, market_landed,
+                    history_len, default_price[good], quote_count, quote_enterprise,
+                    quote_price, enterprise_tile, offer_index, offer_landed, eps)
+                sort_good[i] = good
+            if budget_revision:
+                for i in range(1, basic_count):
+                    good = sort_good[i]
+                    key = population[account]*basic_rate_by_good[good]*ceilings[account, good]
+                    position = i
+                    while position > 0:
+                        j = sort_good[position-1]
+                        if population[account]*basic_rate_by_good[j]*ceilings[account, j] <= key:
+                            break
+                        sort_good[position] = j
+                        position -= 1
+                    sort_good[position] = good
+                # Каждый singleton pass имеет собственный fraction и свободную кассу.
+                for i in range(basic_count):
+                    good = sort_good[i]
+                    needed = population[account]*basic_rate_by_good[good]
+                    missing = max(0, needed-stock[account, good])
+                    price = ceilings[account, good]
+                    item = missing*price
+                    free_cash = max(0.0, balance[account]-reserved[account]-protected[account])
+                    fraction = min(1, free_cash/item) if item > eps else 0
+                    output_account[request_count] = account
+                    output_good[request_count] = good
+                    output_needed[request_count] = needed
+                    output_missing[request_count] = missing
+                    output_price[request_count] = price
+                    output_fraction[request_count] = fraction
+                    output_budget_price[request_count] = price*fraction
+                    output_unfunded[request_count] = fraction < 1-eps
+                    output_basic[request_count] = True
+                    quantity = min(missing*fraction, free_cash/price)
+                    if quantity > eps:
+                        reserved[account] += quantity*price
+                        output_order_quantity[request_count] = quantity
+                        output_order_reserved[request_count] = quantity*price
+                        output_order_index[request_count] = initial_order_count+sell_count+order_count
+                        output_seq[request_count] = sell_count+order_count
+                        order_count += 1
+                    request_count += 1
+            else:
+                total_hi = 0.0
+                total_lo = 0.0
+                for i in range(basic_count):
+                    item = max(0, population[account]*basic_rate[i]-stock[account, basic_good[i]]) \
+                        *ceilings[account, basic_good[i]]
+                    next_hi = total_hi+item
+                    if abs(total_hi) >= abs(item):
+                        total_lo += (total_hi-next_hi)+item
+                    else:
+                        total_lo += (item-next_hi)+total_hi
+                    total_hi = next_hi
+                free_cash = max(0.0, balance[account]-reserved[account]-protected[account])
+                fraction = min(1, free_cash/(total_hi+total_lo)) if total_hi+total_lo > eps else 0
+                for i in range(basic_count):
+                    good = basic_good[i]
+                    needed = population[account]*basic_rate[i]
+                    missing = max(0, needed-stock[account, good])
+                    price = ceilings[account, good]
+                    output_account[request_count] = account
+                    output_good[request_count] = good
+                    output_needed[request_count] = needed
+                    output_missing[request_count] = missing
+                    output_price[request_count] = price
+                    output_fraction[request_count] = fraction
+                    output_budget_price[request_count] = price*fraction
+                    output_unfunded[request_count] = fraction < 1-eps
+                    output_basic[request_count] = True
+                    quantity = missing*fraction
+                    free_cash = max(0.0, balance[account]-reserved[account]-protected[account])
+                    quantity = min(quantity, free_cash/price)
+                    if quantity > eps:
+                        reserved[account] += quantity*price
+                        output_order_quantity[request_count] = quantity
+                        output_order_reserved[request_count] = quantity*price
+                        output_order_index[request_count] = initial_order_count+sell_count+order_count
+                        output_seq[request_count] = sell_count+order_count
+                        order_count += 1
+                    request_count += 1
+
+        # Второй проход начинается только после всех базовых заявок.
+        for h in range(household_count):
+            account = households[h]
+            total_hi = 0.0
+            total_lo = 0.0
+            for i in range(extra_count):
+                good = extra_good[i]
+                needed = population[account]*extra_rate[i]
+                missing = max(0, needed-stock[account, good])
+                price = _household_ceiling(good, missing, account_tile[account],
+                    account_state[account], account_province[account], sell_count,
+                    sell_good, sell_account, sell_quantity, sell_price, sell_order_index,
+                    account_tile, distances, good_weight, transport_rate, market_state,
+                    market_province, market_good, market_volume, market_landed, history_len,
+                    default_price[good], quote_count, quote_enterprise, quote_price,
+                    enterprise_tile, offer_index, offer_landed, eps)
+                ceilings[account, good] = price
+                item = missing*price
+                next_hi = total_hi+item
+                if abs(total_hi) >= abs(item):
+                    total_lo += (total_hi-next_hi)+item
+                else:
+                    total_lo += (item-next_hi)+total_hi
+                total_hi = next_hi
+            free_cash = max(0.0, balance[account]-reserved[account]-protected[account])
+            fraction = min(1, free_cash/(total_hi+total_lo)) if total_hi+total_lo > eps else 0
+            for i in range(extra_count):
+                good = extra_good[i]
+                needed = population[account]*extra_rate[i]
+                missing = max(0, needed-stock[account, good])
+                price = ceilings[account, good]
+                output_account[request_count] = account
+                output_good[request_count] = good
+                output_needed[request_count] = needed
+                output_missing[request_count] = missing
+                output_price[request_count] = price
+                output_fraction[request_count] = fraction
+                output_budget_price[request_count] = price*fraction
+                output_unfunded[request_count] = fraction < 1-eps
+                output_basic[request_count] = False
+                quantity = missing*fraction
+                free_cash = max(0.0, balance[account]-reserved[account]-protected[account])
+                quantity = min(quantity, free_cash/price)
+                if quantity > eps:
+                    reserved[account] += quantity*price
+                    output_order_quantity[request_count] = quantity
+                    output_order_reserved[request_count] = quantity*price
+                    output_order_index[request_count] = initial_order_count+sell_count+order_count
+                    output_seq[request_count] = sell_count+order_count
+                    order_count += 1
+                request_count += 1
+    data['household_request_count'] = request_count
+    return request_count
+
 def market_preparation(dict data, object rng):
     """Цены, recovery и sell orders видят одно последовательное состояние."""
     update_prices(data)
     prepare_recovery_quotes(data)
     sell_orders(data, rng)
+
+
+def household_preparation(dict data, object rng):
+    """Пять последовательных фаз до owner_requests в одном native state."""
+    update_prices(data)
+    prepare_recovery_quotes(data)
+    sell_orders(data, rng)
+    household_requests(data, rng)

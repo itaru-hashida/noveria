@@ -8,7 +8,7 @@ from modules.economy import Economy
 
 pytest.importorskip('modules.economy.native.serial_step')
 from modules.economy.native.update_prices_boundary import (
-    run_native_market, run_native_preparation, run_update_prices)
+    run_native_households, run_native_market, run_native_preparation, run_update_prices)
 
 
 def engine():
@@ -89,6 +89,37 @@ def test_sell_orders_native_ids_reserves_sells_caches_and_rng_match_v3():
     for name in ('_market_books', '_quoted_cost_cache', '_reference_price_cache'):
         assert name not in reference.__dict__
         assert name not in native.__dict__
+
+
+def test_household_requests_native_orders_needs_cash_and_rng_match_v3():
+    reference = engine()
+    reference.step()
+    native = copy.deepcopy(reference)
+
+    reference.update_prices()
+    reference.prepare_recovery_quotes()
+    sells = reference.sell_orders()
+    households = reference.shuffled(a for a in reference.accounts.values()
+                                    if a['kind'] == 'household')
+    reference.household_requests(households, reference.cfg['basic_needs'],
+                                 'Базовые нужды', sells)
+    reference.household_requests(households, reference.cfg['extra_needs'],
+                                 'Дополнительные нужды', sells)
+    run_native_households(native)
+
+    assert sells == native.native_households['sells']
+    assert [a['id'] for a in households] == [
+        a['id'] for a in native.native_households['households']]
+    assert reference._demand_revision == native._demand_revision
+    assert_same_state(reference, native)
+
+
+def test_native_deep_food_diagnostics_match_v3():
+    reference, native = engine(), engine()
+    reference.meta['report_detail'] = native.meta['report_detail'] = 'deep'
+    reference.step()
+    native.step(native_mode='cython')
+    assert_same_state(reference, native)
 
 
 def test_two_complete_native_steps_match_v3():

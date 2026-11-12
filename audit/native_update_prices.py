@@ -1,4 +1,4 @@
-"""Точность и стоимость native prices + recovery + sell_orders без cProfile.
+"""Точность и стоимость native boundary через household requests без cProfile.
 
     python audit/native_update_prices.py --seed 73129 --months 12
     python audit/native_update_prices.py --seed 73129 --benchmark --abba 4
@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'audit'))
 
 import scenario_runner as sr
-from modules.economy.native.update_prices_boundary import run_native_market
+from modules.economy.native.update_prices_boundary import run_native_households
 
 
 def assert_same(reference, native, month):
@@ -31,7 +31,8 @@ def assert_same(reference, native, month):
             raise AssertionError(f'месяц {month}: {name}')
     if reference._recovery_quotes != native._recovery_quotes:
         raise AssertionError(f'месяц {month}: recovery quotes')
-    for name in ('_market_quote_version', '_market_quote_versions', '_market_quotes_epoch'):
+    for name in ('_market_quote_version', '_market_quote_versions', '_market_quotes_epoch',
+                 '_demand_revision'):
         if getattr(reference, name) != getattr(native, name):
             raise AssertionError(f'месяц {month}: {name}')
     if reference.rng.getstate() != native.rng.getstate():
@@ -48,10 +49,19 @@ def verify(engine, months):
         direct_reference.update_prices()
         direct_reference.prepare_recovery_quotes()
         reference_sells = direct_reference.sell_orders()
-        run_native_market(direct_native)
+        reference_households = direct_reference.shuffled(
+            a for a in direct_reference.accounts.values() if a['kind'] == 'household')
+        direct_reference.household_requests(reference_households,
+            direct_reference.cfg['basic_needs'], 'Базовые нужды', reference_sells)
+        direct_reference.household_requests(reference_households,
+            direct_reference.cfg['extra_needs'], 'Дополнительные нужды', reference_sells)
+        run_native_households(direct_native)
         assert_same(direct_reference, direct_native, month)
-        if reference_sells != direct_native.native_market['sells']:
+        if reference_sells != direct_native.native_households['sells']:
             raise AssertionError(f'месяц {month}: sells')
+        if [a['id'] for a in reference_households] != [
+                a['id'] for a in direct_native.native_households['households']]:
+            raise AssertionError(f'месяц {month}: household order')
         reference.step()
         native.step(native_mode='cython')
         assert_same(reference, native, month)
@@ -65,6 +75,7 @@ def measured_v3(checkpoint):
     original_update = engine.update_prices
     original_recovery = engine.prepare_recovery_quotes
     original_sell = engine.sell_orders
+    original_household = engine.household_requests
     elapsed = []
     def timed_update(self):
         started = time.perf_counter()
@@ -83,7 +94,13 @@ def measured_v3(checkpoint):
         return result
     engine.update_prices = types.MethodType(timed_update, engine)
     engine.prepare_recovery_quotes = types.MethodType(timed_recovery, engine)
+    def timed_household(self, households, needs, purpose, sells):
+        started = time.perf_counter()
+        result = original_household(households, needs, purpose, sells)
+        elapsed.append(time.perf_counter()-started)
+        return result
     engine.sell_orders = types.MethodType(timed_sell, engine)
+    engine.household_requests = types.MethodType(timed_household, engine)
     started = time.perf_counter()
     engine.step()
     return time.perf_counter()-started, sum(elapsed)
@@ -101,14 +118,14 @@ def measured_native(checkpoint):
 def benchmark(engine, pairs):
     # Прогрев checkpoint не входит ни в один замер.
     checkpoint = copy.deepcopy(engine)
-    rows = {'v3_step': [], 'v3_market_phases': [], 'native_step': [],
+    rows = {'v3_step': [], 'v3_five_phases': [], 'native_step': [],
             'pack': [], 'native': [], 'apply': []}
     for pair in range(pairs):
         for mode in ('v3', 'native', 'native', 'v3'):
             if mode == 'v3':
-                wall, market_phases = measured_v3(checkpoint)
+                wall, five_phases = measured_v3(checkpoint)
                 rows['v3_step'].append(wall)
-                rows['v3_market_phases'].append(market_phases)
+                rows['v3_five_phases'].append(five_phases)
             else:
                 wall, timings = measured_native(checkpoint)
                 rows['native_step'].append(wall)

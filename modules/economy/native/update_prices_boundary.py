@@ -1,4 +1,4 @@
-"""Flat pack/journal/apply для native update_prices и recovery quotes."""
+"""Общий flat pack/journal/apply для native-фаз V3 до owner_requests."""
 import time
 
 import numpy as np
@@ -60,6 +60,7 @@ def pack_update_prices(engine):
     states = list(dict.fromkeys([a['state_id'] for a in accounts]
                                 + [r['state_id'] for r in market_rows]))
     provinces = list(dict.fromkeys([a['province_id'] for a in accounts]
+                                   + [engine.market_province(a) for a in accounts]
                                    + [r['province_id'] for r in market_rows]))
     state_index = _indices(states)
     province_index = _indices(provinces)
@@ -157,6 +158,11 @@ def pack_update_prices(engine):
         sell_offsets.append(len(sell_goods))
     seller_order = sorted(range(len(accounts)), key=lambda i: accounts[i]['id'])
     sell_capacity = len(sell_goods)
+    household_order = sorted((i for i, a in enumerate(accounts) if a['kind'] == 'household'),
+                             key=lambda i: accounts[i]['id'])
+    basic_goods = list(engine.cfg['basic_needs'])
+    extra_goods = list(engine.cfg['extra_needs'])
+    household_capacity = len(household_order)*(len(basic_goods)+len(extra_goods))
 
     data = dict(
         subject_enterprise=_int32(subject_enterprise),
@@ -193,6 +199,7 @@ def pack_update_prices(engine):
         market_province=_int32([province_index[r['province_id']] for r in market_rows]),
         market_good=_int32([good_index[r['good']] for r in market_rows]),
         market_volume=_float64([r['volume'] for r in market_rows]),
+        market_landed_component=_float64([r['trade_gold']+r['freight'] for r in market_rows]),
         market_history_len=len(engine.meta.get('market_history', [])),
         distances=distances,
         good_weight=_float64([engine.goods[g]['weight'] for g in goods]),
@@ -251,6 +258,38 @@ def pack_update_prices(engine):
         sell_execution_seq=np.zeros(sell_capacity, dtype=np.int32),
         sell_order_count=0,
         initial_order_count=len(engine.report['orders']),
+        account_state=_int32([state_index[a['state_id']] for a in accounts]),
+        account_province=_int32([province_index[engine.market_province(a)] for a in accounts]),
+        account_tile=_int32([tile_index[engine.market_tile(a)] for a in accounts]),
+        account_balance=_float64([a['balance'] for a in accounts]),
+        account_money_reserved=_float64([a.get('reserved', 0) for a in accounts]),
+        account_protected=_float64([a.get('protected', 0) for a in accounts]),
+        account_population=_float64([engine.population(a) for a in accounts]),
+        household_order=_int32(household_order),
+        household_basic_good=_int32([good_index[g] for g in basic_goods]),
+        household_basic_rate=_float64([engine.cfg['basic_needs'][g] for g in basic_goods]),
+        household_basic_rate_by_good=_float64([engine.cfg['basic_needs'].get(g, 0) for g in goods]),
+        household_extra_good=_int32([good_index[g] for g in extra_goods]),
+        household_extra_rate=_float64([engine.cfg['extra_needs'][g] for g in extra_goods]),
+        basic_budget_revision=bool(engine.BASIC_BUDGET_REVISION),
+        household_quote_ceiling=np.zeros((len(accounts), len(goods)), dtype=np.float64),
+        household_offer_index=np.zeros(sell_capacity, dtype=np.int32),
+        household_offer_landed=np.zeros(sell_capacity, dtype=np.float64),
+        household_sort_good=np.zeros(len(basic_goods), dtype=np.int32),
+        household_request_account=np.zeros(household_capacity, dtype=np.int32),
+        household_request_good=np.zeros(household_capacity, dtype=np.int32),
+        household_request_needed=np.zeros(household_capacity, dtype=np.float64),
+        household_request_missing=np.zeros(household_capacity, dtype=np.float64),
+        household_request_price=np.zeros(household_capacity, dtype=np.float64),
+        household_request_fraction=np.zeros(household_capacity, dtype=np.float64),
+        household_request_basic=np.zeros(household_capacity, dtype=np.uint8),
+        household_order_quantity=np.zeros(household_capacity, dtype=np.float64),
+        household_order_reserved=np.zeros(household_capacity, dtype=np.float64),
+        household_budget_price=np.zeros(household_capacity, dtype=np.float64),
+        household_unfunded=np.zeros(household_capacity, dtype=np.uint8),
+        household_order_index=np.full(household_capacity, -1, dtype=np.int32),
+        household_execution_seq=np.full(household_capacity, -1, dtype=np.int32),
+        household_request_count=0,
     )
     meta = dict(subjects=subjects, ask_updates=ask_updates,
                 account_index=account_index, enterprise_index=enterprise_index,
@@ -353,14 +392,60 @@ def apply_sell_orders(engine, data, meta):
     return journal, sells
 
 
-def _run(engine, include_recovery, include_sells=False):
+def apply_households(engine, data, meta, households, sells):
+    """Создать needs и buy orders из готовых household request events."""
+    food_trace = None
+    if engine.FOOD_DIAGNOSTICS and engine.report_detail() == 'deep':
+        from modules.economy.food_diagnostics import FoodDiagnostics
+        food_trace = FoodDiagnostics(engine, households, sells)
+    accounts = list(engine.accounts.values())
+    goods = list(engine.goods)
+    journal = []
+    for index in range(data['household_request_count']):
+        account = int(data['household_request_account'][index])
+        good_index = int(data['household_request_good'][index])
+        good = goods[good_index]
+        needed = float(data['household_request_needed'][index])
+        a = accounts[account]
+        a.setdefault('needs', {})[good] = dict(needed=needed, consumed=0, deficit=needed)
+        journal.append(('set_household_need', int(data['household_execution_seq'][index]),
+                        account, good_index, needed))
+        order_index = int(data['household_order_index'][index])
+        if order_index < 0:
+            continue
+        quantity = float(data['household_order_quantity'][index])
+        price = float(data['household_request_price'][index])
+        reserved = float(data['household_order_reserved'][index])
+        basic = bool(data['household_request_basic'][index])
+        state_id, province_id, tile_id = meta['order_locations'][account]
+        order = dict(id=f'{meta["month"]}-{order_index}', participant=a['id'], good=good,
+            quantity=quantity, remaining=quantity, price=price, side='buy',
+            purpose='Базовые нужды' if basic else 'Дополнительные нужды',
+            status='active', reason='', expires=meta['month'], final_consumption=True,
+            state_id=state_id, province_id=province_id, tile_id=tile_id,
+            reserved=reserved, backing=reserved,
+            need_quantity=float(data['household_request_missing'][index]),
+            budget_price=float(data['household_budget_price'][index]),
+            unfunded_need=bool(data['household_unfunded'][index]),
+            adaptive_household_budget=True)
+        a['reserved'] = a.get('reserved', 0)+reserved
+        engine.report['orders'].append(order)
+        engine._demand_revision[good] += 1
+        journal.append(('create_household_order', int(data['household_execution_seq'][index]),
+                        order['id'], account, good_index, quantity, price, reserved))
+    return journal, food_trace
+
+
+def _run(engine, include_recovery, include_sells=False, include_households=False):
     timings = {}
     started = time.perf_counter()
     data, meta = pack_update_prices(engine)
     timings['pack'] = time.perf_counter()-started
     native = load_serial_step()
     started = time.perf_counter()
-    if include_sells:
+    if include_households:
+        native.household_preparation(data, engine.rng)
+    elif include_sells:
         native.market_preparation(data, engine.rng)
     elif include_recovery:
         native.preparation(data)
@@ -375,12 +460,22 @@ def _run(engine, include_recovery, include_sells=False):
     if include_sells:
         sell_journal, sells = apply_sell_orders(engine, data, meta)
         journal.extend(sell_journal)
+    households = None
+    food_trace = None
+    if include_households:
+        accounts = list(engine.accounts.values())
+        households = [accounts[int(i)] for i in data['household_order']]
+        household_journal, food_trace = apply_households(engine, data, meta, households, sells)
+        journal.extend(household_journal)
     timings['apply'] = time.perf_counter()-started
-    result = dict(timings=timings, data=data, meta=meta, journal=journal, sells=sells)
+    result = dict(timings=timings, data=data, meta=meta, journal=journal, sells=sells,
+                  households=households, food_trace=food_trace)
     engine.native_update_prices = result
     engine.native_preparation = result
     if include_sells:
         engine.native_market = result
+    if include_households:
+        engine.native_households = result
     return journal
 
 
@@ -397,3 +492,8 @@ def run_native_preparation(engine):
 def run_native_market(engine):
     """Один pack/call/apply для цен, recovery и sell_orders."""
     return _run(engine, include_recovery=True, include_sells=True)
+
+
+def run_native_households(engine):
+    """Общий native boundary до конца basic/extra household requests."""
+    return _run(engine, include_recovery=True, include_sells=True, include_households=True)
