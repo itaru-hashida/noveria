@@ -3509,11 +3509,11 @@ class Economy(EconomyServices):
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0,
                 equipment_wear={})
         if native_mode == 'cython':
-            from .native.update_prices_boundary import run_native_households, run_update_prices
+            from .native.update_prices_boundary import run_native_owners, run_update_prices
             if planning_mode == 'lagged_batch':
                 run_update_prices(self)
             else:
-                run_native_households(self)
+                run_native_owners(self)
         else:
             self.update_prices()
         lagged_plans = None
@@ -3545,7 +3545,8 @@ class Economy(EconomyServices):
             food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS and detail == 'deep' else None
             self.household_requests(households, self.cfg['basic_needs'], 'Базовые нужды', sells)
             self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
-        self.owner_requests(sells)
+        if native_mode != 'cython' or planning_mode == 'lagged_batch':
+            self.owner_requests(sells)
         if planning_mode != 'lagged_batch':
             self.recover_enterprises(sells)
         self.public_project_requests(sells)

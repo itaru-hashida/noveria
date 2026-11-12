@@ -65,10 +65,13 @@ def pack_update_prices(engine):
     state_index = _indices(states)
     province_index = _indices(provinces)
 
+    demand_orders = [o for o in engine.report['orders'] if o['side'] == 'buy']
     tile_ids = {a.get('cell_id') or a['tile_id'] for a in accounts}
     tile_ids.update(e['tile_id'] for e in enterprises)
     tile_ids.update(o['tile_id'] for o in public_orders)
     tile_ids.update(o['tile_id'] for o in feedback)
+    tile_ids.update(o['tile_id'] for o in demand_orders)
+    tile_ids.update(a['project']['location']['tile_id'] for a in accounts if a.get('project'))
     tiles = sorted(tile_ids)
     tile_index = _indices(tiles)
     distances = np.full((len(tiles), len(tiles)), np.nan, dtype=np.float64)
@@ -163,6 +166,30 @@ def pack_update_prices(engine):
     basic_goods = list(engine.cfg['basic_needs'])
     extra_goods = list(engine.cfg['extra_needs'])
     household_capacity = len(household_order)*(len(basic_goods)+len(extra_goods))
+    owner_order = sorted((i for i, a in enumerate(accounts) if a['kind'] in ('private', 'merchant')),
+                         key=lambda i: accounts[i]['id'])
+    owner_capacity = len(owner_order)*3
+    # project_cash_reserve читает уже созданные household orders, поэтому в native
+    # передаются все заявки, а не только public orders из update_prices.
+    construction = list(engine.cfg['construction'])
+    construction_offsets = [0]
+    construction_goods, construction_values = [], []
+    project_capacity, project_working, project_delivery = [], [], []
+    project_tiles = []
+    for account in accounts:
+        project = account.get('project')
+        project_capacity.append(project['capacity'] if project else 0.0)
+        project_working.append(project['working_cash'] if project else 0.0)
+        project_delivery.append(project.get('delivery', 0) if project else 0.0)
+        project_tiles.append(tile_index[project['location']['tile_id']] if project else -1)
+    for good in construction:
+        construction_goods.append(good_index[good])
+        construction_values.append(engine.cfg['construction'][good]/engine.cfg['minimum_capacity'])
+    construction_offsets.append(len(construction_goods))
+    tile_ids.update(o['tile_id'] for o in demand_orders)
+    if any(o['tile_id'] not in tile_index for o in demand_orders):
+        raise ValueError('Маршрутная матрица не содержит площадку заявки')
+    owner_basket = [good_index[g] for g in ('bread', 'fish', 'cloth')]
 
     data = dict(
         subject_enterprise=_int32(subject_enterprise),
@@ -290,6 +317,35 @@ def pack_update_prices(engine):
         household_order_index=np.full(household_capacity, -1, dtype=np.int32),
         household_execution_seq=np.full(household_capacity, -1, dtype=np.int32),
         household_request_count=0,
+        household_order_count_created=household_capacity,
+        demand_order_good=_int32([good_index[o['good']] for o in demand_orders]),
+        demand_order_participant=_int32([account_index[o['participant']] for o in demand_orders]),
+        demand_order_remaining=_float64([o['remaining'] for o in demand_orders]),
+        demand_order_reserved=_float64([o['reserved'] for o in demand_orders]),
+        demand_order_active=_uint8([o['status'] not in ('cancelled', 'expired') for o in demand_orders]),
+        demand_order_construction=_uint8([o['purpose'] == 'Строительные материалы' for o in demand_orders]),
+        project_capacity=_float64(project_capacity),
+        project_working=_float64(project_working),
+        project_delivery=_float64(project_delivery),
+        project_tile=_int32(project_tiles),
+        construction_good=_int32(construction_goods),
+        construction_ratio=_float64(construction_values),
+        owner_order=_int32(owner_order),
+        owner_basket_good=_int32(owner_basket),
+        owner_consumption_rate=float(engine.cfg['owner_consumption_rate']),
+        owner_family_size=float(engine.OWNER_FAMILY_SIZE),
+        owner_food_quality=float(engine.OWNER_FOOD_QUALITY),
+        owner_account=np.zeros(len(owner_order), dtype=np.int32),
+        owner_project_reserve=np.zeros(len(owner_order), dtype=np.float64),
+        owner_free_cash=np.zeros(len(owner_order), dtype=np.float64),
+        owner_budget=np.zeros(len(owner_order), dtype=np.float64),
+        owner_request_good=np.zeros(owner_capacity, dtype=np.int32),
+        owner_order_quantity=np.zeros(owner_capacity, dtype=np.float64),
+        owner_order_reserved=np.zeros(owner_capacity, dtype=np.float64),
+        owner_order_price=np.zeros(owner_capacity, dtype=np.float64),
+        owner_order_index=np.full(owner_capacity, -1, dtype=np.int32),
+        owner_execution_seq=np.full(owner_capacity, -1, dtype=np.int32),
+        owner_request_count=0,
     )
     meta = dict(subjects=subjects, ask_updates=ask_updates,
                 account_index=account_index, enterprise_index=enterprise_index,
@@ -436,14 +492,58 @@ def apply_households(engine, data, meta, households, sells):
     return journal, food_trace
 
 
-def _run(engine, include_recovery, include_sells=False, include_households=False):
+def apply_owners(engine, data, meta, sells):
+    """Материализовать личные заявки и диагностику владельцев."""
+    accounts = list(engine.accounts.values())
+    goods = list(engine.goods)
+    journal = []
+    for i, account in enumerate(data['owner_order']):
+        account = int(account)
+        a = accounts[account]
+        project = float(data['owner_project_reserve'][i])
+        available = float(data['owner_free_cash'][i])
+        budget = float(data['owner_budget'][i])
+        a.update(owner_free_cash=available, owner_consumption_budget=budget,
+                 project_reserve=project)
+        row = dict(owner=a['id'], free_cash=available, project_reserve=project,
+                   budget=budget, spent=0.0, tax=0.0, freight=0.0, consumed={}, orders=[])
+        engine.report['owner_consumption'].append(row)
+        journal.append(('owner_budget', i, account, project, available, budget))
+        for k in range(3):
+            index = i*3+k
+            order_index = int(data['owner_order_index'][index])
+            if order_index < 0:
+                continue
+            good = goods[int(data['owner_request_good'][index])]
+            quantity = float(data['owner_order_quantity'][index])
+            price = float(data['owner_order_price'][index])
+            reserved = float(data['owner_order_reserved'][index])
+            state_id, province_id, tile_id = meta['order_locations'][account]
+            order = dict(id=f'{meta["month"]}-{order_index}', participant=a['id'], good=good,
+                quantity=quantity, remaining=quantity, price=price, side='buy',
+                purpose='Личное потребление собственника', status='active', reason='',
+                expires=meta['month'], final_consumption=True, state_id=state_id,
+                province_id=province_id, tile_id=tile_id, reserved=reserved, backing=reserved)
+            a['reserved'] = a.get('reserved', 0)+reserved
+            engine.report['orders'].append(order)
+            engine._demand_revision[good] += 1
+            row['orders'].append(order['id'])
+            journal.append(('create_owner_order', int(data['owner_execution_seq'][index]),
+                            order['id'], account, good, quantity, price, reserved))
+    return journal
+
+
+def _run(engine, include_recovery, include_sells=False, include_households=False,
+         include_owners=False):
     timings = {}
     started = time.perf_counter()
     data, meta = pack_update_prices(engine)
     timings['pack'] = time.perf_counter()-started
     native = load_serial_step()
     started = time.perf_counter()
-    if include_households:
+    if include_owners:
+        native.owner_preparation(data, engine.rng)
+    elif include_households:
         native.household_preparation(data, engine.rng)
     elif include_sells:
         native.market_preparation(data, engine.rng)
@@ -467,6 +567,8 @@ def _run(engine, include_recovery, include_sells=False, include_households=False
         households = [accounts[int(i)] for i in data['household_order']]
         household_journal, food_trace = apply_households(engine, data, meta, households, sells)
         journal.extend(household_journal)
+    if include_owners:
+        journal.extend(apply_owners(engine, data, meta, sells))
     timings['apply'] = time.perf_counter()-started
     result = dict(timings=timings, data=data, meta=meta, journal=journal, sells=sells,
                   households=households, food_trace=food_trace)
@@ -476,6 +578,8 @@ def _run(engine, include_recovery, include_sells=False, include_households=False
         engine.native_market = result
     if include_households:
         engine.native_households = result
+    if include_owners:
+        engine.native_owners = result
     return journal
 
 
@@ -497,3 +601,9 @@ def run_native_market(engine):
 def run_native_households(engine):
     """Общий native boundary до конца basic/extra household requests."""
     return _run(engine, include_recovery=True, include_sells=True, include_households=True)
+
+
+def run_native_owners(engine):
+    """Общий native boundary до конца owner_requests."""
+    return _run(engine, include_recovery=True, include_sells=True, include_households=True,
+                include_owners=True)

@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'audit'))
 
 import scenario_runner as sr
-from modules.economy.native.update_prices_boundary import run_native_households
+from modules.economy.native.update_prices_boundary import run_native_owners
 
 
 def assert_same(reference, native, month):
@@ -55,7 +55,8 @@ def verify(engine, months):
             direct_reference.cfg['basic_needs'], 'Базовые нужды', reference_sells)
         direct_reference.household_requests(reference_households,
             direct_reference.cfg['extra_needs'], 'Дополнительные нужды', reference_sells)
-        run_native_households(direct_native)
+        direct_reference.owner_requests(reference_sells)
+        run_native_owners(direct_native)
         assert_same(direct_reference, direct_native, month)
         if reference_sells != direct_native.native_households['sells']:
             raise AssertionError(f'месяц {month}: sells')
