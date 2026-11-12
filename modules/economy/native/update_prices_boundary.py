@@ -173,7 +173,7 @@ def pack_update_prices(engine):
     # передаются все заявки, а не только public orders из update_prices.
     construction = list(engine.cfg['construction'])
     construction_offsets = [0]
-    construction_goods, construction_values = [], []
+    construction_goods, construction_values, construction_amounts = [], [], []
     project_capacity, project_working, project_delivery = [], [], []
     project_tiles = []
     for account in accounts:
@@ -185,6 +185,7 @@ def pack_update_prices(engine):
     for good in construction:
         construction_goods.append(good_index[good])
         construction_values.append(engine.cfg['construction'][good]/engine.cfg['minimum_capacity'])
+        construction_amounts.append(engine.cfg['construction'][good])
     construction_offsets.append(len(construction_goods))
     tile_ids.update(o['tile_id'] for o in demand_orders)
     if any(o['tile_id'] not in tile_index for o in demand_orders):
@@ -365,6 +366,8 @@ def pack_update_prices(engine):
         project_tile=_int32(project_tiles),
         construction_good=_int32(construction_goods),
         construction_ratio=_float64(construction_values),
+        construction_amount=_float64(construction_amounts),
+        minimum_capacity=float(engine.cfg['minimum_capacity']),
         owner_order=_int32(owner_order),
         owner_basket_good=_int32(owner_basket),
         owner_consumption_rate=float(engine.cfg['owner_consumption_rate']),

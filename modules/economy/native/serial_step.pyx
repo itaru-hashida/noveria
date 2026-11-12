@@ -785,6 +785,8 @@ def owner_requests(dict data, object rng):
     cdef int[::1] project_tile = data['project_tile']
     cdef int[::1] construction_good = data['construction_good']
     cdef double[::1] construction_ratio = data['construction_ratio']
+    cdef double[::1] construction_amount = data['construction_amount']
+    cdef double minimum_capacity = data['minimum_capacity']
     cdef int[::1] demand_good = data['demand_order_good']
     cdef int[::1] demand_participant = data['demand_order_participant']
     cdef int[::1] demand_tile = data['demand_order_tile']
@@ -837,7 +839,7 @@ def owner_requests(dict data, object rng):
     cdef int next_order = data['initial_order_count']+sell_count+data['household_order_count_created']
     cdef int demand_count = data['demand_order_count']
     cdef int i, j, k, account, good, request = 0
-    cdef double project, available, budget, share, reference, quantity, ceiling, distance
+    cdef double project, available, budget, share, reference, quantity, ceiling, distance, material_cost
     cdef double ordered, missing, item, next_hi, weight_hi, weight_lo
     cdef list shuffled = [owners[i] for i in range(owners.shape[0])]
     rng.shuffle(shuffled)
@@ -855,7 +857,7 @@ def owner_requests(dict data, object rng):
                     weight_hi = 0.0
                     weight_lo = 0.0
                     for j in range(construction_good.shape[0]):
-                        item = construction_ratio[j]*project_capacity[account] \
+                        item = construction_amount[j]*project_capacity[account]/minimum_capacity \
                             *weight[construction_good[j]]
                         next_hi = weight_hi+item
                         if abs(weight_hi) >= abs(item):
@@ -874,7 +876,7 @@ def owner_requests(dict data, object rng):
                                 and demand_good[j] == good and demand_active[j]
                                 and demand_reserved[j] > eps):
                             ordered += demand_remaining[j]
-                    missing = max(0.0, construction_ratio[k]*project_capacity[account]
+                    missing = max(0.0, construction_amount[k]*project_capacity[account]/minimum_capacity
                                   -stock[account, good]-ordered)
                     ceiling = _household_ceiling(good, missing, account_tile[account],
                         account_state[account], account_province[account], sell_count,
@@ -883,7 +885,11 @@ def owner_requests(dict data, object rng):
                         market_province, market_good, market_volume, market_landed, history_len,
                         default_price[good], quote_count, quote_enterprise, quote_price,
                         enterprise_tile, offer_index, offer_landed, eps, -1, account, sell_active)
-                    project += missing*ceiling
+                    # V3 сначала округляет произведение в Python float, затем
+                    # прибавляет его к reserve. Явный temporary запрещает
+                    # компилятору склеить операции в FMA.
+                    material_cost = missing*ceiling
+                    project = project+material_cost
             available = max(0.0, balance[account]-reserved[account]-max(protected[account], project))
             budget = rate*available
             output_project[i] = project
@@ -1158,6 +1164,8 @@ def recover_enterprises(dict data, object rng):
     cdef int[::1] project_tile = data['project_tile']
     cdef int[::1] construction_good = data['construction_good']
     cdef double[::1] construction_ratio = data['construction_ratio']
+    cdef double[::1] construction_amount = data['construction_amount']
+    cdef double minimum_capacity = data['minimum_capacity']
     cdef int[::1] output_enterprise = data['recovery_enterprise']
     cdef double[::1] output_transfer = data['recovery_transfer']
     cdef double[::1] output_hold = data['recovery_hold']
@@ -1365,7 +1373,7 @@ def recover_enterprises(dict data, object rng):
                 if distance == distance:
                     weight_hi = 0.0; weight_lo = 0.0
                     for k in range(construction_good.shape[0]):
-                        item = construction_ratio[k]*project_capacity[owner]*weight[construction_good[k]]
+                        item = construction_amount[k]*project_capacity[owner]/minimum_capacity*weight[construction_good[k]]
                         next_hi = weight_hi+item
                         if abs(weight_hi) >= abs(item): weight_lo += (weight_hi-next_hi)+item
                         else: weight_lo += (item-next_hi)+weight_hi
@@ -1381,7 +1389,7 @@ def recover_enterprises(dict data, object rng):
                                 and demand_good[j] == input_g and demand_active[j]
                                 and demand_reserved[j] > eps):
                             ordered += demand_remaining[j]
-                    missing = max(0.0, construction_ratio[k]*project_capacity[owner]
+                    missing = max(0.0, construction_amount[k]*project_capacity[owner]/minimum_capacity
                                   -stock[owner, input_g]-ordered)
                     reference = _household_ceiling(input_g, missing, account_tile[owner],
                         account_state[owner], account_province[owner], sell_count,
