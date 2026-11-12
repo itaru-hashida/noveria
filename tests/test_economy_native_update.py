@@ -8,8 +8,8 @@ from modules.economy import Economy
 
 pytest.importorskip('modules.economy.native.serial_step')
 from modules.economy.native.update_prices_boundary import (
-    run_native_households, run_native_market, run_native_preparation, run_native_recovery,
-    run_update_prices)
+    run_native_households, run_native_market, run_native_preparation, run_native_public_projects,
+    run_native_recovery, run_update_prices)
 
 
 def engine():
@@ -40,7 +40,7 @@ def assert_same_state(reference, native):
     native.validate()
 
 
-def run_recovery_pair(reference):
+def run_recovery_pair(reference, public=False):
     native = copy.deepcopy(reference)
     # Прямой replay начинается с той же monthly derived state, что и step().
     for name in ('_planning_orders', '_stock_sales_cache', '_production_outlook_cache'):
@@ -57,7 +57,11 @@ def run_recovery_pair(reference):
                                  'Дополнительные нужды', sells)
     reference.owner_requests(sells)
     reference.recover_enterprises(sells)
-    run_native_recovery(native)
+    if public:
+        reference.public_project_requests(sells)
+        run_native_public_projects(native)
+    else:
+        run_native_recovery(native)
     assert_same_state(reference, native)
     assert reference._stock_sales_cache == native._stock_sales_cache
     for name in ('_market_quote_version', '_market_quote_versions',
@@ -236,3 +240,36 @@ def test_recovery_equal_landed_prices_use_python_lexical_order():
     else:
         pytest.fail('Нужен сценарий с равными ценами для проверки FIFO')
     assert_same_state(reference, native)
+
+
+def test_public_project_stock_claims_releases_orders_and_cash_cap_match_v3():
+    reference = engine()
+    reference.step()
+    reference.goods['tools']['durable'] = {'wear_rate': 0.1}
+    reference.cfg['institutions']['test_school'] = dict(
+        name='Школа', materials={'wood': 20.0}, equipment={'tools': 6.0},
+        equipment_wear={}, work_required=10.0, max_workers=5.0)
+    reference.cfg['construction_modes']['normal']['support_goods'] = {'bread': 4.0}
+    project = reference.start_public_project('c', 'test_school')
+    account = reference.accounts['municipal:c']
+    account['stock'].update(wood=10.0, tools=4.0, bread=10.0)
+    account.update(balance=1.0, reserved=0.0, protected=0.0)
+    reference.enterprises['firm-00007']['suspended'] = True
+    reference.meta['initial_gold'] = reference.gold()
+
+    sells, native = run_recovery_pair(reference, public=True)
+
+    held = reference.accounts['municipal:c']['public_projects'][0]
+    assert held['id'] == project['id']
+    assert held['materials']['wood'] == 10.0
+    assert held['equipment_held']['tools'] == 4.0
+    assert held['support_stock']['bread'] == 10.0
+    releases = [e for e in native.native_public_projects['journal']
+                if e[0] == 'public_stock_release']
+    assert releases
+    orders = [o for o in reference.report['orders'] if o.get('project_id') == project['id']]
+    assert orders
+    assert any(o['purpose'] == 'Содержание ускоренной стройки' for o in orders) is False
+    assert all(o['quantity']*o['price'] <= 1.0 for o in orders)
+    assert sells == native.native_public_projects['sells']
+    assert reference._demand_revision == native._demand_revision

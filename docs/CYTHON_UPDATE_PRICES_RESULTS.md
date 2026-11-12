@@ -1,6 +1,6 @@
-# Рабочие Cython-участки: от prices до recover_enterprises
+# Рабочие Cython-участки: от prices до public_project_requests
 
-Дата: 12.11.2026. Предыдущий опубликованный boundary: `a2ada29`.
+Дата: 12.11.2026. Предыдущий опубликованный boundary: `bca5aec`.
 
 ## Реализация
 
@@ -9,7 +9,7 @@
 ```text
 update_prices → prepare_recovery_quotes → sell_orders
 → household_requests(basic) → household_requests(extra)
-→ owner_requests → recover_enterprises
+→ owner_requests → recover_enterprises → public_project_requests
 ```
 
 Все фазы используют одно изменяемое flat state. В вычислительных циклах нет
@@ -53,6 +53,14 @@ transfers, reopen, cancellations и operating reserve. Apply материали�
 и восстанавливает `_stock_sales_cache` и `_production_outlook_cache` из journal, включая
 snapshot quote versions; повторный `production_outlook()` в apply не вызывается.
 
+`public_project_requests()` выполняется в том же state после recovery. Native последовательно
+закрепляет собственные materials, equipment и support stock, при необходимости сокращает
+quantity/remaining/backing существующих sell offers и уменьшает `stock_reserved`. Он сразу
+обновляет market versions, отменяет исчерпанные offers, ограничивает покупки доступными
+деньгами, увеличивает денежный reserve и добавляет готовые buy orders с `project_id` в общий
+demand state. Apply только материализует bucket values, release/cancel events и заявки по
+журналу; quantity, price, reserve и порядок повторно не вычисляются.
+
 Offers упорядочиваются по `(landed_price, order ID)`. Decimal suffix сравнивается
 лексикографически по цифрам, включая `2 < 268` и `11 < 9`; числовая сортировка здесь
 недопустима. История продаж и Python 3.12 `sum()` воспроизводятся компенсированным
@@ -63,7 +71,7 @@ Offers упорядочиваются по `(landed_price, order ID)`. Decimal s
 
 ## Проверка точности
 
-На независимых копиях сравнивались семь исходных Python-фаз и общий native boundary,
+На независимых копиях сравнивались восемь исходных Python-фаз и общий native boundary,
 затем полный старый V3 против native-режима. На границе проверялись:
 
 - ID, порядок и все поля заявок, включая quantity, price, reserved, backing, status;
@@ -72,6 +80,7 @@ Offers упорядочиваются по `(landed_price, order ID)`. Decimal s
   удаление производных market/cost/reference caches;
 - household order, needs, buy quantity/price/reserved и `_demand_revision`;
 - owner budgets/reserves, recovery transfers, lifecycle, cancellations и operating holds;
+- public stock claims, сокращение и отмена sell offers, buy orders, project IDs и cash cap;
 - точные `_stock_sales_cache` и `_production_outlook_cache`, включая ключи и quote versions;
 - accounts, enterprises, meta, report, `_recovery_quotes`, RNG и `validate()`.
 
@@ -92,29 +101,29 @@ PYTHONPATH=. python audit/native_update_prices.py --seed 17 --months 12
 
 Seed `73129`, `detail=none`, два прогретых месяца, четыре пары ABBA на одном
 checkpoint. Создание checkpoint не входит в замер; pack/apply входят. Старая
-строка объединяет prices, recovery quotes, sell, оба household requests, owner requests
-и начальный recover_enterprises. Повторные точечные recovery из plan_enterprises не
-относятся к измеряемому boundary.
+строка объединяет prices, recovery quotes, sell, оба household requests, owner requests,
+начальный recover_enterprises и public_project_requests. Повторные точечные recovery из
+plan_enterprises не относятся к измеряемому boundary.
 
 | Участок | Медиана | Диапазон |
 |---|---:|---:|
-| старые семь фаз | 84,663 мс | 80,502–244,376 мс |
-| pack | 11,914 мс | 11,228–12,044 мс |
-| Cython call | 4,001 мс | 3,932–4,394 мс |
-| apply | 6,290 мс | 6,020–7,040 мс |
-| полный V3 step | 471,676 мс | 309,389–478,225 мс |
-| полный native step | 365,718 мс | 274,656–448,732 мс |
+| старые восемь фаз | 81,993 мс | 80,675–263,049 мс |
+| pack | 11,654 мс | 11,474–11,877 мс |
+| Cython call | 4,004 мс | 3,931–4,281 мс |
+| apply | 6,268 мс | 5,998–7,063 мс |
+| полный V3 step | 468,899 мс | 286,800–480,955 мс |
+| полный native step | 361,488 мс | 262,605–444,284 мс |
 
-Локальная разность по медианам: 62,458 мс (22,205 мс native boundary вместо
-84,663 мс). Разность полного хода 105,959 мс больше локальной экономии и потому
+Локальная разность по медианам: 60,067 мс (21,926 мс native boundary вместо
+81,993 мс). Разность полного хода 107,411 мс больше локальной экономии и потому
 записана только как результат замера, без утверждения об общем ускорении полного хода.
 
 ## Тесты
 
 Все тесты запускались параллельно через `PYTHONPATH=. pytest -n auto -q`.
 
-- focused native boundary: `9 passed`;
-- полный набор: `378 passed, 1 failed`;
+- focused native boundary: `10 passed`;
+- полный набор: `379 passed, 1 failed`;
 - единственный сбой: предсуществующий
   `tests/test_lab.py::test_reproducible_isolated_runs_and_optional_journal`;
   он воспроизводился отдельно и на неизменённом HEAD до native-изменений.

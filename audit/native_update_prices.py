@@ -1,4 +1,4 @@
-"""Точность и стоимость native boundary через recover_enterprises без cProfile.
+"""Точность и стоимость native boundary через public_project_requests без cProfile.
 
     python audit/native_update_prices.py --seed 73129 --months 12
     python audit/native_update_prices.py --seed 73129 --benchmark --abba 4
@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'audit'))
 
 import scenario_runner as sr
-from modules.economy.native.update_prices_boundary import run_native_recovery
+from modules.economy.native.update_prices_boundary import run_native_public_projects
 
 
 def assert_same(reference, native, month):
@@ -70,7 +70,8 @@ def verify(engine, months):
             direct_reference.cfg['extra_needs'], 'Дополнительные нужды', reference_sells)
         direct_reference.owner_requests(reference_sells)
         direct_reference.recover_enterprises(reference_sells)
-        run_native_recovery(direct_native)
+        direct_reference.public_project_requests(reference_sells)
+        run_native_public_projects(direct_native)
         assert_same(direct_reference, direct_native, month)
         left_cache = {(None,)+key[1:]: value for key, value in
                       getattr(direct_reference, '_production_outlook_cache', {}).items()}
@@ -109,6 +110,7 @@ def measured_v3(checkpoint):
     original_household = engine.household_requests
     original_owner = engine.owner_requests
     original_enterprise_recovery = engine.recover_enterprises
+    original_public_projects = engine.public_project_requests
     elapsed = []
     def timed_update(self):
         started = time.perf_counter()
@@ -146,7 +148,13 @@ def measured_v3(checkpoint):
     engine.sell_orders = types.MethodType(timed_sell, engine)
     engine.household_requests = types.MethodType(timed_household, engine)
     engine.owner_requests = types.MethodType(timed_owner, engine)
+    def timed_public_projects(self, sells):
+        started = time.perf_counter()
+        result = original_public_projects(sells)
+        elapsed.append(time.perf_counter()-started)
+        return result
     engine.recover_enterprises = types.MethodType(timed_enterprise_recovery, engine)
+    engine.public_project_requests = types.MethodType(timed_public_projects, engine)
     started = time.perf_counter()
     engine.step()
     return time.perf_counter()-started, sum(elapsed)
@@ -164,14 +172,14 @@ def measured_native(checkpoint):
 def benchmark(engine, pairs):
     # Прогрев checkpoint не входит ни в один замер.
     checkpoint = copy.deepcopy(engine)
-    rows = {'v3_step': [], 'v3_seven_phases': [], 'native_step': [],
+    rows = {'v3_step': [], 'v3_eight_phases': [], 'native_step': [],
             'pack': [], 'native': [], 'apply': []}
     for pair in range(pairs):
         for mode in ('v3', 'native', 'native', 'v3'):
             if mode == 'v3':
-                wall, seven_phases = measured_v3(checkpoint)
+                wall, eight_phases = measured_v3(checkpoint)
                 rows['v3_step'].append(wall)
-                rows['v3_seven_phases'].append(seven_phases)
+                rows['v3_eight_phases'].append(eight_phases)
             else:
                 wall, timings = measured_native(checkpoint)
                 rows['native_step'].append(wall)

@@ -190,7 +190,22 @@ def pack_update_prices(engine):
     if any(o['tile_id'] not in tile_index for o in demand_orders):
         raise ValueError('Маршрутная матрица не содержит площадку заявки')
     owner_basket = [good_index[g] for g in ('bread', 'fish', 'cloth')]
-    demand_capacity = len(demand_orders)+household_capacity+owner_capacity
+    public_requests = []
+    for account in sorted(accounts, key=lambda a: a['id']):
+        for project in account.get('public_projects', []):
+            for bucket, requirements, purpose in (
+                    ('materials', project['material_bill'], 0),
+                    ('equipment_held', project['equipment'], 1)):
+                for good, required in requirements.items():
+                    public_requests.append((account_index[account['id']], project, bucket,
+                                            good_index[good], float(required), purpose))
+            support = engine.cfg['construction_modes'][project['mode']]['support_goods']
+            for good, per_worker in support.items():
+                public_requests.append((account_index[account['id']], project, 'support_stock',
+                    good_index[good], float(project['max_workers']*per_worker), 2))
+    public_capacity = len(public_requests)
+    public_release_capacity = max(1, public_capacity*sell_capacity)
+    demand_capacity = len(demand_orders)+household_capacity+owner_capacity+public_capacity
     def demand_field(name, default=0):
         return [o.get(name, default) for o in demand_orders] + [default]*(demand_capacity-len(demand_orders))
     equipment_offsets = [0]
@@ -292,6 +307,9 @@ def pack_update_prices(engine):
         sell_order_entry=np.zeros(sell_capacity, dtype=np.int32),
         sell_order_good=np.zeros(sell_capacity, dtype=np.int32),
         sell_order_quantity=np.zeros(sell_capacity, dtype=np.float64),
+        sell_order_initial_quantity=np.zeros(sell_capacity, dtype=np.float64),
+        sell_order_remaining=np.zeros(sell_capacity, dtype=np.float64),
+        sell_order_backing=np.zeros(sell_capacity, dtype=np.float64),
         sell_order_price=np.zeros(sell_capacity, dtype=np.float64),
         sell_order_index=np.zeros(sell_capacity, dtype=np.int32),
         sell_execution_seq=np.zeros(sell_capacity, dtype=np.int32),
@@ -363,6 +381,23 @@ def pack_update_prices(engine):
         owner_order_index=np.full(owner_capacity, -1, dtype=np.int32),
         owner_execution_seq=np.full(owner_capacity, -1, dtype=np.int32),
         owner_request_count=0,
+        owner_order_count_created=0,
+        public_request_account=_int32([row[0] for row in public_requests]),
+        public_request_good=_int32([row[3] for row in public_requests]),
+        public_request_required=_float64([row[4] for row in public_requests]),
+        public_request_purpose=_int32([row[5] for row in public_requests]),
+        public_request_held=_float64([row[1][row[2]].get(goods[row[3]], 0)
+                                      for row in public_requests]),
+        public_held=np.zeros(public_capacity, dtype=np.float64),
+        public_order_quantity=np.zeros(public_capacity, dtype=np.float64),
+        public_order_reserved=np.zeros(public_capacity, dtype=np.float64),
+        public_order_price=np.zeros(public_capacity, dtype=np.float64),
+        public_order_index=np.full(public_capacity, -1, dtype=np.int32),
+        public_release_request=np.zeros(public_release_capacity, dtype=np.int32),
+        public_release_sell=np.zeros(public_release_capacity, dtype=np.int32),
+        public_release_quantity=np.zeros(public_release_capacity, dtype=np.float64),
+        public_release_count=0,
+        public_order_count_created=0,
         recovery_equipment_offset=_int32(equipment_offsets),
         recovery_equipment_good=_int32(equipment_goods),
         recovery_equipment_value=_float64(equipment_values),
@@ -421,6 +456,7 @@ def pack_update_prices(engine):
     meta = dict(subjects=subjects, ask_updates=ask_updates,
                 account_index=account_index, enterprise_index=enterprise_index,
                 good_index=good_index, month=engine.meta['month'],
+                public_requests=public_requests,
                 order_locations=[(a['state_id'], engine.market_province(a), engine.market_tile(a))
                                  for a in accounts])
     return data, meta
@@ -500,7 +536,7 @@ def apply_sell_orders(engine, data, meta):
             if entry not in by_entry:
                 continue
             index = by_entry[entry]
-            quantity = float(data['sell_order_quantity'][index])
+            quantity = float(data['sell_order_initial_quantity'][index])
             price = float(data['sell_order_price'][index])
             state_id, province_id, tile_id = meta['order_locations'][account]
             order = dict(id=f'{meta["month"]}-{int(data["sell_order_index"][index])}',
@@ -694,15 +730,66 @@ def apply_recovery(engine, data, meta, sells):
     return journal
 
 
+def apply_public_projects(engine, data, meta, sells):
+    """Материализовать закрепление склада, release events и публичные заявки."""
+    accounts = list(engine.accounts.values())
+    goods = list(engine.goods)
+    journal = []
+    releases = [[] for _ in meta['public_requests']]
+    for i in range(data['public_release_count']):
+        releases[int(data['public_release_request'][i])].append(i)
+    purposes = ('Материалы городской стройки', 'Оснащение городской стройки',
+                'Содержание ускоренной стройки')
+    for request, row in enumerate(meta['public_requests']):
+        account_index, project, bucket, good_index, _, purpose = row
+        account = accounts[account_index]
+        good = goods[good_index]
+        project[bucket][good] = float(data['public_held'][request])
+        for release_index in releases[request]:
+            sell_index = int(data['public_release_sell'][release_index])
+            order_id = f'{meta["month"]}-{int(data["sell_order_index"][sell_index])}'
+            order = next(o for o in engine.report['orders'] if o['id'] == order_id)
+            take = float(data['public_release_quantity'][release_index])
+            order['quantity'] -= take
+            order['remaining'] -= take
+            order['backing'] -= take
+            account['stock_reserved'][good] = max(0,
+                account['stock_reserved'].get(good, 0)-take)
+            engine.mark_market_quotes_dirty(good)
+            if order['remaining'] <= EPS:
+                engine.cancel_order(order, 'Материалы закреплены за городской стройкой')
+            journal.append(('public_stock_release', request, order_id, take))
+        order_index = int(data['public_order_index'][request])
+        if order_index < 0:
+            continue
+        quantity = float(data['public_order_quantity'][request])
+        price = float(data['public_order_price'][request])
+        reserved = float(data['public_order_reserved'][request])
+        state_id, province_id, tile_id = meta['order_locations'][account_index]
+        order = dict(id=f'{meta["month"]}-{order_index}', participant=account['id'],
+            good=good, quantity=quantity, remaining=quantity, price=price, side='buy',
+            purpose=purposes[purpose], status='active', reason='', expires=meta['month'],
+            final_consumption=False, state_id=state_id, province_id=province_id,
+            tile_id=tile_id, reserved=reserved, backing=reserved, project_id=project['id'])
+        account['reserved'] = account.get('reserved', 0)+reserved
+        engine.report['orders'].append(order)
+        engine._demand_revision[good] += 1
+        journal.append(('create_public_project_order', request, order['id'], quantity,
+                        price, reserved))
+    return journal
+
+
 def _run(engine, include_recovery, include_sells=False, include_households=False,
-         include_owners=False, include_enterprise_recovery=False):
+         include_owners=False, include_enterprise_recovery=False, include_public=False):
     timings = {}
     started = time.perf_counter()
     data, meta = pack_update_prices(engine)
     timings['pack'] = time.perf_counter()-started
     native = load_serial_step()
     started = time.perf_counter()
-    if include_enterprise_recovery:
+    if include_public:
+        native.public_project_preparation(data, engine.rng)
+    elif include_enterprise_recovery:
         native.recovery_preparation(data, engine.rng)
     elif include_owners:
         native.owner_preparation(data, engine.rng)
@@ -734,6 +821,8 @@ def _run(engine, include_recovery, include_sells=False, include_households=False
         journal.extend(apply_owners(engine, data, meta, sells))
     if include_enterprise_recovery:
         journal.extend(apply_recovery(engine, data, meta, sells))
+    if include_public:
+        journal.extend(apply_public_projects(engine, data, meta, sells))
     timings['apply'] = time.perf_counter()-started
     result = dict(timings=timings, data=data, meta=meta, journal=journal, sells=sells,
                   households=households, food_trace=food_trace)
@@ -747,6 +836,8 @@ def _run(engine, include_recovery, include_sells=False, include_households=False
         engine.native_owners = result
     if include_enterprise_recovery:
         engine.native_recovery = result
+    if include_public:
+        engine.native_public_projects = result
     return journal
 
 
@@ -780,3 +871,9 @@ def run_native_recovery(engine):
     """Общий native boundary до конца recover_enterprises."""
     return _run(engine, include_recovery=True, include_sells=True, include_households=True,
                 include_owners=True, include_enterprise_recovery=True)
+
+
+def run_native_public_projects(engine):
+    """Общий native boundary до конца public_project_requests."""
+    return _run(engine, include_recovery=True, include_sells=True, include_households=True,
+                include_owners=True, include_enterprise_recovery=True, include_public=True)

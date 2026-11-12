@@ -3509,11 +3509,11 @@ class Economy(EconomyServices):
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0,
                 equipment_wear={})
         if native_mode == 'cython':
-            from .native.update_prices_boundary import run_native_recovery, run_update_prices
+            from .native.update_prices_boundary import run_native_public_projects, run_update_prices
             if planning_mode == 'lagged_batch':
                 run_update_prices(self)
             else:
-                run_native_recovery(self)
+                run_native_public_projects(self)
         else:
             self.update_prices()
         lagged_plans = None
@@ -3549,7 +3549,8 @@ class Economy(EconomyServices):
             self.owner_requests(sells)
         if planning_mode != 'lagged_batch' and native_mode != 'cython':
             self.recover_enterprises(sells)
-        self.public_project_requests(sells)
+        if native_mode != 'cython':
+            self.public_project_requests(sells)
         # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
         if investment_mode == 'snapshot_batch':
             from shadow.investment_batch import run_snapshot_batch
