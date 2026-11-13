@@ -1822,6 +1822,9 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
     cdef double rate = inv['transport_rate']
     cdef double[:, ::1] distances = sup['distances']
 
+    if 'batch' in sup:
+        sup['batch'].ensure_suppliers(good)
+
     # cheap = {order_id: remaining} по всем sells[good]
     cdef int[::1] gs_offset = sup['gs_offset']
     cdef double[::1] gs_remaining = sup['gs_remaining']
@@ -2029,7 +2032,7 @@ cdef object _recipe_requirements_native(dict inv, int good, double quantity):
     return result
 
 
-def evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
+cpdef evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
                                object rng, int derived_good, double derived_amount,
                                int demand_region_province, bint parent_present):
     """Чистый native project_candidate: один инвестор, без commit и мутаций.
@@ -2211,6 +2214,8 @@ def evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
             capacity = min(demand, derived_amount)
         else:
             capacity = demand
+        if 'batch' in sup:
+            sup['batch'].touch_capacity(loc_state_idx, pid, resource)
         labor = _lookup2_or_zero(dyn['la_state'], dyn['la_province'],
                                  dyn['la_value'], dyn['la_count'],
                                  loc_state_idx, pid)
@@ -2363,3 +2368,6 @@ def evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
     free(d_v1); free(d_v2); free(d_v3); free(d_v4)
     free(terms)
     return result
+
+
+include "project_requests.pxi"
