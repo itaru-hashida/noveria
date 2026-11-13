@@ -8,6 +8,12 @@ from modules.economy.support import EPS
 from . import load_serial_step
 
 
+# Native project support uses a wider tile set than the regular investment
+# pack. Keep its directed distance matrix across turns/world reloads, keyed by
+# the immutable route signature and the exact tile ordering.
+_PROJECT_DISTANCE_MATRICES = {}
+
+
 def _indices(values):
     return {value: index for index, value in enumerate(values)}
 
@@ -1752,33 +1758,40 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     all_tiles = sorted(tile_index, key=tile_index.get)
     n_tiles = len(all_tiles)
     old_n = inv_data['distances'].shape[0]
-    if n_tiles > old_n:
-        distances = np.full((n_tiles, n_tiles), np.nan, dtype=np.float64)
-        distances[:old_n, :old_n] = inv_data['distances']
-        # Populate/validate each source tree once, then read its distance map
-        # directly. Calling engine.path for every matrix cell adds millions of
-        # Python calls even though path trees are cached by source.
-        path_distances = {}
-        for source in all_tiles:
-            engine.path(source, source)
-            path_distances[source] = engine.paths[source][0]
-        for tile_id in extra_sorted:
-            i = tile_index[tile_id]
-            for j, other in enumerate(all_tiles):
-                if i == j:
-                    distances[i, j] = 0.0
-                    continue
-                if j < old_n and i < old_n:
-                    continue
-                # Keep both directed lookups: the road graph may be asymmetric.
-                d = path_distances[tile_id].get(other)
-                if d is not None:
-                    distances[i, j] = d
-                d = path_distances[other].get(tile_id)
-                if d is not None:
-                    distances[j, i] = d
-    else:
-        distances = inv_data['distances']
+    # Trigger the existing once-per-month graph-shape check before accepting a
+    # process-wide cached matrix. Explicit road edits call invalidate_routes;
+    # this also catches editor changes that only altered graph shape.
+    if all_tiles:
+        engine.path(all_tiles[0], all_tiles[0])
+    distance_key = (engine._route_cache_key, tuple(all_tiles), tuple(extra_sorted))
+    distances = _PROJECT_DISTANCE_MATRICES.get(distance_key)
+    if distances is None:
+        if n_tiles > old_n:
+            distances = np.full((n_tiles, n_tiles), np.nan, dtype=np.float64)
+            # The extended set is static for a given map. Build its matrix once
+            # from exact directed NetworkX route-tree values, then reuse the
+            # packed array on every subsequent project phase.
+            path_distances = {}
+            for source in all_tiles:
+                engine.path(source, source)
+                path_distances[source] = engine.paths[source][0]
+            for i, source in enumerate(all_tiles):
+                row = distances[i]
+                route_row = path_distances[source]
+                for target, distance in route_row.items():
+                    j = tile_index.get(target)
+                    if j is not None:
+                        row[j] = distance
+            # The old extension explicitly gave newly added tiles a zero
+            # diagonal, including map tiles absent from the route graph.
+            for tile_id in extra_sorted:
+                i = tile_index[tile_id]
+                distances[i, i] = 0.0
+        else:
+            distances = inv_data['distances']
+        if len(_PROJECT_DISTANCE_MATRICES) >= 8:
+            _PROJECT_DISTANCE_MATRICES.clear()
+        _PROJECT_DISTANCE_MATRICES[distance_key] = distances
     tile_ids_by_index = {i: t for t, i in tile_index.items()}
 
     # --- market signal по всем ключам истории ---
