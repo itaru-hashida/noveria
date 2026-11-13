@@ -3,12 +3,13 @@
 import copy
 import hashlib
 import numpy as np
-from collections import defaultdict
 
 _int32 = lambda values: np.asarray(values, dtype=np.int32)
 _float64 = lambda values: np.asarray(values, dtype=np.float64)
 _uint8 = lambda values: np.asarray(values, dtype=np.uint8)
 EPS = 1e-7
+
+include "project_numeric.pxi"
 
 
 class _ReservationLedger:
@@ -81,15 +82,20 @@ class _ProjectBatch:
         states = list(names['state_index'])
         provinces = list(names['province_index'])
         resources = list(names['resource_index'])
-        self.flow_keys = [(state, good) for state in states for good in self.goods]
         self.initial_state['input_reserved'] = _ReservationLedger(list(self.goods))
         self.initial_state['labor_reserved'] = _ReservationLedger(
             [(state, province) for state in states for province in provinces])
         self.initial_state['resource_reserved'] = _ReservationLedger(
             [(province, resource) for province in provinces for resource in resources])
         self.initial_state['supply_revision'] = _ReservationLedger(list(self.goods), np.int32)
-        self.initial_state['flow_reserved'] = _ReservationLedger(self.flow_keys)
-        self.dynamic_cache = {}
+        self.initial_state['flow_reserved'] = _FlowLedger(names)
+        self.initial_state['flow_balances'] = _FlowBalanceStore(names)
+        self.flow_kernel = _ProjectFlowKernel(self, names, inv)
+        self.recipes = _ProjectRecipes(names, inv)
+        self.available_inputs = np.zeros(len(names['good_names']), dtype=np.float64)
+        self.upstream_cache = _UpstreamCache(len(self.accounts))
+        self.initial_state['upstream_candidates'] = self.upstream_cache
+        self.dynamic_cache = [None]*len(self.accounts)
         self.live_dynamic = dict(
             lr_state=_int32([names['state_index'][state] for state, province in self.initial_state['labor_reserved'].index]),
             lr_province=_int32([names['province_index'][province] for state, province in self.initial_state['labor_reserved'].index]),
@@ -110,8 +116,7 @@ class _ProjectBatch:
         self.execution_seq = 0
         self.investor_order = []
         self.reservations = None
-        if snapshot['upstream_diagnostics'] is not None:
-            self._upstream_candidate_diagnostics = snapshot['upstream_diagnostics']
+        self.prior_upstream_diagnostics = snapshot['upstream_diagnostics']
 
     def rng_digest(self):
         return hashlib.sha256(repr(self.rng.getstate()).encode()).hexdigest()
@@ -145,20 +150,19 @@ class _ProjectBatch:
         self.rng.shuffle(result)
         return result
 
-    def offers(self, buyer, good, sells):
+    def available_input(self, buyer, good):
         inv, sup = self.inv, self.support
         ai = self.names['account_index'][buyer['id']]
         gi = self.names['good_index'][good]
         tile = int(inv['account_tile'][ai])
         index = _find_pair(sup['bk_tile'], sup['bk_good'], sup['bk_count'], tile, gi)
         if index < 0:
-            return []
-        result = []
-        for i in range(sup['bk_offset'][index], sup['bk_offset'][index+1]):
-            if (sup['bk_active'][i] and sup['bk_participant'][i] != ai
-                    and sup['bk_remaining'][i] > EPS):
-                result.append((float(sup['bk_price'][i]), {'remaining': float(sup['bk_remaining'][i])}, None))
-        return result
+            return 0
+        # Python 3.12 sum(float) сохраняет точный порядок/компенсацию V3.
+        return sum(float(sup['bk_remaining'][i])
+            for i in range(sup['bk_offset'][index], sup['bk_offset'][index+1])
+            if sup['bk_active'][i] and sup['bk_participant'][i] != ai
+            and sup['bk_remaining'][i] > EPS)
 
     def _refresh_project_arrays(self):
         """Живой индекс меняется только при commit, а не перед инвестором."""
@@ -175,7 +179,7 @@ class _ProjectBatch:
 
     def candidate_dynamic(self, int account, allowed_goods):
         names = self.names
-        cached = self.dynamic_cache.get(account)
+        cached = self.dynamic_cache[account]
         if cached is None:
             investor = self.accounts[names['account_names'][account]]
             markets = self.initial_state['index']['markets'].get(investor['state_id'], ())
@@ -250,12 +254,12 @@ class _ProjectBatch:
             if funds <= EPS:
                 sup['sup_capacity'][i] = 0.0
 
-    def market_signal(self, history, state, province, good):
+    def market_signal_values(self, state, province, good):
         si = self.names['state_index'][state]
         pi = self.names['province_index'][province]
         gi = self.names['good_index'][good]
-        return dict(volume=max(0, _sig_field(self.support, si, pi, gi, 0)),
-                    unmet=max(0, _sig_field(self.support, si, pi, gi, 1)))
+        return (max(0, _sig_field(self.support, si, pi, gi, 0)),
+                max(0, _sig_field(self.support, si, pi, gi, 1)))
 
     def project_candidate(self, investor, sells, derived_demand=None,
                           demand_region=None, parent_project_id=None,
@@ -323,41 +327,8 @@ class _ProjectBatch:
         self.record_candidate(investor, project, rng_before)
         return project
 
-    def recipe_graph(self):
-        graph = getattr(self, '_recipe_graph_cache', None)
-        if graph is None:
-            parents = {good: set() for good in self.goods}
-            children = {good: dict(recipe.get('inputs', {})) for good, recipe in self.goods.items()}
-            for product, inputs in children.items():
-                for input_good in inputs:
-                    parents.setdefault(input_good, set()).add(product)
-            affected = {}
-            for source in self.goods:
-                seen, pending = set(), [source]
-                while pending:
-                    current = pending.pop()
-                    if current in seen:
-                        continue
-                    seen.add(current)
-                    pending.extend(parents.get(current, ()))
-                affected[source] = frozenset(seen)
-            graph = {'parents': parents, 'children': children, 'affected': affected}
-            self._recipe_graph_cache = graph
-        return graph
-
     def recipe_requirements(self, good, quantity):
-        """Полный производный спрос на входы для заданного выпуска."""
-        requirements = defaultdict(float)
-        stack = [(good, quantity, ())]
-        while stack:
-            product, amount, path = stack.pop()
-            if product in path:
-                raise ValueError('Цикл рецептов: '+' -> '.join(path + (product,)))
-            for input_good, ratio in self.recipe_graph()['children'].get(product, {}).items():
-                required = amount*ratio
-                requirements[input_good] += required
-                stack.append((input_good, required, path + (product,)))
-        return dict(requirements)
+        return self.recipes.requirements(self.names['good_index'][good], quantity)
 
     def reserve_investment_project(self, project):
         """Применить решение к ledger до обработки следующего инвестора."""
@@ -370,7 +341,7 @@ class _ProjectBatch:
         if recipe['resource']:
             state['resource_reserved'][loc['province_id'], recipe['resource']] += capacity
         state['supply_revision'][project['good']] += 1
-        state['dirty_goods'].update(self.recipe_graph()['affected'][project['good']])
+        state['dirty_goods'].update(self.recipes.affected_names(self.names['good_index'][project['good']]))
 
     def register_investment_project(self, project):
         state = getattr(self, '_investment_state', None)
@@ -388,7 +359,7 @@ class _ProjectBatch:
         self.journal.append(row)
         self.execution_seq += 1
 
-    def investment_flow_balance(self, state_id, good):
+    def investment_flow_balance(self, state_id, good, full=False):
         """Вернуть устойчивый месячный поток товара внутри государства.
 
         Это диагностический расчёт для будущего планировщика: он не меняет
@@ -423,7 +394,7 @@ class _ProjectBatch:
                 suppliers.append(dict(enterprise_id=firm['id'], output=output,
                     capacity=firm['capacity']))
             ratio = self.goods[firm['good']]['inputs'].get(good, 0)
-            if ratio:
+            if ratio or full and good in self.goods[firm['good']]['inputs']:
                 demand = output*ratio
                 operating_demand += demand
                 consumers.append(dict(enterprise_id=firm['id'], output=output,
@@ -436,7 +407,7 @@ class _ProjectBatch:
             if not project or account['state_id'] != state_id:
                 continue
             ratio = self.goods[project['good']]['inputs'].get(good, 0)
-            if ratio:
+            if ratio or full and good in self.goods[project['good']]['inputs']:
                 demand = project['capacity']*ratio
                 construction_demand += demand
                 projects.append(dict(project_id=project.get('project_id'),
@@ -456,141 +427,17 @@ class _ProjectBatch:
         return result
 
     def investment_flow_balances(self, state_ids):
-        """Построить все устойчивые потоки одним проходом по миру.
+        # Один и тот же ленивый числовой индекс. Для full все строки
+        # фиксируются до возобновления очереди, в исходном порядке ключей.
+        for state_id in state_ids:
+            for good in self.goods:
+                self.investment_flow_balance(state_id, good, full=True)
+        return self._investment_state['flow_balances']
 
-        Полный инвестиционный обзор требует каждую пару ``государство ×
-        товар``. Вызывать для неё ``investment_flow_balance`` отдельно значит
-        повторно проходить все предприятия и проекты. Здесь сохраняется тот же
-        диагностический состав строк, но предприятия и проекты читаются по
-        одному разу.
-        """
-        state_ids = tuple(state_ids)
-        balances = {(state_id, good): dict(
-            state_id=state_id, good=good, supply=0.0, capacity_supply=0.0,
-            operating_demand=0.0, construction_demand=0.0, committed=0.0,
-            free=0.0, shortage=0.0, rampable_free=0.0,
-            suppliers=[], consumers=[], projects=[])
-            for state_id in state_ids for good in self.goods}
-
-        for firm in self.enterprises.values():
-            state_id = firm['state_id']
-            if state_id not in state_ids or firm['status'] == 'closed' or firm.get('suspended') \
-                    or firm['available_from'] > self.meta['month']:
-                continue
-            history = firm.get('sales_history', [])[max(0, len(firm.get('sales_history', []))-3):]
-            actual = max((row.get('output', 0) for row in history), default=0)
-            output = min(firm['capacity'], max(0, firm.get('planned_output', 0), actual))
-            own = balances[state_id, firm['good']]
-            own['supply'] += output
-            own['capacity_supply'] += firm['capacity']
-            own['suppliers'].append(dict(enterprise_id=firm['id'], output=output,
-                capacity=firm['capacity']))
-            for input_good, ratio in self.goods[firm['good']]['inputs'].items():
-                demand = output*ratio
-                row = balances[state_id, input_good]
-                row['operating_demand'] += demand
-                row['consumers'].append(dict(enterprise_id=firm['id'], output=output,
-                    ratio=ratio, demand=demand))
-
-        for account in self.accounts.values():
-            project = account.get('project')
-            state_id = account.get('state_id')
-            if not project or state_id not in state_ids:
-                continue
-            for input_good, ratio in self.goods[project['good']]['inputs'].items():
-                demand = project['capacity']*ratio
-                row = balances[state_id, input_good]
-                row['construction_demand'] += demand
-                row['projects'].append(dict(project_id=project.get('project_id'),
-                    investor=account['id'], good=project['good'], ratio=ratio,
-                    demand=demand))
-
-        for row in balances.values():
-            row['committed'] = row['operating_demand']+row['construction_demand']
-            row['free'] = max(0, row['supply']-row['committed'])
-            row['shortage'] = max(0, row['committed']-row['supply'])
-            row['rampable_free'] = max(0, row['capacity_supply']-row['committed'])
-        state = getattr(self, '_investment_state', None)
-        if state is not None:
-            state['flow_balances'].update(balances)
-        return balances
-
-    def sustainable_flow_headroom(self, state_id, good, reserved=None, path=(),
-                                  flow_balances=None):
-        """Максимальный дополнительный выпуск существующей цепочки.
-
-        Свободная мощность мельницы считается доступной только если её может
-        прокормить свободный поток зерна. ``reserved`` предназначен для
-        будущего общего ledger одновременных проектов; сейчас метод чистый.
-        """
-        if good in path:
-            raise ValueError('Цикл рецептов: '+' -> '.join(path+(good,)))
-        if reserved is None:
-            reserved = {}
-        balance = (flow_balances or {}).get((state_id, good))
-        if balance is None:
-            balance = self.investment_flow_balance(state_id, good)
-        capacity_headroom = max(0, balance['capacity_supply']-balance['committed']
-            -reserved.get((state_id, good), 0))
-        headroom = capacity_headroom
-        inputs = []
-        for input_good, ratio in sorted(self.goods[good]['inputs'].items()):
-            upstream = self.sustainable_flow_headroom(state_id, input_good,
-                reserved, path+(good,), flow_balances)
-            output_limit = upstream['headroom']/ratio
-            inputs.append(dict(good=input_good, ratio=ratio,
-                input_headroom=upstream['headroom'], output_limit=output_limit))
-            headroom = min(headroom, output_limit)
-        return dict(state_id=state_id, good=good,
-            capacity_headroom=capacity_headroom, headroom=max(0, headroom),
-            inputs=inputs)
-
-    def sustainable_candidate_capacity(self, candidate, reserved=None, flow_balances=None):
-        """Вернуть обеспеченную мощность кандидата и ledger после её резерва.
-
-        В отличие от склада это резерв постоянной производственной цепочки.
-        Вызывающий применяет возвращённый ledger только для действительно
-        начатого проекта.
-        """
-        def reserve_flow(state_id, good, quantity, ledger, path=()):
-            if good in path:
-                raise ValueError('Цикл рецептов: '+' -> '.join(path+(good,)))
-            available = self.sustainable_flow_headroom(state_id, good, ledger,
-                path, flow_balances)['headroom']
-            if quantity > available+EPS:
-                return None
-            trial = dict(ledger)
-            for input_good, ratio in sorted(self.goods[good]['inputs'].items()):
-                trial = reserve_flow(state_id, input_good, quantity*ratio, trial,
-                    path+(good,))
-                if trial is None:
-                    return None
-            key = (state_id, good)
-            trial[key] = trial.get(key, 0)+quantity
-            return trial
-
-        def reserve_candidate(candidate, quantity, ledger):
-            trial = dict(ledger)
-            for input_good, ratio in sorted(self.goods[candidate['good']]['inputs'].items()):
-                trial = reserve_flow(candidate['state_id'], input_good,
-                    quantity*ratio, trial, (candidate['good'],))
-                if trial is None:
-                    return None
-            return trial
-
-        ledger = dict(reserved or {})
-        desired = max(0, candidate.get('quantity', candidate.get('capacity', 0)))
-        best = 0.0
-        best_ledger = dict(ledger)
-        low, high = 0.0, desired
-        for _ in range(40):
-            middle = (low+high)/2
-            trial = reserve_candidate(candidate, middle, ledger)
-            if trial is None:
-                high = middle
-            else:
-                low, best, best_ledger = middle, middle, trial
-        return best, best_ledger
+    def sustainable_candidate_capacity(self, candidate, reserved, flow_balances=None):
+        return self.flow_kernel.solve(self.names['state_index'][candidate['state_id']],
+            self.names['good_index'][candidate['good']],
+            candidate.get('quantity', candidate.get('capacity', 0)), reserved)
 
     def limit_project_capacity(self, project, capacity):
         """Уменьшить ещё не начатый проект без изменения его экономики на единицу."""
@@ -613,7 +460,7 @@ class _ProjectBatch:
 
     def investment_candidate_capacity_limits(self, candidates, flow_balances=None):
         """Теневой общий лимит кандидатов по существующей цепочке выпуска."""
-        ledger = {}
+        ledger = _FlowLedger(self.names)
         result = []
         ordered = sorted(candidates, key=lambda row: (
             row.get('state_id', ''), row.get('good', ''), row.get('project_id', ''),
@@ -629,50 +476,7 @@ class _ProjectBatch:
         return result
 
     def investment_expansion_intents(self, demands, flow_balances=None):
-        """Собрать агрегированные дефициты потоков для подтверждённого спроса.
-
-        ``demands`` содержит словари ``state_id``, ``good``, ``quantity`` и
-        необязательный ``decision_id``. Метод только строит диагностику:
-        ничего не резервирует, не создаёт проект и не меняет экономику.
-        Один intent создаётся на пару ``(state_id, good)`` независимо от
-        количества верхних решений, которые к нему привели.
-        """
-        free_flow = {}
-        intents = {}
-
-        def available(state_id, good):
-            key = (state_id, good)
-            if key not in free_flow:
-                balance = (flow_balances or {}).get(key)
-                if balance is None:
-                    balance = self.investment_flow_balance(state_id, good)
-                # Сначала используем резерв уже построенных поставщиков.
-                # Новый intent создаётся только когда и он исчерпан.
-                free_flow[key] = balance['rampable_free']
-            return free_flow[key]
-
-        def require(state_id, product, quantity, decision_id, parent_good, path):
-            if product in path:
-                raise ValueError('Цикл рецептов: '+' -> '.join(path+(product,)))
-            for input_good, ratio in sorted(self.goods[product]['inputs'].items()):
-                required = quantity*ratio
-                key = (state_id, input_good)
-                covered = min(required, available(state_id, input_good))
-                free_flow[key] -= covered
-                missing = required-covered
-                if missing <= EPS:
-                    continue
-                intent = intents.setdefault(key, dict(
-                    state_id=state_id, good=input_good, required_flow=0.0,
-                    covered_by_free_flow=0.0, parents=[]))
-                intent['required_flow'] += missing
-                intent['covered_by_free_flow'] += covered
-                intent['parents'].append(dict(decision_id=decision_id,
-                    parent_good=parent_good, required=required,
-                    covered=covered, missing=missing))
-                require(state_id, input_good, missing, decision_id, input_good,
-                    path+(product,))
-
+        accumulator = _ExpansionFlows(self.flow_kernel, self.names)
         ordered = sorted(demands, key=lambda row: (
             row['state_id'], row['good'], str(row.get('decision_id', ''))))
         for demand in ordered:
@@ -683,8 +487,9 @@ class _ProjectBatch:
             if quantity < -EPS:
                 raise ValueError('Потребность не может быть отрицательной')
             if quantity > EPS:
-                require(state_id, good, quantity, demand.get('decision_id'), good, ())
-        return [intents[key] for key in sorted(intents)]
+                accumulator.add(self.names['state_index'][state_id],
+                    self.names['good_index'][good], quantity, demand.get('decision_id'))
+        return accumulator.rows()
 
     def investment_expansion_diagnostics(self, intents):
         """Проверить физические ограничения агрегированных intent'ов.
@@ -738,21 +543,22 @@ class _ProjectBatch:
         return result
 
     def investment_candidate_statuses(self, candidates, intents, diagnostics):
-        """Связать верхнего кандидата с агрегированными intent'ами без решений."""
-        diagnostic_by_key = {(row['state_id'], row['good']): row for row in diagnostics}
-        linked = defaultdict(list)
+        # Связи строк журнала хранятся последовательно; lookup-dict нет.
+        linked_ids, linked_rows = [], []
         for intent in intents:
-            diagnostic = diagnostic_by_key.get((intent['state_id'], intent['good']))
+            diagnostic = next((row for row in diagnostics
+                if row['state_id'] == intent['state_id'] and row['good'] == intent['good']), None)
             if diagnostic is None:
                 continue
             for parent in intent.get('parents', []):
                 decision_id = parent.get('decision_id')
                 if decision_id is not None:
-                    linked[decision_id].append(diagnostic)
-
+                    linked_ids.append(decision_id)
+                    linked_rows.append(diagnostic)
         result = []
         for candidate in candidates:
-            rows = linked.get(candidate.get('project_id'), [])
+            rows = [row for decision_id, row in zip(linked_ids, linked_rows)
+                    if decision_id == candidate.get('project_id')]
             blockers = sorted({blocker for row in rows for blocker in row['blockers']})
             status = 'blocked' if blockers else 'waiting_for_intent' if rows else 'ready'
             result.append(dict(**copy.deepcopy(candidate), status=status, blockers=blockers,
@@ -773,12 +579,17 @@ class _ProjectBatch:
 
     def upstream_expansion_candidate(self, good, state_id, sells, shortage,
                                      province_id, parent_project_id):
-        """Найти расширяемую мощность для дефицитного звена цепочки."""
-        cache = getattr(self, '_upstream_candidate_cache', {})
-        key = (good, state_id, round(shortage, 8), province_id)
-        if key in cache:
-            return cache[key]
-        candidates = []
+        cache = self.upstream_cache
+        gi = self.names['good_index'][good]
+        si = self.names['state_index'][state_id]
+        pi = self.names['province_index'][province_id]
+        rounded = round(shortage, 8)
+        slot = cache.lookup(gi, si, rounded, pi)
+        if slot >= 0:
+            return cache.result(slot, self.accounts, self.names)
+        best_owner = -1
+        best_project = None
+        best_capacity = 0.0
         diagnostics = []
         for firm in self.enterprises.values():
             if (firm['good'] != good or firm['status'] == 'closed'
@@ -788,19 +599,16 @@ class _ProjectBatch:
             if account.get('project'):
                 continue
             project = self.project_candidate(account, sells,
-                # Расширение происходит в провинции самого поставщика;
-                # доставка до верхнего проекта проверяется его маржой.
                 derived_demand={good: shortage}, demand_region=firm['province_id'],
                 parent_project_id=parent_project_id, diagnostics=diagnostics,
                 allowed_goods={good})
-            if project and project['good'] == good and project['expansion']:
-                candidates.append((account, project))
-        result = max(candidates, key=lambda row: row[1]['capacity'], default=None)
-        cache[key] = result
-        self._upstream_candidate_diagnostics = getattr(self, '_upstream_candidate_diagnostics', {})
-        self._upstream_candidate_diagnostics[key] = diagnostics
-        self._upstream_candidate_cache = cache
-        return result
+            if (project and project['good'] == good and project['expansion']
+                    and (best_project is None or project['capacity'] > best_capacity)):
+                best_owner = self.names['account_index'][account['id']]
+                best_project = project
+                best_capacity = project['capacity']
+        slot = cache.store(gi, si, rounded, pi, best_owner, best_project, diagnostics)
+        return cache.result(slot, self.accounts, self.names)
 
     def log_event(self, event_type, *, entity_id=None, region_id=None, good=None,
                   cause=None, source=None, parent_event_id=None, decision_id=None,
@@ -848,9 +656,7 @@ class _ProjectBatch:
             self._investment_demand_cache = self._investment_state['demand_cache']
             self._investment_demand_cache_hits = self._investment_demand_cache_misses = 0
             self._investment_input_reserved = self._investment_state['input_reserved']
-            self._upstream_candidate_cache = self._investment_state['upstream_candidates']
         diagnostic_demands = []
-        flow_reserved = {}
         flow_balances = None
         if due:
             state_ids = sorted({a['state_id'] for a in self.accounts.values() if a.get('state_id')})
@@ -865,7 +671,7 @@ class _ProjectBatch:
             if not investor or investor.get('project') or not project:
                 continue
             ready = all(project['capacity']*ratio <=
-                sum(sell['remaining'] for _, sell, _ in self.offers(investor, good, sells))+EPS
+                self.available_input(investor, good)+EPS
                 for good, ratio in self.goods[project['good']]['inputs'].items())
             if ready:
                 investor['project'] = project
@@ -888,10 +694,10 @@ class _ProjectBatch:
                     province_id=project['location']['province_id'])
                 diagnostic_demands.append(demand)
                 self.report['investment_candidates'].append(copy.deepcopy(demand))
-                flow_candidate = dict(state_id=a['state_id'], good=project['good'],
-                    quantity=project['capacity'], project_id=project['project_id'])
-                sustainable_capacity, flow_trial = self.sustainable_candidate_capacity(
-                    flow_candidate, self._investment_state['flow_reserved'], flow_balances)
+                sustainable_capacity, flow_trial = self.flow_kernel.solve(
+                    self.names['state_index'][a['state_id']],
+                    self.names['good_index'][project['good']], project['capacity'],
+                    self._investment_state['flow_reserved'])
                 if sustainable_capacity+EPS < project['capacity']:
                     if sustainable_capacity < self.cfg['minimum_capacity']:
                         self.report['investment_decisions'].append(dict(
@@ -904,11 +710,11 @@ class _ProjectBatch:
                     else:
                         self.limit_project_capacity(project, sustainable_capacity)
                 feasible = True
-                available_inputs = {}
+                available_inputs = self.available_inputs
                 for input_good, ratio in self.goods[project['good']]['inputs'].items() if project else ():
                     required = project['capacity']*ratio
-                    available = sum(sell['remaining'] for _, sell, _ in self.offers(a, input_good, sells))
-                    available_inputs[input_good] = available
+                    available = self.available_input(a, input_good)
+                    available_inputs[self.names['good_index'][input_good]] = available
                     free = available-self._investment_input_reserved[input_good]
                     if required > free+EPS:
                         feasible = False
@@ -934,8 +740,7 @@ class _ProjectBatch:
                             required=required, available=available,
                             already_reserved=self._investment_input_reserved[input_good],
                             bounded_shortage=shortage, parent_good=project['good'],
-                            candidate_diagnostics=getattr(self, '_upstream_candidate_diagnostics', {}).get(
-                                (input_good, a['state_id'], round(shortage, 8), project['location']['province_id']), []))
+                            candidate_diagnostics=self.upstream_cache.last_diagnostics())
                     if upstream:
                         owner, upstream_project = upstream
                         if not owner.get('project'):
@@ -956,19 +761,18 @@ class _ProjectBatch:
                                           project=copy.deepcopy(project)))
                     project = None
             if project:
-                flow_reserved = flow_trial
-                self._investment_state['flow_reserved'].replace(flow_reserved)
+                self._investment_state['flow_reserved'].replace(flow_trial)
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
                     self._investment_input_reserved[input_good] += project['capacity']*ratio
                 evidence = {}
                 for input_good, ratio in self.goods[project['good']]['inputs'].items():
                     required = project['capacity']*ratio
-                    available = available_inputs[input_good]
-                    signal = self.market_signal(self.meta.get('market_history', []), a['state_id'],
-                                                project['location']['province_id'], input_good)
+                    available = float(available_inputs[self.names['good_index'][input_good]])
+                    signal = self.market_signal_values(a['state_id'],
+                        project['location']['province_id'], input_good)
                     evidence[input_good] = dict(required=round(required, 6),
                         available=round(available, 6), shortage=round(max(0, required-available), 6),
-                        historical_unmet=round(signal['unmet'], 6), historical_volume=round(signal['volume'], 6))
+                        historical_unmet=round(signal[1], 6), historical_volume=round(signal[0], 6))
                 project['input_evidence'] = evidence
                 a['project'] = project
                 self.register_investment_project(project)
@@ -992,7 +796,6 @@ class _ProjectBatch:
             self.__dict__.pop('_investment_supply_cache', None)
             self.__dict__.pop('_investment_index', None)
             self.__dict__.pop('_investment_demand_cache', None)
-            self.__dict__.pop('_upstream_candidate_cache', None)
             self.__dict__.pop('_investment_input_reserved', None)
             self.__dict__.pop('_investment_state', None)
             self.__dict__.pop('_investment_customer_limits', None)
@@ -1003,8 +806,10 @@ def native_project_requests(dict inv, dict support, dict names, dict snapshot, o
     batch = _ProjectBatch(inv, support, names, snapshot, rng)
     due, investors = batch.project_requests(None)
     support.pop('batch', None)
+    batch.flow_kernel.owner = None
     return dict(accounts=batch.accounts, meta=batch.meta, report=batch.report,
         dirty_goods=batch._investment_dirty_goods,
-        upstream_diagnostics=getattr(batch, '_upstream_candidate_diagnostics', None),
+        upstream_diagnostics=batch.upstream_cache.materialize_diagnostics(
+            names, batch.prior_upstream_diagnostics),
         reservations=batch.reservations, journal=batch.journal,
         investor_order=batch.investor_order, due=due, investors=investors)
