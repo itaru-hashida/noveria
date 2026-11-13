@@ -1,0 +1,25 @@
+[project]
+name = "noveria"
+version = "0.0.0"
+description = "Экономическая симуляция мира: государства, население, предприятия, производство и торговля"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+
+# Зависимости повторяют requirements.txt и requirements-native.txt один в один,
+# включая точные версии. Эти два файла остаются рабочими для pip:
+#   python -m pip install -r requirements.txt
+# При изменении версий правьте requirements*.txt и этот список согласованно,
+# затем обновляйте uv.lock через `uv lock`.
+dependencies = [
+    "ladybug==0.22.1",        # requirements.txt — графовая БД мира
+    "networkx==3.7",          # requirements.txt — графовые алгоритмы
+    "pytest==9.2.0",          # requirements.txt — тесты
+    "numpy==2.5.4",           # requirements.txt — численные расчёты
+    "pyarrow==26.0.1",        # requirements.txt — Parquet-checkpoint
+    "Cython==3.3.1",          # requirements-native.txt — сборка serial_step
+    "setuptools>=75",         # requirements-native.txt — сборка расширения
+]
+
+[tool.uv]
+# Репозиторий — приложение, а не пакет: uv не должен собирать wheel из корня.
+package = false

@@ -1,3 +1,4 @@
+# Виртуальные окружения (uv создаёт .venv по `uv sync`).
 .venv/
 .venv312/
 .tools/
@@ -16,6 +17,10 @@ modules/economy/native/build/
 modules/economy/native/serial_step.c
 modules/economy/native/*.so
 modules/economy/native/*.pyd
+# Артефакты сборки расширений вне modules/economy/native.
+*.so
+*.pyd
+build/
 # Бинарные профили cProfile: воспроизводятся прогоном, в репозиторий не нужны.
 *.prof
 audit_results/
