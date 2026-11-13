@@ -1839,18 +1839,36 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     # build every tile×good book, customer quote list, or demand row here.
     tile_component = [engine.route_component(t) for t in all_tiles]
 
-    # --- suppliers по товарам (для investment_demand) ---
-    sup_offset = [0]
-    sup_tile, sup_price, sup_capacity = [], [], []
-    sup_account, sup_owner = [], []
+    # --- raw firm rows для lazy suppliers в Cython ---
+    # Передаём только плоские исходные поля. Unit cost, net price, funding и
+    # capacity считаются native при первом реальном запросе товара.
+    sup_market_offset = [0]
+    sup_account, sup_owner, sup_tile, sup_state, sup_province = [], [], [], [], []
+    sup_raw_capacity, sup_raw_price, sup_raw_production_price = [], [], []
+    sup_closed, sup_suspended, sup_resource_limit = [], [], []
+    component_count = max((c for c in tile_component if c is not None), default=-1)+1
+    firms_by_market = [[] for _ in range(len(goods)*component_count)]
+    for firm in engine.enterprises.values():
+        component = tile_component[tile_index[firm['tile_id']]]
+        firms_by_market[good_index[firm['good']]*component_count+component].append(firm)
     for good in goods:
-        for firm, price, capacity in ctx.suppliers(good):
-            sup_account.append(account_index[firm['id']])
-            sup_owner.append(account_index[firm['owner_id']])
-            sup_tile.append(tile_index[firm['tile_id']])
-            sup_price.append(price)
-            sup_capacity.append(capacity)
-        sup_offset.append(len(sup_tile))
+        resource = engine.goods[good]['resource']
+        for component in range(component_count):
+            market_rows = firms_by_market[good_index[good]*component_count+component]
+            for firm in market_rows:
+                sup_account.append(account_index[firm['id']])
+                sup_owner.append(account_index[firm['owner_id']])
+                sup_tile.append(tile_index[firm['tile_id']])
+                sup_state.append(state_index[firm['state_id']])
+                sup_province.append(province_index[firm['province_id']])
+                sup_raw_capacity.append(firm['capacity'])
+                sup_raw_price.append(firm['price'])
+                sup_raw_production_price.append(firm.get('production_price', firm['price']))
+                sup_closed.append(firm['status'] == 'closed')
+                sup_suspended.append(bool(firm.get('suspended')))
+                sup_resource_limit.append(engine.resource_limits.get(
+                    (firm['province_id'], resource), 0) if resource else 0)
+            sup_market_offset.append(len(sup_tile))
 
     support = dict(
         sig_state=_int32([state_index[s] for s, _, _ in sig_keys]),
@@ -1872,10 +1890,22 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
         rt_tile=_int32(rt_flat),
         sup_account=_int32(sup_account),
         sup_owner=_int32(sup_owner),
-        sup_offset=_int32(sup_offset),
+        sup_market_offset=_int32(sup_market_offset),
+        supplier_component_count=component_count,
         sup_tile=_int32(sup_tile),
-        sup_price=_float64(sup_price),
-        sup_capacity=_float64(sup_capacity),
+        sup_state=_int32(sup_state),
+        sup_province=_int32(sup_province),
+        sup_raw_capacity=_float64(sup_raw_capacity),
+        sup_raw_price=_float64(sup_raw_price),
+        sup_raw_production_price=_float64(sup_raw_production_price),
+        sup_closed=_uint8(sup_closed),
+        sup_suspended=_uint8(sup_suspended),
+        sup_resource_limit=_float64(sup_resource_limit),
+        sup_price=_float64(np.zeros(len(sup_tile), dtype=np.float64)),
+        sup_capacity=_float64(np.zeros(len(sup_tile), dtype=np.float64)),
+        sup_labor_state=inv_data['labor_available_state'],
+        sup_labor_province=inv_data['labor_available_province'],
+        sup_labor_value=inv_data['labor_available_value'],
         good_wear_rate=_float64([engine.goods[g].get('durable', {}).get('wear_rate', 0)
                                  for g in goods]),
         distances=distances,

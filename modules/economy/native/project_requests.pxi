@@ -67,7 +67,8 @@ class _ProjectBatch:
         self.inv = inv
         self.support = support
         support['batch'] = self
-        self.suppliers_initialized = np.zeros(len(inv['good_labor']), dtype=np.uint8)
+        self.suppliers_initialized = np.zeros(
+            len(inv['good_labor'])*support['supplier_component_count'], dtype=np.uint8)
         self.names = names
         self.rng = rng
         self.accounts = snapshot['accounts']
@@ -216,27 +217,60 @@ class _ProjectBatch:
             resource_name = list(self.names['resource_index'])[resource]
             self._investment_state['resource_reserved'][province_name, resource_name]
 
-    def ensure_suppliers(self, int good):
+    def ensure_suppliers(self, int good, int tile):
         """V3 запоминает поставщиков при первом запросе товара, после очереди."""
         cdef double quantity, missing, value, ceiling, reserve, distance, delivery
         cdef double own_cash, owner_cash, funds
-        cdef int owner, firm, tile, gi, i, j
+        cdef double cost, price, net, labor, capacity
+        cdef int owner, firm, gi, i, j, state, province, component, market_key, owner_tile
         cdef dict inv = self.inv
         cdef dict sup = self.support
+        cdef int[::1] sup_state = sup['sup_state']
+        cdef int[::1] sup_province = sup['sup_province']
+        cdef int[::1] sup_tile = sup['sup_tile']
+        cdef int[::1] sup_account = sup['sup_account']
+        cdef int[::1] sup_owner = sup['sup_owner']
+        cdef unsigned char[::1] sup_closed = sup['sup_closed']
+        cdef unsigned char[::1] sup_suspended = sup['sup_suspended']
+        cdef double[::1] sup_capacity_raw = sup['sup_raw_capacity']
+        cdef double[::1] sup_price_raw = sup['sup_raw_price']
+        cdef double[::1] sup_production_price = sup['sup_raw_production_price']
+        cdef double[::1] sup_resource_limit = sup['sup_resource_limit']
+        cdef double[::1] sup_capacity = sup['sup_capacity']
+        cdef double[::1] sup_price = sup['sup_price']
+        cdef int[::1] labor_state = sup['sup_labor_state']
+        cdef int[::1] labor_province = sup['sup_labor_province']
+        cdef double[::1] labor_value = sup['sup_labor_value']
         good_name = self.names['good_names'][good]
+        component = sup['tile_component'][tile]
+        market_key = good*sup['supplier_component_count']+component
         self._investment_state['supply_revision'][good_name]
         self._investment_index['projects'][good_name]
-        if self.suppliers_initialized[good]:
+        if self.suppliers_initialized[market_key]:
             return
-        self.suppliers_initialized[good] = 1
-        for i in range(sup['sup_offset'][good], sup['sup_offset'][good+1]):
-            owner = sup['sup_owner'][i]
-            firm = sup['sup_account'][i]
+        self.suppliers_initialized[market_key] = 1
+        for i in range(sup['sup_market_offset'][market_key],
+                       sup['sup_market_offset'][market_key+1]):
+            if sup_closed[i] or sup_suspended[i]:
+                continue
+            owner = sup_owner[i]
+            firm = sup_account[i]
+            tile = sup_tile[i]
+            state = sup_state[i]
+            province = sup_province[i]
+            cost = _unit_cost_native(inv, sup, tile, good, firm, state, province)
+            price = sup_price_raw[i]
+            net = _net_price_native(inv, sup, tile, good, price, firm)
+            if net+EPS < cost:
+                price = sup_production_price[i]
+            net = _net_price_native(inv, sup, tile, good, price, firm)
+            if net+EPS < cost:
+                continue
             project = self.accounts[self.names['account_names'][owner]].get('project')
             reserve = 0.0
             if project:
-                tile = inv['account_tile'][owner]
-                distance = sup['distances'][tile, self.names['tile_index'][project['location']['tile_id']]]
+                owner_tile = inv['account_tile'][owner]
+                distance = sup['distances'][owner_tile, self.names['tile_index'][project['location']['tile_id']]]
                 bill = [(int(g), float(q)*project['capacity']/inv['minimum_capacity'])
                         for g, q in zip(inv['construction_good'], inv['construction_value'])]
                 delivery = (sum(q*float(inv['good_weight'][g]) for g, q in bill)
@@ -248,7 +282,7 @@ class _ProjectBatch:
                         and inv['order_construction'][j] and inv['order_good'][j] == gi
                         and inv['order_status_active'][j] and inv['order_reserved'][j] > EPS)
                     missing = max(0, quantity-inv['account_stock'][owner, gi]-ordered)
-                    _quoted_cost_native(inv, sup, tile, gi, owner, missing, &value, &ceiling)
+                    _quoted_cost_native(inv, sup, owner_tile, gi, owner, missing, &value, &ceiling)
                     reserve += missing*ceiling
             own_cash = max(0, inv['account_balance'][firm]-inv['account_reserved'][firm]
                                -inv['account_protected'][firm])
@@ -256,7 +290,14 @@ class _ProjectBatch:
                                  -max(inv['account_protected'][owner], reserve))
             funds = own_cash+owner_cash
             if funds <= EPS:
-                sup['sup_capacity'][i] = 0.0
+                continue
+            labor = _lookup2_or_zero(labor_state, labor_province, labor_value,
+                                     len(labor_value), state, province)
+            capacity = min(sup_capacity_raw[i], labor/inv['good_labor'][good])
+            if inv['good_resource'][good] >= 0:
+                capacity = min(capacity, sup_resource_limit[i])
+            sup_price[i] = price
+            sup_capacity[i] = capacity
 
     def market_signal_values(self, state, province, good):
         si = self.names['state_index'][state]

@@ -1989,8 +1989,11 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
     cdef double rate = inv['transport_rate']
     cdef double[:, ::1] distances = sup['distances']
 
+    cdef int[::1] tile_component = sup['tile_component']
+    cdef int component = tile_component[tile]
+    cdef int market_key = good*sup['supplier_component_count']+component
     if 'batch' in sup:
-        sup['batch'].ensure_suppliers(good)
+        sup['batch'].ensure_suppliers(good, tile)
 
     # cheap = {order_id: remaining} по всем sells[good]
     cdef int[::1] gs_offset = inv['sell_offset']
@@ -2003,8 +2006,8 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
         cheap[i] = gs_remaining[cheap_start+i]
 
     # suppliers: базовые фирмы, затем проекты живого индекса; копии на вызов
-    cdef int[::1] sup_offset = sup['sup_offset']
-    cdef int n_base = sup_offset[good+1]-sup_offset[good]
+    cdef int[::1] sup_offset = sup['sup_market_offset']
+    cdef int n_base = sup_offset[market_key+1]-sup_offset[market_key]
     cdef int[::1] pj_offset = dyn['pj_offset']
     cdef int n_pj = pj_offset[good+1]-pj_offset[good]
     cdef int n_sup = n_base+n_pj
@@ -2019,7 +2022,7 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
     cdef double[::1] pj_price = dyn['pj_price']
     cdef double[::1] pj_capacity = dyn['pj_capacity']
     for s in range(n_base):
-        sup_cap[s] = sup_capacity[sup_offset[good]+s]
+        sup_cap[s] = sup_capacity[sup_offset[market_key]+s]
     for s in range(n_pj):
         sup_cap[n_base+s] = pj_capacity[pj_offset[good]+s]
 
@@ -2032,11 +2035,10 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
     cdef double[::1] order_price = inv['order_price']
     cdef double[::1] order_remaining = inv['order_remaining']
     cdef double[::1] order_reserved = inv['order_reserved']
-    cdef int[::1] tile_component = sup['tile_component']
     cdef int n_rows = inv['order_count']
     cdef int[::1] market_offset = inv['order_market_offsets']
     cdef int[::1] market_rows = inv['order_market_rows']
-    cdef int market_key = good*sup['market_component_count']+tile_component[tile]
+    market_key = good*sup['market_component_count']+tile_component[tile]
     cdef int market_start = market_offset[market_key]
     cdef int market_end = market_offset[market_key+1]
     cdef int* g_part = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
@@ -2111,8 +2113,8 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
             if sup_cap[s] <= eps:
                 continue
             if s < n_base:
-                supply_tile = sup_tile[sup_offset[good]+s]
-                supply_price = sup_price[sup_offset[good]+s]
+                supply_tile = sup_tile[sup_offset[market_key]+s]
+                supply_price = sup_price[sup_offset[market_key]+s]
             else:
                 supply_tile = pj_tile[pj_offset[good]+s-n_base]
                 supply_price = pj_price[pj_offset[good]+s-n_base]
