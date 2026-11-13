@@ -183,3 +183,55 @@ def test_pack_replay_keeps_full_step_exact():
     assert reference.rng.getstate() == native.rng.getstate()
     reference.validate()
     native.validate()
+
+
+def test_sell_order_quantity_keeps_int_type_like_v3():
+    """Тип объёма sell-заявки обязан совпадать: sum() различает int и float.
+
+    В Python 3.12 встроенный sum компенсирует погрешность только при
+    float-старте, поэтому отчёт складывает объёмы сделок по-разному в
+    зависимости от типа quantity. Здесь проверяется, что native возвращает
+    ровно тот тип, который построил бы V3.
+    """
+    reference = engine()
+    native = copy.deepcopy(reference)
+    for name in ('_planning_orders', '_stock_sales_cache', '_production_outlook_cache'):
+        reference.__dict__.pop(name, None)
+        native.__dict__.pop(name, None)
+    reference.step(native_mode='off')
+    native.step(native_mode='cython')
+
+    left = {o['id']: o for o in reference.report['orders'] if o['side'] == 'sell'}
+    right = {o['id']: o for o in native.report['orders'] if o['side'] == 'sell'}
+    assert set(left) == set(right)
+    mismatched = [oid for oid in left
+                  if type(left[oid]['quantity']) is not type(right[oid]['quantity'])]
+    assert not mismatched, 'тип объёма sell-заявки разошёлся: %s' % (mismatched[:5],)
+    for oid in left:
+        assert type(left[oid]['remaining']) is type(right[oid]['remaining']), oid
+        assert type(left[oid]['backing']) is type(right[oid]['backing']), oid
+
+
+def test_report_province_prices_exact_after_full_step():
+    """Регресс на 1-ULP расхождение report['provinces'][*]['prices'].
+
+    Равенство словаря report проверяет и цены, и export_volume: оба поля
+    складывают объёмы сделок, поэтому расхождение типа quantity проявлялось
+    именно здесь.
+    """
+    reference = engine()
+    native = copy.deepcopy(reference)
+    for name in ('_planning_orders', '_stock_sales_cache', '_production_outlook_cache'):
+        reference.__dict__.pop(name, None)
+        native.__dict__.pop(name, None)
+    reference.step(native_mode='off')
+    native.step(native_mode='cython')
+    assert reference.report == native.report
+    # Мини-мир теста живёт с report_detail='none', где сводка провинций не
+    # строится. Когда она есть — проверяем цены и объёмы явно.
+    if 'provinces' not in reference.report:
+        return
+    for left, right in zip(reference.report['provinces'], native.report['provinces']):
+        assert left['prices'] == right['prices'], left['province_id']
+        assert type(left['export_volume']) is type(right['export_volume']), left['province_id']
+        assert left['export_volume'] == right['export_volume'], left['province_id']

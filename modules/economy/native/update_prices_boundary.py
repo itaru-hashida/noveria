@@ -674,6 +674,22 @@ def apply_recovery_quotes(engine, data, meta):
     return journal
 
 
+def free_stock_is_integral(engine, account, good):
+    """Сохранил бы V3 целочисленный тип объёма sell-заявки для этой пары.
+
+    `order()` в V3 получает объём из `free_stock()`, то есть
+    `max(0, stock - reserved - locked_material())`. Если все три слагаемых
+    int, результат остаётся int — и для выхода фирмы, и для побочного товара.
+    Ветка предприятия, где объём дополнительно уменьшается на float-резервы
+    и оснащение, сюда не относится: там слагаемые уже float.
+    """
+    stock = account['stock'].get(good, 0)
+    reserved = account.get('stock_reserved', {}).get(good, 0)
+    if type(stock) is not int or type(reserved) is not int:
+        return False
+    return type(engine.locked_material(account['id'], good)) is int
+
+
 def apply_sell_orders(engine, data, meta):
     """Материализовать готовые sell intents, не повторяя расчёты order()."""
     from collections import defaultdict
@@ -708,6 +724,14 @@ def apply_sell_orders(engine, data, meta):
             quantity = float(data['sell_order_initial_quantity'][index])
             price = float(data['sell_order_price'][index])
             state_id, province_id, tile_id = meta['order_locations'][account]
+            # V3 строит объём через free_stock(), и когда склад, резерв и
+            # закрепление — целые, объём остаётся int. Native хранит float64,
+            # поэтому тип восстанавливается по тому же правилу. Это важно не
+            # для значения, а для sum(): в Python 3.12 встроенный sum
+            # компенсирует погрешность только при float-старте, поэтому
+            # int и float дают разные последние биты в отчёте.
+            if free_stock_is_integral(engine, a, good):
+                quantity = int(quantity)
             order = dict(id=f'{meta["month"]}-{int(data["sell_order_index"][index])}',
                 participant=a['id'], good=good, quantity=quantity, remaining=quantity,
                 price=price, side='sell', purpose='Продажа запасов', status='active',
