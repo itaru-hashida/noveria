@@ -1642,6 +1642,88 @@ cdef double _sig_field(dict sup, int state, int province, int good,
     return sup['sig_limit'][idx]
 
 
+cdef void _build_market_order_indexes(dict inv, dict sup):
+    """Build stable CSR row indexes once for this monthly native batch.
+
+    Rows within every bucket retain their original report order, so all sums
+    and tie-breaking see the same sequence as the previous full-array scans.
+    """
+    cdef int[::1] tile_component = sup['tile_component']
+    cdef int[::1] sell_offset = inv['sell_offset']
+    cdef int[::1] sell_tile = inv['sell_tile']
+    cdef int[::1] order_good = inv['order_good']
+    cdef int[::1] order_tile = inv['order_tile']
+    cdef Py_ssize_t n_goods = len(sell_offset)-1
+    cdef Py_ssize_t n_components = 0
+    cdef Py_ssize_t n_keys, i, good, component, key, cursor
+    cdef object sell_counts_obj, order_counts_obj
+    cdef object sell_offsets_obj, order_offsets_obj
+    cdef object sell_rows_obj, order_rows_obj
+    cdef object sell_cursor_obj, order_cursor_obj
+    cdef int[::1] sell_counts, order_counts
+    cdef int[::1] sell_offsets, order_offsets
+    cdef int[::1] sell_rows, order_rows
+    cdef int[::1] sell_cursor, order_cursor
+
+    for i in range(tile_component.shape[0]):
+        if tile_component[i]+1 > n_components:
+            n_components = tile_component[i]+1
+    if n_components < 1:
+        n_components = 1
+    n_keys = n_goods*n_components
+    sell_counts_obj = np.zeros(n_keys, dtype=np.int32)
+    order_counts_obj = np.zeros(n_keys, dtype=np.int32)
+    sell_counts = sell_counts_obj
+    order_counts = order_counts_obj
+
+    for good in range(n_goods):
+        for i in range(sell_offset[good], sell_offset[good+1]):
+            component = tile_component[sell_tile[i]]
+            sell_counts[good*n_components+component] += 1
+    for i in range(inv['order_count']):
+        good = order_good[i]
+        component = tile_component[order_tile[i]]
+        order_counts[good*n_components+component] += 1
+
+    sell_offsets_obj = np.empty(n_keys+1, dtype=np.int32)
+    order_offsets_obj = np.empty(n_keys+1, dtype=np.int32)
+    sell_offsets = sell_offsets_obj
+    order_offsets = order_offsets_obj
+    sell_offsets[0] = 0
+    order_offsets[0] = 0
+    for key in range(n_keys):
+        sell_offsets[key+1] = sell_offsets[key]+sell_counts[key]
+        order_offsets[key+1] = order_offsets[key]+order_counts[key]
+    sell_rows_obj = np.empty(sell_offsets[n_keys], dtype=np.int32)
+    order_rows_obj = np.empty(order_offsets[n_keys], dtype=np.int32)
+    sell_rows = sell_rows_obj
+    order_rows = order_rows_obj
+    sell_cursor_obj = sell_offsets_obj[:n_keys].copy()
+    order_cursor_obj = order_offsets_obj[:n_keys].copy()
+    sell_cursor = sell_cursor_obj
+    order_cursor = order_cursor_obj
+    for good in range(n_goods):
+        for i in range(sell_offset[good], sell_offset[good+1]):
+            component = tile_component[sell_tile[i]]
+            key = good*n_components+component
+            cursor = sell_cursor[key]
+            sell_rows[cursor] = i
+            sell_cursor[key] = cursor+1
+    for i in range(inv['order_count']):
+        good = order_good[i]
+        component = tile_component[order_tile[i]]
+        key = good*n_components+component
+        cursor = order_cursor[key]
+        order_rows[cursor] = i
+        order_cursor[key] = cursor+1
+
+    inv['order_market_offsets'] = order_offsets_obj
+    inv['order_market_rows'] = order_rows_obj
+    sup['sell_market_offsets'] = sell_offsets_obj
+    sup['sell_market_rows'] = sell_rows_obj
+    sup['market_component_count'] = int(n_components)
+
+
 cdef list _lazy_book(dict inv, dict sup, int tile, int good):
     """Build one requested offer book from raw sell rows and cache it in Cython."""
     cdef object cache = sup.setdefault('lazy_book_cache', {})
@@ -1649,6 +1731,8 @@ cdef list _lazy_book(dict inv, dict sup, int tile, int good):
     cdef object cached = cache.get(key)
     if cached is not None:
         return cached
+    cdef int[::1] sell_market_offset = sup['sell_market_offsets']
+    cdef int[::1] sell_market_rows = sup['sell_market_rows']
     cdef int[::1] sell_offset = inv['sell_offset']
     cdef int[::1] sell_tile = inv['sell_tile']
     cdef int[::1] sell_participant = inv['sell_participant']
@@ -1661,14 +1745,16 @@ cdef list _lazy_book(dict inv, dict sup, int tile, int good):
     cdef double[:, ::1] distances = sup['distances']
     cdef double[::1] weight = inv['good_weight']
     cdef double eps = inv['eps'], rate = inv['transport_rate']
-    cdef int start = sell_offset[good], end = sell_offset[good+1]
-    cdef int i, j, pos, order_idx, rank, component = tile_component[tile]
+    cdef int component = tile_component[tile]
+    cdef int market_key = good*sup['market_component_count']+component
+    cdef int start = sell_market_offset[market_key]
+    cdef int end = sell_market_offset[market_key+1]
+    cdef int i, j, pos, order_idx, rank, good_start = sell_offset[good]
     cdef double d, landed
     cdef object rows = []
     cdef object row
-    for i in range(start, end):
-        if tile_component[sell_tile[i]] != component:
-            continue
+    for j in range(start, end):
+        i = sell_market_rows[j]
         d = distances[sell_tile[i], tile]
         if isnan(d):
             continue
@@ -1682,7 +1768,7 @@ cdef list _lazy_book(dict inv, dict sup, int tile, int good):
                 break
             pos -= 1
         rows.insert(pos, (landed, sell_participant[i], sell_remaining[i],
-                          sell_active[i], i-start, order_idx, rank))
+                          sell_active[i], i-good_start, order_idx, rank))
     cache[key] = rows
     return rows
 
@@ -1791,7 +1877,7 @@ cdef double _unit_cost_native(dict inv, dict sup, int tile, int good,
 cdef double _net_price_native(dict inv, dict sup, int tile, int good,
                               double price, int exclude) except? -1.0:
     """Точная копия net_price по упакованным customer quotes."""
-    cdef int i
+    cdef int i, j
     cdef double quantity = 0.0, final_quantity = 0.0, limit, landed, volume
     cdef int[::1] order_good = inv['order_good']
     cdef int[::1] order_participant = inv['order_participant']
@@ -1803,15 +1889,20 @@ cdef double _net_price_native(dict inv, dict sup, int tile, int good,
     cdef double[::1] order_remaining = inv['order_remaining']
     cdef double[::1] order_reserved = inv['order_reserved']
     cdef int[::1] tile_component = sup['tile_component']
+    cdef int[::1] market_offset = inv['order_market_offsets']
+    cdef int[::1] market_rows = inv['order_market_rows']
     cdef double[:, ::1] distances = sup['distances']
     cdef double[::1] weight = inv['good_weight']
-    cdef int order_count = inv['order_count']
+    cdef int market_key = good*sup['market_component_count']+tile_component[tile]
+    cdef int market_start = market_offset[market_key]
+    cdef int market_end = market_offset[market_key+1]
     cdef double freight
     cdef double eps = inv['eps']
-    for i in range(order_count):
-        if (not order_buy[i] or order_good[i] != good or not order_active[i]
+    for j in range(market_start, market_end):
+        i = market_rows[j]
+        if (not order_buy[i] or not order_active[i]
                 or order_remaining[i] <= eps or order_participant[i] == exclude
-                or tile_component[order_tile[i]] != tile_component[tile]):
+                ):
             continue
         freight = distances[tile, order_tile[i]]*weight[good]*inv['transport_rate']
         if isnan(freight):
@@ -1835,6 +1926,8 @@ cdef double _net_price_native(dict inv, dict sup, int tile, int good,
 cdef double _customer_limit_native(dict inv, dict sup, int tile, int good,
                                    int exclude) except? -1.0:
     """Лучшая цена спроса не самого инвестора; -1.0 = лимита нет."""
+    cdef int[::1] market_offset = inv['order_market_offsets']
+    cdef int[::1] market_rows = inv['order_market_rows']
     cdef int[::1] order_good = inv['order_good']
     cdef int[::1] order_participant = inv['order_participant']
     cdef int[::1] order_tile = inv['order_tile']
@@ -1845,17 +1938,19 @@ cdef double _customer_limit_native(dict inv, dict sup, int tile, int good,
     cdef double[::1] order_remaining = inv['order_remaining']
     cdef int[::1] tile_component = sup['tile_component']
     cdef double[:, ::1] distances = sup['distances']
-    cdef int order_count = order_good.shape[0]
-    cdef int i, best_part = -1, second_part = -1, part
+    cdef int market_key = good*sup['market_component_count']+tile_component[tile]
+    cdef int market_start = market_offset[market_key]
+    cdef int market_end = market_offset[market_key+1]
+    cdef int i, j, best_part = -1, second_part = -1, part
     cdef double freight, limit, best = -1.0, second = -1.0
     cdef double[::1] weight = inv['good_weight']
     cdef double rate = inv['transport_rate']
     cdef double eps = inv['eps']
-    for i in range(order_count):
+    for j in range(market_start, market_end):
+        i = market_rows[j]
         part = order_participant[i]
-        if (not order_buy[i] or order_good[i] != good or not order_active[i]
-                or order_remaining[i] <= eps
-                or tile_component[order_tile[i]] != tile_component[tile]):
+        if (not order_buy[i] or not order_active[i]
+                or order_remaining[i] <= eps):
             continue
         freight = distances[tile, order_tile[i]]*weight[good]*rate
         if isnan(freight):
@@ -1939,6 +2034,11 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
     cdef double[::1] order_reserved = inv['order_reserved']
     cdef int[::1] tile_component = sup['tile_component']
     cdef int n_rows = inv['order_count']
+    cdef int[::1] market_offset = inv['order_market_offsets']
+    cdef int[::1] market_rows = inv['order_market_rows']
+    cdef int market_key = good*sup['market_component_count']+tile_component[tile]
+    cdef int market_start = market_offset[market_key]
+    cdef int market_end = market_offset[market_key+1]
     cdef int* g_part = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
     cdef int* g_tile = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
     cdef double* g_price = <double*> malloc((n_rows if n_rows > 0 else 1)*sizeof(double))
@@ -1952,10 +2052,10 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
         raise MemoryError()
     cdef int n_groups = 0, found
     cdef double row_volume, d_order, order_freight, order_limit
-    for i in range(n_rows):
-        if (not order_buy[i] or order_good[i] != good or not order_active[i]
-                or order_remaining[i] <= eps
-                or tile_component[order_tile[i]] != tile_component[tile]):
+    for j in range(market_start, market_end):
+        i = market_rows[j]
+        if (not order_buy[i] or not order_active[i]
+                or order_remaining[i] <= eps):
             continue
         d_order = distances[tile, order_tile[i]]
         if isnan(d_order):
@@ -2167,6 +2267,7 @@ cpdef evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
     if markets_pid == NULL or markets_good == NULL:
         raise MemoryError()
     cdef int n_markets = mk_count
+    _build_market_order_indexes(inv, sup)
     for i in range(mk_count):
         markets_pid[i] = mk_province[i]
         markets_good[i] = mk_good[i]

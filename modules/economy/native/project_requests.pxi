@@ -817,6 +817,7 @@ class _ProjectBatch:
 
 def native_project_requests(dict inv, dict support, dict names, dict snapshot, object rng):
     """Единственная внешняя native-точка входа всего инвестиционного обзора."""
+    _build_market_order_indexes(inv, support)
     batch = _ProjectBatch(inv, support, names, snapshot, rng)
     due, investors = batch.project_requests(None)
     support.pop('batch', None)
