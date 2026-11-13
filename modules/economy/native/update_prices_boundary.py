@@ -1010,6 +1010,8 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
     accounts = list(engine.accounts.values())
     enterprises = list(engine.enterprises.values())
     goods = list(engine.goods)
+    account_id_rank = {aid: rank for rank, aid in enumerate(
+        sorted(a['id'] for a in accounts))}
     if data is not None and meta is not None:
         account_index = meta['account_index']
         enterprise_index = meta['enterprise_index']
@@ -1168,8 +1170,12 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
     sells = sells if sells is not None else {}
     sell_offsets = [0]
     sell_order_idx, sell_participant, sell_province, sell_tile = [], [], [], []
+    sell_active, sell_id_rank = [], []
     sell_price, sell_quantity, sell_remaining, sell_backing = [], [], [], []
     sell_missing = []
+    sell_rows = [offer for good in goods for offer in sells.get(good, [])]
+    sell_rank = {oid: rank for rank, oid in enumerate(
+        sorted((offer.get('id') for offer in sell_rows), key=str))}
     for good in goods:
         for offer in sells.get(good, []):
             idx = order_id_index.get(offer.get('id'), -1)
@@ -1179,6 +1185,8 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
             sell_participant.append(account_index.get(offer['participant'], -1))
             sell_province.append(province_index.get(offer['province_id'], -1))
             sell_tile.append(tile_index.get(offer['tile_id'], -1))
+            sell_active.append(offer.get('status') not in ('cancelled', 'expired'))
+            sell_id_rank.append(sell_rank.get(offer.get('id'), -1))
             sell_price.append(offer['price'])
             sell_quantity.append(offer['quantity'])
             sell_remaining.append(offer['remaining'])
@@ -1238,6 +1246,7 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
     inv_data = dict(
         # accounts / investors
         account_kind=_uint8([kind_codes.get(a['kind'], 255) for a in accounts]),
+        account_id_rank=_int32([account_id_rank[a['id']] for a in accounts]),
         account_state=_int32([state_index[a['state_id']] for a in accounts]),
         account_province=_int32([province_index[a['province_id']] for a in accounts]),
         account_tile=_int32([tile_index[a.get('cell_id') or a['tile_id']] for a in accounts]),
@@ -1364,6 +1373,8 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
         sell_participant=_int32(sell_participant),
         sell_province=_int32(sell_province),
         sell_tile=_int32(sell_tile),
+        sell_active=_uint8(sell_active),
+        sell_id_rank=_int32(sell_id_rank),
         sell_price=_float64(sell_price),
         sell_quantity=_float64(sell_quantity),
         sell_remaining=_float64(sell_remaining),
@@ -1720,37 +1731,6 @@ def _equipment_wear(engine, recipe):
             for good, ratio in recipe.get('equipment', {}).items()}
 
 
-def _top_live_reference_offers(ctx, tile_id, good):
-    """Return the first live offer from each of the two best sellers.
-
-    ``ctx.book`` is sorted by landed price and offer ID. Reference prices
-    exclude one participant, so the best offer from the first distinct
-    participant not excluded is sufficient; two distinct participants cover
-    every single-participant exclusion.
-    """
-    result = []
-    participants = set()
-    for price, sell in ctx.book(tile_id, good):
-        participant = sell['participant']
-        if participant in participants:
-            continue
-        if sell['remaining'] <= EPS or sell['status'] in ('cancelled', 'expired'):
-            continue
-        participants.add(participant)
-        result.append((price, participant))
-        if len(result) == 2:
-            break
-    return result
-
-
-def _reference_price_from_top(ctx, state_id, province_id, good, exclude_id, top_offers):
-    for price, participant in top_offers:
-        if participant != exclude_id:
-            return price
-    signal = ctx.signal(state_id, province_id, good)
-    return signal['landed_price'] or ctx.engine.goods[good]['price']
-
-
 def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), all_goods=False):
     """Построить статические flat-таблицы для native project_candidate.
 
@@ -1855,207 +1835,9 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
                                   key=lambda i: tile_ids_by_index[i]))
             rt_offset.append(len(rt_flat))
 
-    # --- какие (tile, good) нужны ---
-    investor_indices = [i for i, a in enumerate(accounts)
-                        if a['kind'] in ('private', 'merchant', 'treasury', 'municipal')
-                        or (a['kind'] == 'enterprise'
-                            and engine.enterprises[a['id']]['status'] != 'closed'
-                            and engine.enterprises[a['id']]['available_from'] <= engine.meta['month'])]
-    book_keys, ref_pairs, cq_keys, dq_keys, ld_keys = set(), set(), set(), set(), set()
-    construction_goods = list(engine.cfg['construction'])
-    market_goods = set()
-    investor_states = sorted({accounts[i]['state_id'] for i in investor_indices})
-    # Market locations belong to the state, not to an investor. Building these
-    # keys once per state avoids repeating the same resource-tile expansion for
-    # every account in that state.
-    for state_id in investor_states:
-        markets = index['markets'].get(state_id, ()) if index is not None else ()
-        for pid, good in markets:
-            market_goods.add(good)
-            loc = engine.location(pid)
-            recipe = engine.goods[good]
-            tiles = ([loc['tile_id']] if not recipe['resource']
-                     else [t['id'] for t in index['resource_tiles'].get(
-                         (state_id, pid, recipe['resource']), [])])
-            for tile_id in tiles:
-                cq_keys.add((tile_id, good))
-                dq_keys.add((tile_id, good))
-                ld_keys.add((tile_id, good))
-                ref_pairs.add((tile_id, good))
-                for input_good in recipe['inputs']:
-                    ref_pairs.add((tile_id, input_good))
-                for equip_good in recipe.get('equipment', {}):
-                    ref_pairs.add((tile_id, equip_good))
-    for i in investor_indices:
-        account = accounts[i]
-        market_tile = account.get('cell_id') or account['tile_id']
-        for good in construction_goods:
-            book_keys.add((market_tile, good))
-            ref_pairs.add((market_tile, good))
-        for good in market_goods:
-            for equip_good in engine.goods[good].get('equipment', {}):
-                book_keys.add((market_tile, equip_good))
-                ref_pairs.add((market_tile, equip_good))
-    # derived-рынки (extra_pairs): покрыть локации, которых нет в markets
-    covered_pairs = set()
-    if index is not None:
-        for pairs in index['markets'].values():
-            covered_pairs.update(pairs)
-    for province_id, good in extra_pairs:
-        if (province_id, good) in covered_pairs:
-            continue
-        state_id = engine.owners.get(province_id)
-        recipe = engine.goods[good]
-        market_goods.add(good)
-        if recipe['resource'] and index is not None:
-            tiles = [t['id'] for t in index['resource_tiles'].get(
-                (state_id, province_id, recipe['resource']), [])]
-        else:
-            tiles = [engine.location(province_id)['tile_id']]
-        for tile_id in tiles:
-            cq_keys.add((tile_id, good))
-            dq_keys.add((tile_id, good))
-            ld_keys.add((tile_id, good))
-            ref_pairs.add((tile_id, good))
-            for input_good in recipe['inputs']:
-                ref_pairs.add((tile_id, input_good))
-            for equip_good in recipe.get('equipment', {}):
-                ref_pairs.add((tile_id, equip_good))
-    covered_pairs.update(extra_pairs)
-    if all_goods:
-        market_goods.update(goods)
-    # книги для offers-walk в investment_demand: все счета x кандидатные товары
-    for account in accounts:
-        market_tile = account.get('cell_id') or account['tile_id']
-        for good in market_goods:
-            book_keys.add((market_tile, good))
-    # unit_cost фирм для suppliers
-    for firm in engine.enterprises.values():
-        recipe = engine.goods[firm['good']]
-        for input_good in recipe['inputs']:
-            ref_pairs.add((firm['tile_id'], input_good))
-        for equip_good in recipe.get('equipment', {}):
-            ref_pairs.add((firm['tile_id'], equip_good))
-        cq_keys.add((firm['tile_id'], firm['good']))
-
-    # --- expansion-кандидаты: локация фирмы может не входить в markets ---
-    for account in accounts:
-        firm = engine.enterprises.get(account['id'])
-        if firm is None or firm['status'] == 'closed':
-            continue
-        tile_id = account.get('cell_id') or account['tile_id']
-        state_id = account['state_id']
-        province_id = engine.market_province(account)
-        recipe = engine.goods[firm['good']]
-        cq_keys.add((firm['tile_id'], firm['good']))
-        dq_keys.add((firm['tile_id'], firm['good']))
-        ld_keys.add((firm['tile_id'], firm['good']))
-        ref_pairs.add((tile_id, firm['good']))
-        for input_good in recipe['inputs']:
-            ref_pairs.add((tile_id, input_good))
-        for equip_good in recipe.get('equipment', {}):
-            ref_pairs.add((tile_id, equip_good))
-            book_keys.add((tile_id, equip_good))
-    # книги offers-walk investment_demand: площадка покупателя x товары строк спроса
-    dq_goods = {good for _, good in dq_keys}
-    for account in accounts:
-        market_tile = account.get('cell_id') or account['tile_id']
-        for good in dq_goods:
-            book_keys.add((market_tile, good))
-    # Reference-price lookups use the same offer books; keep only one key per
-    # tile/good, independent of the investor that will later exclude itself.
-    book_keys.update(ref_pairs)
-
-    # --- flatten книг ---
-    book_keys = sorted(book_keys, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
-    bk_offset = [0]
-    bk_price, bk_order, bk_participant, bk_remaining, bk_active, bk_sellpos = [], [], [], [], [], []
-    gs_offset = [0]
-    gs_order, gs_remaining = [], []
-    order_id_index = {o['id']: i for i, o in enumerate(engine.report['orders'])}
-    good_sell_pos = {}
-    for good in goods:
-        good_start = len(gs_order)
-        for offer in sells.get(good, []):
-            good_sell_pos[offer['id']] = len(gs_order) - good_start
-            gs_order.append(order_id_index.get(offer['id'], -1))
-            gs_remaining.append(offer['remaining'])
-        gs_offset.append(len(gs_order))
-    for tile_id, good in book_keys:
-        for price, sell in ctx.book(tile_id, good):
-            bk_price.append(price)
-            bk_order.append(order_id_index.get(sell['id'], -1))
-            bk_participant.append(account_index.get(sell['participant'], -1))
-            bk_remaining.append(sell['remaining'])
-            bk_active.append(sell['status'] not in ('cancelled', 'expired'))
-            bk_sellpos.append(good_sell_pos.get(sell['id'], -1))
-        bk_offset.append(len(bk_price))
-
-    # --- compact reference prices ---
-    # Reference quotes depend on tile/good plus one excluded participant, so
-    # the two best live offers from distinct participants answer every lookup.
-    # Market-signal fallback is read by Cython from the existing sig table.
-    ref_pairs = sorted(ref_pairs, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
-    rft_tile, rft_good = [], []
-    rft_participant0, rft_price0, rft_participant1, rft_price1 = [], [], [], []
-    for tile_id, good in ref_pairs:
-        tile_idx, good_idx = tile_index[tile_id], good_index[good]
-        top = _top_live_reference_offers(ctx, tile_id, good)
-        codes = [account_index.get(participant, -2) for price, participant in top]
-        rft_tile.append(tile_idx)
-        rft_good.append(good_idx)
-        rft_participant0.append(codes[0] if codes else -1)
-        rft_price0.append(top[0][0] if top else 0.0)
-        rft_participant1.append(codes[1] if len(codes) > 1 else -1)
-        rft_price1.append(top[1][0] if len(top) > 1 else 0.0)
-
-    # --- customer quotes / demand rows / leaders ---
-    cq_keys = sorted(cq_keys, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
-    cq_offset = [0]
-    cq_participant, cq_price, cq_limit, cq_remaining, cq_reserved, cq_final = [], [], [], [], [], []
-    for tile_id, good in cq_keys:
-        for order, limit in ctx.customer_quotes(tile_id, good, None):
-            cq_participant.append(account_index.get(order['participant'], -1))
-            cq_price.append(order['price'])
-            cq_limit.append(limit)
-            cq_remaining.append(order['remaining'])
-            cq_reserved.append(order['reserved'])
-            cq_final.append(bool(order.get('final_consumption')))
-        cq_offset.append(len(cq_participant))
-
-    dq_keys = sorted(dq_keys, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
-    dq_offset = [0]
-    dq_participant, dq_order_tile, dq_order_price, dq_limit, dq_freight, dq_remaining, dq_reserved = \
-        [], [], [], [], [], [], []
-    for tile_id, good in dq_keys:
-        for participant, order_tile, order_price, limit, freight, remaining, reserved \
-                in ctx.demand_rows(tile_id, good):
-            dq_participant.append(account_index.get(participant, -1))
-            dq_order_tile.append(tile_index.get(order_tile, -1))
-            dq_order_price.append(order_price)
-            dq_limit.append(limit)
-            dq_freight.append(freight)
-            dq_remaining.append(remaining)
-            dq_reserved.append(reserved)
-        dq_offset.append(len(dq_participant))
-
-    ld_keys = sorted(ld_keys, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
-    ld_limit0, ld_part0, ld_limit1, ld_part1 = [], [], [], []
-    for tile_id, good in ld_keys:
-        by_participant = {}
-        for order, limit in ctx.customer_quotes(tile_id, good, None):
-            by_participant[order['participant']] = max(
-                limit, by_participant.get(order['participant'], -np.inf))
-        leaders = sorted(((limit, participant) for participant, limit in by_participant.items()),
-                         reverse=True)[:2]
-        for slot in range(2):
-            if slot < len(leaders):
-                limit, participant = leaders[slot]
-            else:
-                limit, participant = -np.inf, None
-            (ld_limit0 if slot == 0 else ld_limit1).append(limit)
-            (ld_part0 if slot == 0 else ld_part1).append(
-                account_index.get(participant, -1) if participant is not None else -1)
+    # Raw order/sell arrays from inv_data are queried lazily by Cython. Do not
+    # build every tile×good book, customer quote list, or demand row here.
+    tile_component = [engine.route_component(t) for t in all_tiles]
 
     # --- suppliers по товарам (для investment_demand) ---
     sup_offset = [0]
@@ -2088,54 +1870,6 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
         rt_count=len(rt_keys),
         rt_offset=_int32(rt_offset),
         rt_tile=_int32(rt_flat),
-        bk_tile=_int32([tile_index[t] for t, _ in book_keys]),
-        bk_good=_int32([good_index[g] for _, g in book_keys]),
-        bk_count=len(book_keys),
-        bk_offset=_int32(bk_offset),
-        bk_price=_float64(bk_price),
-        bk_order=_int32(bk_order),
-        bk_participant=_int32(bk_participant),
-        bk_remaining=_float64(bk_remaining),
-        bk_active=_uint8(bk_active),
-        bk_sellpos=_int32(bk_sellpos),
-        gs_offset=_int32(gs_offset),
-        gs_order=_int32(gs_order),
-        gs_remaining=_float64(gs_remaining),
-        rft_tile=_int32(rft_tile),
-        rft_good=_int32(rft_good),
-        rft_count=len(rft_tile),
-        rft_participant0=_int32(rft_participant0),
-        rft_price0=_float64(rft_price0),
-        rft_participant1=_int32(rft_participant1),
-        rft_price1=_float64(rft_price1),
-        cq_tile=_int32([tile_index[t] for t, _ in cq_keys]),
-        cq_good=_int32([good_index[g] for _, g in cq_keys]),
-        cq_count=len(cq_keys),
-        cq_offset=_int32(cq_offset),
-        cq_participant=_int32(cq_participant),
-        cq_price=_float64(cq_price),
-        cq_limit=_float64(cq_limit),
-        cq_remaining=_float64(cq_remaining),
-        cq_reserved=_float64(cq_reserved),
-        cq_final=_uint8(cq_final),
-        dq_tile=_int32([tile_index[t] for t, _ in dq_keys]),
-        dq_good=_int32([good_index[g] for _, g in dq_keys]),
-        dq_count=len(dq_keys),
-        dq_offset=_int32(dq_offset),
-        dq_participant=_int32(dq_participant),
-        dq_order_tile=_int32(dq_order_tile),
-        dq_order_price=_float64(dq_order_price),
-        dq_limit=_float64(dq_limit),
-        dq_freight=_float64(dq_freight),
-        dq_remaining=_float64(dq_remaining),
-        dq_reserved=_float64(dq_reserved),
-        ld_tile=_int32([tile_index[t] for t, _ in ld_keys]),
-        ld_good=_int32([good_index[g] for _, g in ld_keys]),
-        ld_count=len(ld_keys),
-        ld_limit0=_float64(ld_limit0),
-        ld_part0=_int32(ld_part0),
-        ld_limit1=_float64(ld_limit1),
-        ld_part1=_int32(ld_part1),
         sup_account=_int32(sup_account),
         sup_owner=_int32(sup_owner),
         sup_offset=_int32(sup_offset),
@@ -2145,12 +1879,14 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
         good_wear_rate=_float64([engine.goods[g].get('durable', {}).get('wear_rate', 0)
                                  for g in goods]),
         distances=distances,
+        tile_component=_int32([-1 if value is None else value
+                               for value in tile_component]),
+        lazy_market=True,
     )
     support_meta = dict(ctx=ctx, account_index=account_index, good_index=good_index,
                         state_index=state_index, province_index=province_index,
                         tile_index=tile_index, resource_index=resource_index,
-                        investor_indices=investor_indices, month=engine.meta['month'],
-                        covered_pairs=covered_pairs)
+                        month=engine.meta['month'])
     return support, support_meta
 
 

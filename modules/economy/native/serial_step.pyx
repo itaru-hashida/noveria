@@ -1604,15 +1604,6 @@ cdef double _csum(double* values, Py_ssize_t n) noexcept nogil:
     return s + c
 
 
-cdef int _find_pair(int[::1] keys_a, int[::1] keys_b, int count,
-                    int a, int b) noexcept nogil:
-    cdef int i
-    for i in range(count):
-        if keys_a[i] == a and keys_b[i] == b:
-            return i
-    return -1
-
-
 cdef int _find_triple(int[::1] keys_a, int[::1] keys_b, int[::1] keys_c,
                       int count, int a, int b, int c) noexcept nogil:
     cdef int i
@@ -1651,31 +1642,59 @@ cdef double _sig_field(dict sup, int state, int province, int good,
     return sup['sig_limit'][idx]
 
 
-cdef void _book_range(dict sup, int tile, int good, int* start, int* end) except *:
-    cdef int idx = _find_pair(sup['bk_tile'], sup['bk_good'], sup['bk_count'],
-                              tile, good)
-    if idx < 0:
-        raise ValueError('candidate support: книга (%d, %d) не упакована'
-                         % (tile, good))
-    start[0] = sup['bk_offset'][idx]
-    end[0] = sup['bk_offset'][idx + 1]
+cdef list _lazy_book(dict inv, dict sup, int tile, int good):
+    """Build one requested offer book from raw sell rows and cache it in Cython."""
+    cdef object cache = sup.setdefault('lazy_book_cache', {})
+    cdef object key = (tile, good)
+    cdef object cached = cache.get(key)
+    if cached is not None:
+        return cached
+    cdef int[::1] sell_offset = inv['sell_offset']
+    cdef int[::1] sell_tile = inv['sell_tile']
+    cdef int[::1] sell_participant = inv['sell_participant']
+    cdef int[::1] sell_order_index = inv['sell_order_index']
+    cdef double[::1] sell_price = inv['sell_price']
+    cdef double[::1] sell_remaining = inv['sell_remaining']
+    cdef unsigned char[::1] sell_active = inv['sell_active']
+    cdef int[::1] sell_rank = inv['sell_id_rank']
+    cdef int[::1] tile_component = sup['tile_component']
+    cdef double[:, ::1] distances = sup['distances']
+    cdef double[::1] weight = inv['good_weight']
+    cdef double eps = inv['eps'], rate = inv['transport_rate']
+    cdef int start = sell_offset[good], end = sell_offset[good+1]
+    cdef int i, j, pos, order_idx, rank, component = tile_component[tile]
+    cdef double d, landed
+    cdef object rows = []
+    cdef object row
+    for i in range(start, end):
+        if tile_component[sell_tile[i]] != component:
+            continue
+        d = distances[sell_tile[i], tile]
+        if isnan(d):
+            continue
+        landed = sell_price[i]+d*weight[good]*rate
+        order_idx = sell_order_index[i]
+        rank = sell_rank[i]
+        pos = len(rows)
+        while pos > 0:
+            row = rows[pos-1]
+            if row[0] < landed or (row[0] == landed and row[6] <= rank):
+                break
+            pos -= 1
+        rows.insert(pos, (landed, sell_participant[i], sell_remaining[i],
+                          sell_active[i], i-start, order_idx, rank))
+    cache[key] = rows
+    return rows
 
 
 cdef double _rf_value(dict inv, dict sup, int tile, int good, int exclude,
                       int state, int province) except? -1.0:
-    cdef int idx = _find_pair(sup['rft_tile'], sup['rft_good'],
-                              sup['rft_count'], tile, good)
-    cdef int[::1] participant0, participant1
-    cdef double[::1] price0, price1
-    if idx >= 0:
-        participant0 = sup['rft_participant0']
-        participant1 = sup['rft_participant1']
-        price0 = sup['rft_price0']
-        price1 = sup['rft_price1']
-        if participant0[idx] >= 0 and participant0[idx] != exclude:
-            return price0[idx]
-        if participant1[idx] >= 0 and participant1[idx] != exclude:
-            return price1[idx]
+    cdef object rows = _lazy_book(inv, sup, tile, good)
+    cdef object row
+    cdef double eps = inv['eps']
+    for row in rows:
+        if row[1] != exclude and row[2] > eps and row[3]:
+            return row[0]
     cdef double fallback = _sig_field(sup, state, province, good, 3)
     if fallback < 0.0 or isnan(fallback) or fallback == 0.0:
         return inv['good_price'][good]
@@ -1686,7 +1705,7 @@ cdef void _quoted_cost_native(dict inv, dict sup, int tile, int good, int exclud
                               double quantity,
                               double* out_value, double* out_ceiling) except *:
     """Точная копия quoted_cost: книга, затем recovery fallback."""
-    cdef int start, end, i, firm
+    cdef int i, firm
     cdef double left = quantity, value = 0.0, ceiling = 0.0
     cdef double q, price, reference, best = 0.0, d, freight, weight
     cdef bint any_quote = False
@@ -1699,17 +1718,15 @@ cdef void _quoted_cost_native(dict inv, dict sup, int tile, int good, int exclud
     cdef int[::1] ent_tile = inv['enterprise_tile']
     cdef int[::1] ent_account = inv['enterprise_account']
     cdef double[:, ::1] distances = sup['distances']
-    _book_range(sup, tile, good, &start, &end)
-    cdef double[::1] bk_price = sup['bk_price']
-    cdef int[::1] bk_participant = sup['bk_participant']
-    cdef double[::1] bk_remaining = sup['bk_remaining']
-    cdef unsigned char[::1] bk_active = sup['bk_active']
-    for i in range(start, end):
-        if bk_participant[i] == exclude or bk_remaining[i] <= eps or not bk_active[i]:
+    cdef object rows = _lazy_book(inv, sup, tile, good)
+    cdef object row
+    for row in rows:
+        if row[1] == exclude or row[2] <= eps or not row[3]:
             continue
-        q = min(left, bk_remaining[i])
-        value += q*bk_price[i]
-        ceiling = max(ceiling, bk_price[i])
+        # The first tuple field is landed offer price; remaining follows.
+        q = min(left, row[2])
+        value += q*row[0]
+        ceiling = max(ceiling, row[0])
         left -= q
         if left <= eps:
             break
@@ -1774,31 +1791,38 @@ cdef double _unit_cost_native(dict inv, dict sup, int tile, int good,
 cdef double _net_price_native(dict inv, dict sup, int tile, int good,
                               double price, int exclude) except? -1.0:
     """Точная копия net_price по упакованным customer quotes."""
-    cdef int idx = _find_pair(sup['cq_tile'], sup['cq_good'], sup['cq_count'],
-                              tile, good)
-    if idx < 0:
-        raise ValueError('candidate support: customer quotes (%d, %d) не упакованы'
-                         % (tile, good))
-    cdef int start = sup['cq_offset'][idx], end = sup['cq_offset'][idx + 1]
     cdef int i
     cdef double quantity = 0.0, final_quantity = 0.0, limit, landed, volume
-    cdef int[::1] cq_participant = sup['cq_participant']
-    cdef double[::1] cq_price = sup['cq_price']
-    cdef double[::1] cq_limit = sup['cq_limit']
-    cdef double[::1] cq_remaining = sup['cq_remaining']
-    cdef double[::1] cq_reserved = sup['cq_reserved']
-    cdef unsigned char[::1] cq_final = sup['cq_final']
+    cdef int[::1] order_good = inv['order_good']
+    cdef int[::1] order_participant = inv['order_participant']
+    cdef int[::1] order_tile = inv['order_tile']
+    cdef unsigned char[::1] order_buy = inv['order_side_buy']
+    cdef unsigned char[::1] order_active = inv['order_status_active']
+    cdef unsigned char[::1] order_final = inv['order_final_consumption']
+    cdef double[::1] order_price = inv['order_price']
+    cdef double[::1] order_remaining = inv['order_remaining']
+    cdef double[::1] order_reserved = inv['order_reserved']
+    cdef int[::1] tile_component = sup['tile_component']
+    cdef double[:, ::1] distances = sup['distances']
+    cdef double[::1] weight = inv['good_weight']
+    cdef int order_count = inv['order_count']
+    cdef double freight
     cdef double eps = inv['eps']
-    for i in range(start, end):
-        if cq_participant[i] == exclude:
+    for i in range(order_count):
+        if (not order_buy[i] or order_good[i] != good or not order_active[i]
+                or order_remaining[i] <= eps or order_participant[i] == exclude
+                or tile_component[order_tile[i]] != tile_component[tile]):
             continue
-        limit = cq_limit[i]
+        freight = distances[tile, order_tile[i]]*weight[good]*inv['transport_rate']
+        if isnan(freight):
+            continue
+        limit = order_price[i]-freight
         if limit+eps < price:
             continue
-        landed = price+(cq_price[i]-limit)
-        volume = min(cq_remaining[i], cq_reserved[i]/max(landed, eps))
+        landed = price+(order_price[i]-limit)
+        volume = min(order_remaining[i], order_reserved[i]/max(landed, eps))
         quantity += volume
-        if cq_final[i]:
+        if order_final[i]:
             final_quantity += volume
     cdef double share
     if quantity > eps:
@@ -1808,22 +1832,54 @@ cdef double _net_price_native(dict inv, dict sup, int tile, int good,
     return price*(1-inv['consumption_tax']*share)
 
 
-cdef double _customer_limit_native(dict sup, int tile, int good,
+cdef double _customer_limit_native(dict inv, dict sup, int tile, int good,
                                    int exclude) except? -1.0:
     """Лучшая цена спроса не самого инвестора; -1.0 = лимита нет."""
-    cdef int idx = _find_pair(sup['ld_tile'], sup['ld_good'], sup['ld_count'],
-                              tile, good)
-    if idx < 0:
-        raise ValueError('candidate support: leaders (%d, %d) не упакованы'
-                         % (tile, good))
-    cdef double limit0 = sup['ld_limit0'][idx]
-    cdef int part0 = sup['ld_part0'][idx]
-    cdef double limit1 = sup['ld_limit1'][idx]
-    cdef int part1 = sup['ld_part1'][idx]
-    if part0 != exclude and limit0 > 0:
-        return limit0
-    if part1 != exclude and limit1 > 0:
-        return limit1
+    cdef int[::1] order_good = inv['order_good']
+    cdef int[::1] order_participant = inv['order_participant']
+    cdef int[::1] order_tile = inv['order_tile']
+    cdef int[::1] account_rank = inv['account_id_rank']
+    cdef unsigned char[::1] order_buy = inv['order_side_buy']
+    cdef unsigned char[::1] order_active = inv['order_status_active']
+    cdef double[::1] order_price = inv['order_price']
+    cdef double[::1] order_remaining = inv['order_remaining']
+    cdef int[::1] tile_component = sup['tile_component']
+    cdef double[:, ::1] distances = sup['distances']
+    cdef int order_count = order_good.shape[0]
+    cdef int i, best_part = -1, second_part = -1, part
+    cdef double freight, limit, best = -1.0, second = -1.0
+    cdef double[::1] weight = inv['good_weight']
+    cdef double rate = inv['transport_rate']
+    cdef double eps = inv['eps']
+    for i in range(order_count):
+        part = order_participant[i]
+        if (not order_buy[i] or order_good[i] != good or not order_active[i]
+                or order_remaining[i] <= eps
+                or tile_component[order_tile[i]] != tile_component[tile]):
+            continue
+        freight = distances[tile, order_tile[i]]*weight[good]*rate
+        if isnan(freight):
+            continue
+        limit = order_price[i]-freight
+        if part == best_part:
+            if limit > best:
+                best = limit
+            continue
+        if part == second_part:
+            if limit > second:
+                second = limit
+            continue
+        if limit > best or (limit == best and account_rank[part] > account_rank[best_part]):
+            second, second_part = best, best_part
+            best, best_part = limit, part
+        elif part != second_part and (limit > second or
+                (limit == second and (second_part < 0 or
+                                      account_rank[part] > account_rank[second_part]))):
+            second, second_part = limit, part
+    if best_part != exclude and best > 0:
+        return best
+    if second_part != exclude and second > 0:
+        return second
     return -1.0
 
 
@@ -1842,8 +1898,8 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
         sup['batch'].ensure_suppliers(good)
 
     # cheap = {order_id: remaining} по всем sells[good]
-    cdef int[::1] gs_offset = sup['gs_offset']
-    cdef double[::1] gs_remaining = sup['gs_remaining']
+    cdef int[::1] gs_offset = inv['sell_offset']
+    cdef double[::1] gs_remaining = inv['sell_remaining']
     cdef int cheap_start = gs_offset[good], cheap_end = gs_offset[good + 1]
     cdef double* cheap = <double*> malloc((cheap_end-cheap_start)*sizeof(double))
     if cheap == NULL:
@@ -1873,78 +1929,78 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
         sup_cap[n_base+s] = pj_capacity[pj_offset[good]+s]
 
     # группы спроса: отсев по цене, вставка в порядке следования строк
-    cdef int dq_idx = _find_pair(sup['dq_tile'], sup['dq_good'], sup['dq_count'],
-                                 tile, good)
-    if dq_idx < 0:
-        free(cheap); free(sup_cap)
-        raise ValueError('candidate support: demand rows (%d, %d) не упакованы'
-                         % (tile, good))
-    cdef int dq_start = sup['dq_offset'][dq_idx], dq_end = sup['dq_offset'][dq_idx+1]
-    cdef int n_rows = dq_end-dq_start
+    cdef int[::1] order_good = inv['order_good']
+    cdef int[::1] order_participant = inv['order_participant']
+    cdef int[::1] order_tile = inv['order_tile']
+    cdef unsigned char[::1] order_buy = inv['order_side_buy']
+    cdef unsigned char[::1] order_active = inv['order_status_active']
+    cdef double[::1] order_price = inv['order_price']
+    cdef double[::1] order_remaining = inv['order_remaining']
+    cdef double[::1] order_reserved = inv['order_reserved']
+    cdef int[::1] tile_component = sup['tile_component']
+    cdef int n_rows = inv['order_count']
     cdef int* g_part = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
     cdef int* g_tile = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
     cdef double* g_price = <double*> malloc((n_rows if n_rows > 0 else 1)*sizeof(double))
+    cdef double* g_limit = <double*> malloc((n_rows if n_rows > 0 else 1)*sizeof(double))
     cdef double* g_volume = <double*> malloc((n_rows if n_rows > 0 else 1)*sizeof(double))
     cdef int* g_row = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
     if g_part == NULL or g_tile == NULL or g_price == NULL or g_volume == NULL \
-            or g_row == NULL:
+            or g_row == NULL or g_limit == NULL:
         free(cheap); free(sup_cap); free(g_part); free(g_tile); free(g_price)
-        free(g_volume); free(g_row)
+        free(g_volume); free(g_row); free(g_limit)
         raise MemoryError()
     cdef int n_groups = 0, found
-    cdef int[::1] dq_participant = sup['dq_participant']
-    cdef int[::1] dq_order_tile = sup['dq_order_tile']
-    cdef double[::1] dq_order_price = sup['dq_order_price']
-    cdef double[::1] dq_limit = sup['dq_limit']
-    cdef double[::1] dq_freight = sup['dq_freight']
-    cdef double[::1] dq_remaining = sup['dq_remaining']
-    cdef double[::1] dq_reserved = sup['dq_reserved']
-    cdef double row_volume
-    for i in range(dq_start, dq_end):
-        if dq_limit[i]+eps < price:
+    cdef double row_volume, d_order, order_freight, order_limit
+    for i in range(n_rows):
+        if (not order_buy[i] or order_good[i] != good or not order_active[i]
+                or order_remaining[i] <= eps
+                or tile_component[order_tile[i]] != tile_component[tile]):
             continue
-        row_volume = min(dq_remaining[i],
-                         dq_reserved[i]/max(price+dq_freight[i], eps))
+        d_order = distances[tile, order_tile[i]]
+        if isnan(d_order):
+            continue
+        order_freight = d_order*weight*rate
+        order_limit = order_price[i]-order_freight
+        if order_limit+eps < price:
+            continue
+        row_volume = min(order_remaining[i],
+                         order_reserved[i]/max(price+order_freight, eps))
         found = -1
         for j in range(n_groups):
-            if g_part[j] == dq_participant[i] and g_tile[j] == dq_order_tile[i] \
-                    and g_price[j] == dq_order_price[i]:
+            if g_part[j] == order_participant[i] and g_tile[j] == order_tile[i] \
+                    and g_price[j] == order_price[i]:
                 found = j
                 break
         if found < 0:
             found = n_groups
-            g_part[n_groups] = dq_participant[i]
-            g_tile[n_groups] = dq_order_tile[i]
-            g_price[n_groups] = dq_order_price[i]
+            g_part[n_groups] = order_participant[i]
+            g_tile[n_groups] = order_tile[i]
+            g_price[n_groups] = order_price[i]
             g_row[n_groups] = i
+            g_limit[n_groups] = order_limit
             g_volume[n_groups] = 0.0
             n_groups += 1
         g_volume[found] += row_volume
 
-    cdef int bk_start, bk_end
-    cdef int[::1] bk_participant = sup['bk_participant']
-    cdef double[::1] bk_remaining = sup['bk_remaining']
-    cdef unsigned char[::1] bk_active = sup['bk_active']
-    cdef double[::1] bk_price = sup['bk_price']
-    cdef int[::1] bk_sellpos = sup['bk_sellpos']
     cdef double d, freight, landed_price
     cdef int supply_tile
     cdef double supply_price
+    cdef object book_rows, book_row
     for j in range(n_groups):
         if g_part[j] == exclude:
             continue
-        if dq_limit[g_row[j]]+eps < price:
+        if g_limit[j]+eps < price:
             continue
         volume = g_volume[j]
         # дешёвые офферы покупателя группы
-        _book_range(sup, g_tile[j], good, &bk_start, &bk_end)
-        for i in range(bk_start, bk_end):
-            if bk_participant[i] == g_part[j] or bk_remaining[i] <= eps \
-                    or not bk_active[i]:
+        book_rows = _lazy_book(inv, sup, g_tile[j], good)
+        for book_row in book_rows:
+            if book_row[1] == g_part[j] or book_row[2] <= eps or not book_row[3]:
                 continue
-            if bk_price[i] > g_price[j]+eps:
+            if book_row[0] > g_price[j]+eps:
                 break
-            pos = bk_sellpos[i]
+            pos = book_row[4]
             covered = min(volume, cheap[pos])
             cheap[pos] -= covered
             volume -= covered
@@ -1972,7 +2028,7 @@ cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
         residual += volume
 
     free(cheap); free(sup_cap); free(g_part); free(g_tile); free(g_price)
-    free(g_volume); free(g_row)
+    free(g_volume); free(g_row); free(g_limit)
     return residual
 
 
@@ -2203,7 +2259,7 @@ cpdef evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
                 loc_tile_idx = sup['rt_tile'][start+order[0]]
             city_present = 0
 
-        limit = _customer_limit_native(sup, loc_tile_idx, good, investor)
+        limit = _customer_limit_native(inv, sup, loc_tile_idx, good, investor)
         sig_price = _sig_field(sup, loc_state_idx, pid, good, 2)
         if limit != -1.0:
             price = limit

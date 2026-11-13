@@ -162,14 +162,11 @@ class _ProjectBatch:
         ai = self.names['account_index'][buyer['id']]
         gi = self.names['good_index'][good]
         tile = int(inv['account_tile'][ai])
-        index = _find_pair(sup['bk_tile'], sup['bk_good'], sup['bk_count'], tile, gi)
-        if index < 0:
-            return 0
-        # Python 3.12 sum(float) сохраняет точный порядок/компенсацию V3.
-        return sum(float(sup['bk_remaining'][i])
-            for i in range(sup['bk_offset'][index], sup['bk_offset'][index+1])
-            if sup['bk_active'][i] and sup['bk_participant'][i] != ai
-            and sup['bk_remaining'][i] > EPS)
+        rows = _lazy_book(inv, sup, tile, gi)
+        # Keep Python 3.12's compensated float-sum behavior from the former
+        # packed generator while the rows themselves are queried lazily.
+        return sum(float(row[2]) for row in rows
+                   if row[3] and row[1] != ai and row[2] > EPS)
 
     def _refresh_project_arrays(self):
         """Живой индекс меняется только при commit, а не перед инвестором."""
