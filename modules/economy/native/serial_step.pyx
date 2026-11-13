@@ -1661,13 +1661,25 @@ cdef void _book_range(dict sup, int tile, int good, int* start, int* end) except
     end[0] = sup['bk_offset'][idx + 1]
 
 
-cdef double _rf_value(dict sup, int tile, int good, int exclude) except? -1.0:
-    cdef int idx = _find_triple(sup['rf_tile'], sup['rf_good'], sup['rf_exclude'],
-                                sup['rf_count'], tile, good, exclude)
-    if idx < 0:
-        raise ValueError('candidate support: ref price (%d, %d, %d) не упакован'
-                         % (tile, good, exclude))
-    return sup['rf_value'][idx]
+cdef double _rf_value(dict inv, dict sup, int tile, int good, int exclude,
+                      int state, int province) except? -1.0:
+    cdef int idx = _find_pair(sup['rft_tile'], sup['rft_good'],
+                              sup['rft_count'], tile, good)
+    cdef int[::1] participant0, participant1
+    cdef double[::1] price0, price1
+    if idx >= 0:
+        participant0 = sup['rft_participant0']
+        participant1 = sup['rft_participant1']
+        price0 = sup['rft_price0']
+        price1 = sup['rft_price1']
+        if participant0[idx] >= 0 and participant0[idx] != exclude:
+            return price0[idx]
+        if participant1[idx] >= 0 and participant1[idx] != exclude:
+            return price1[idx]
+    cdef double fallback = _sig_field(sup, state, province, good, 3)
+    if fallback < 0.0 or isnan(fallback) or fallback == 0.0:
+        return inv['good_price'][good]
+    return fallback
 
 
 cdef void _quoted_cost_native(dict inv, dict sup, int tile, int good, int exclude,
@@ -1679,6 +1691,8 @@ cdef void _quoted_cost_native(dict inv, dict sup, int tile, int good, int exclud
     cdef double q, price, reference, best = 0.0, d, freight, weight
     cdef bint any_quote = False
     cdef double eps = inv['eps']
+    cdef int[::1] account_state = inv['account_state']
+    cdef int[::1] account_province = inv['account_province']
     cdef int[::1] rq_offset = inv['recovery_quote_offset']
     cdef int[::1] rq_firm = inv['recovery_quote_firm']
     cdef double[::1] rq_price = inv['recovery_quote_price']
@@ -1700,7 +1714,8 @@ cdef void _quoted_cost_native(dict inv, dict sup, int tile, int good, int exclud
         if left <= eps:
             break
     if left > eps:
-        reference = _rf_value(sup, tile, good, exclude)
+        reference = _rf_value(inv, sup, tile, good, exclude,
+                               account_state[exclude], account_province[exclude])
         weight = inv['good_weight'][good]
         for i in range(rq_offset[good], rq_offset[good + 1]):
             firm = rq_firm[i]
@@ -1723,7 +1738,7 @@ cdef void _quoted_cost_native(dict inv, dict sup, int tile, int good, int exclud
 
 
 cdef double _unit_cost_native(dict inv, dict sup, int tile, int good,
-                              int exclude) except? -1.0:
+                              int exclude, int state, int province) except? -1.0:
     """Точная копия unit_cost: компенсированные суммы raw и wear."""
     cdef int i, input_good
     cdef double* raw_terms = <double*> malloc(64*sizeof(double))
@@ -1742,12 +1757,13 @@ cdef double _unit_cost_native(dict inv, dict sup, int tile, int good,
     cdef double result
     for i in range(in_off[good], in_off[good + 1]):
         input_good = in_good[i]
-        raw_terms[n_raw] = in_value[i]*_rf_value(sup, tile, input_good, exclude)
+        raw_terms[n_raw] = in_value[i]*_rf_value(
+            inv, sup, tile, input_good, exclude, state, province)
         n_raw += 1
     for i in range(eq_off[good], eq_off[good + 1]):
         input_good = eq_good[i]
         wear_terms[n_wear] = (eq_value[i]*wear_rate[input_good]) \
-            *_rf_value(sup, tile, input_good, exclude)
+            *_rf_value(inv, sup, tile, input_good, exclude, state, province)
         n_wear += 1
     result = inv['good_labor'][good]*inv['wage'] \
         + _csum(raw_terms, n_raw) + _csum(wear_terms, n_wear)
@@ -2237,7 +2253,8 @@ cpdef evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
             d_v3[n_diag] = 0.0; d_v4[n_diag] = 0.0
             n_diag += 1
             continue
-        unit = _unit_cost_native(inv, sup, loc_tile_idx, good, investor)
+        unit = _unit_cost_native(inv, sup, loc_tile_idx, good, investor,
+                                 loc_state_idx, pid)
         fixed_unit = good_labor[good]*wage*overhead
         net = _net_price_native(inv, sup, loc_tile_idx, good, price, investor)
         margin = net-unit-fixed_unit

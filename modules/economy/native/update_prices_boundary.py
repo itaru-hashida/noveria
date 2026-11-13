@@ -1755,6 +1755,13 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     if n_tiles > old_n:
         distances = np.full((n_tiles, n_tiles), np.nan, dtype=np.float64)
         distances[:old_n, :old_n] = inv_data['distances']
+        # Populate/validate each source tree once, then read its distance map
+        # directly. Calling engine.path for every matrix cell adds millions of
+        # Python calls even though path trees are cached by source.
+        path_distances = {}
+        for source in all_tiles:
+            engine.path(source, source)
+            path_distances[source] = engine.paths[source][0]
         for tile_id in extra_sorted:
             i = tile_index[tile_id]
             for j, other in enumerate(all_tiles):
@@ -1763,12 +1770,11 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
                     continue
                 if j < old_n and i < old_n:
                     continue
-                # path() не побитово симметричен: каждое направление считается
-                # своим вызовом, как это делает V3
-                d, _ = engine.path(tile_id, other)
+                # Keep both directed lookups: the road graph may be asymmetric.
+                d = path_distances[tile_id].get(other)
                 if d is not None:
                     distances[i, j] = d
-                d, _ = engine.path(other, tile_id)
+                d = path_distances[other].get(tile_id)
                 if d is not None:
                     distances[j, i] = d
     else:
@@ -1809,7 +1815,7 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
                         or (a['kind'] == 'enterprise'
                             and engine.enterprises[a['id']]['status'] != 'closed'
                             and engine.enterprises[a['id']]['available_from'] <= engine.meta['month'])]
-    book_keys, ref_keys, cq_keys, dq_keys, ld_keys = set(), set(), set(), set(), set()
+    book_keys, ref_pairs, cq_keys, dq_keys, ld_keys = set(), set(), set(), set(), set()
     construction_goods = list(engine.cfg['construction'])
     market_goods = set()
     for i in investor_indices:
@@ -1829,18 +1835,18 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
                 cq_keys.add((tile_id, good))
                 dq_keys.add((tile_id, good))
                 ld_keys.add((tile_id, good))
-                ref_keys.add((state_id, pid, tile_id, good, account['id']))
+                ref_pairs.add((tile_id, good))
                 for input_good in recipe['inputs']:
-                    ref_keys.add((state_id, pid, tile_id, input_good, account['id']))
+                    ref_pairs.add((tile_id, input_good))
                 for equip_good in recipe.get('equipment', {}):
-                    ref_keys.add((state_id, pid, tile_id, equip_good, account['id']))
+                    ref_pairs.add((tile_id, equip_good))
         for good in construction_goods:
             book_keys.add((market_tile, good))
-            ref_keys.add((state_id, province_id, market_tile, good, account['id']))
+            ref_pairs.add((market_tile, good))
         for good in list(market_goods):
             for equip_good in engine.goods[good].get('equipment', {}):
                 book_keys.add((market_tile, equip_good))
-                ref_keys.add((state_id, province_id, market_tile, equip_good, account['id']))
+                ref_pairs.add((market_tile, equip_good))
     # derived-рынки (extra_pairs): покрыть локации, которых нет в markets
     covered_pairs = set()
     if index is not None:
@@ -1862,13 +1868,11 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
             dq_keys.add((tile_id, good))
             ld_keys.add((tile_id, good))
             for account in accounts:
-                ref_keys.add((state_id, province_id, tile_id, good, account['id']))
+                ref_pairs.add((tile_id, good))
                 for input_good in recipe['inputs']:
-                    ref_keys.add((state_id, province_id, tile_id, input_good,
-                                  account['id']))
+                    ref_pairs.add((tile_id, input_good))
                 for equip_good in recipe.get('equipment', {}):
-                    ref_keys.add((state_id, province_id, tile_id, equip_good,
-                                  account['id']))
+                    ref_pairs.add((tile_id, equip_good))
     covered_pairs.update(extra_pairs)
     if all_goods:
         market_goods.update(goods)
@@ -1881,11 +1885,9 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     for firm in engine.enterprises.values():
         recipe = engine.goods[firm['good']]
         for input_good in recipe['inputs']:
-            ref_keys.add((firm['state_id'], firm['province_id'], firm['tile_id'],
-                          input_good, firm['id']))
+            ref_pairs.add((firm['tile_id'], input_good))
         for equip_good in recipe.get('equipment', {}):
-            ref_keys.add((firm['state_id'], firm['province_id'], firm['tile_id'],
-                          equip_good, firm['id']))
+            ref_pairs.add((firm['tile_id'], equip_good))
         cq_keys.add((firm['tile_id'], firm['good']))
 
     # --- expansion-кандидаты: локация фирмы может не входить в markets ---
@@ -1900,11 +1902,11 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
         cq_keys.add((firm['tile_id'], firm['good']))
         dq_keys.add((firm['tile_id'], firm['good']))
         ld_keys.add((firm['tile_id'], firm['good']))
-        ref_keys.add((state_id, province_id, tile_id, firm['good'], account['id']))
+        ref_pairs.add((tile_id, firm['good']))
         for input_good in recipe['inputs']:
-            ref_keys.add((state_id, province_id, tile_id, input_good, account['id']))
+            ref_pairs.add((tile_id, input_good))
         for equip_good in recipe.get('equipment', {}):
-            ref_keys.add((state_id, province_id, tile_id, equip_good, account['id']))
+            ref_pairs.add((tile_id, equip_good))
             book_keys.add((tile_id, equip_good))
     # книги offers-walk investment_demand: площадка покупателя x товары строк спроса
     dq_goods = {good for _, good in dq_keys}
@@ -1912,6 +1914,9 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
         market_tile = account.get('cell_id') or account['tile_id']
         for good in dq_goods:
             book_keys.add((market_tile, good))
+    # Reference-price lookups use the same offer books; keep only one key per
+    # tile/good, independent of the investor that will later exclude itself.
+    book_keys.update(ref_pairs)
 
     # --- flatten книг ---
     book_keys = sorted(book_keys, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
@@ -1938,33 +1943,23 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
             bk_sellpos.append(good_sell_pos.get(sell['id'], -1))
         bk_offset.append(len(bk_price))
 
-    # --- reference prices ---
-    ref_keys = sorted(ref_keys, key=lambda k: (tile_index[k[2]], good_index[k[3]],
-                                               account_index.get(k[4], -1)))
-    # One exclusion can only remove one participant. Keep only the best live
-    # offer per participant, then use at most two distinct participants for
-    # every lookup. Deduplicate the Cython key after sorting and retain its
-    # first row, matching _find_triple's legacy first-match behavior.
-    compact_ref_keys = []
-    seen_ref_keys = set()
-    for key in ref_keys:
-        lookup = (tile_index[key[2]], good_index[key[3]],
-                  account_index.get(key[4], -1))
-        if lookup in seen_ref_keys:
-            continue
-        seen_ref_keys.add(lookup)
-        compact_ref_keys.append(key)
-    top_ref_cache = {}
-    rf_value = []
-    for state_id, province_id, tile_id, good, exclude_id in compact_ref_keys:
-        book_key = (tile_id, good)
-        top = top_ref_cache.get(book_key)
-        if top is None:
-            top = _top_live_reference_offers(ctx, tile_id, good)
-            top_ref_cache[book_key] = top
-        rf_value.append(_reference_price_from_top(
-            ctx, state_id, province_id, good, exclude_id, top))
-    ref_keys = compact_ref_keys
+    # --- compact reference prices ---
+    # Reference quotes depend on tile/good plus one excluded participant, so
+    # the two best live offers from distinct participants answer every lookup.
+    # Market-signal fallback is read by Cython from the existing sig table.
+    ref_pairs = sorted(ref_pairs, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
+    rft_tile, rft_good = [], []
+    rft_participant0, rft_price0, rft_participant1, rft_price1 = [], [], [], []
+    for tile_id, good in ref_pairs:
+        tile_idx, good_idx = tile_index[tile_id], good_index[good]
+        top = _top_live_reference_offers(ctx, tile_id, good)
+        codes = [account_index.get(participant, -2) for price, participant in top]
+        rft_tile.append(tile_idx)
+        rft_good.append(good_idx)
+        rft_participant0.append(codes[0] if codes else -1)
+        rft_price0.append(top[0][0] if top else 0.0)
+        rft_participant1.append(codes[1] if len(codes) > 1 else -1)
+        rft_price1.append(top[1][0] if len(top) > 1 else 0.0)
 
     # --- customer quotes / demand rows / leaders ---
     cq_keys = sorted(cq_keys, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
@@ -2058,11 +2053,13 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
         gs_offset=_int32(gs_offset),
         gs_order=_int32(gs_order),
         gs_remaining=_float64(gs_remaining),
-        rf_tile=_int32([tile_index[k[2]] for k in ref_keys]),
-        rf_good=_int32([good_index[k[3]] for k in ref_keys]),
-        rf_exclude=_int32([account_index.get(k[4], -1) for k in ref_keys]),
-        rf_count=len(ref_keys),
-        rf_value=_float64(rf_value),
+        rft_tile=_int32(rft_tile),
+        rft_good=_int32(rft_good),
+        rft_count=len(rft_tile),
+        rft_participant0=_int32(rft_participant0),
+        rft_price0=_float64(rft_price0),
+        rft_participant1=_int32(rft_participant1),
+        rft_price1=_float64(rft_price1),
         cq_tile=_int32([tile_index[t] for t, _ in cq_keys]),
         cq_good=_int32([good_index[g] for _, g in cq_keys]),
         cq_count=len(cq_keys),
