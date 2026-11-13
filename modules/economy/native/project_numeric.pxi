@@ -461,3 +461,94 @@ cdef class _ExpansionFlows:
             good=self.names['good_names'][key%self.n_goods],
             required_flow=self.required[key], covered_by_free_flow=self.covered[key],
             parents=self.parents[key]) for key in keys]
+
+
+cdef class _ProjectTable:
+    """Числовой индекс живых проектов; payload хранится отдельно по slot."""
+    cdef public object payload
+    cdef int[::1] good, state, province, tile
+    cdef double[::1] capacity, price
+    cdef public int count, limit
+
+    def __init__(self, names, int limit):
+        self.limit = max(1, limit)
+        self.good = np.empty(self.limit, dtype=np.int32)
+        self.state = np.empty(self.limit, dtype=np.int32)
+        self.province = np.empty(self.limit, dtype=np.int32)
+        self.tile = np.empty(self.limit, dtype=np.int32)
+        self.capacity = np.empty(self.limit, dtype=np.float64)
+        self.price = np.empty(self.limit, dtype=np.float64)
+        self.payload = []
+        self.count = 0
+
+    def append(self, names, project):
+        cdef int slot = self.count
+        if slot >= self.limit:
+            raise RuntimeError('Недостаточная ёмкость project table')
+        self.good[slot] = names['good_index'][project['good']]
+        self.state[slot] = names['state_index'][project['location']['state_id']]
+        self.province[slot] = names['province_index'][project['location']['province_id']]
+        self.tile[slot] = names['tile_index'][project['location']['tile_id']]
+        self.capacity[slot] = project['capacity']
+        self.price[slot] = project['expected_price']
+        self.payload.append(project)
+        self.count = slot+1
+
+    def rows_for(self, int good):
+        return [(self.tile[i], self.price[i], self.capacity[i])
+                for i in range(self.count) if self.good[i] == good]
+
+
+cdef class _QueueTable:
+    """Числовые queue keys; project dicts остаются только payload slots."""
+    cdef int[::1] investor, good, province, created
+    cdef public object payload
+    cdef public int count, limit
+
+    def __init__(self, names, rows, int limit):
+        self.limit = max(1, limit)
+        self.investor = np.empty(self.limit, dtype=np.int32)
+        self.good = np.empty(self.limit, dtype=np.int32)
+        self.province = np.empty(self.limit, dtype=np.int32)
+        self.created = np.empty(self.limit, dtype=np.int32)
+        self.payload = []
+        self.count = 0
+        for row in rows:
+            if row.get('project'):
+                self.append(names, row)
+
+    def append(self, names, row):
+        cdef int slot = self.count
+        project = row['project']
+        if slot >= self.limit:
+            raise RuntimeError('Недостаточная ёмкость queue table')
+        self.investor[slot] = names['account_index'].get(row.get('investor'), -1)
+        self.good[slot] = names['good_index'].get(project.get('good'), -1)
+        self.province[slot] = names['province_index'].get(
+            project.get('location', {}).get('province_id'), -1)
+        self.created[slot] = row.get('created', 0)
+        self.payload.append(row)
+        self.count = slot+1
+
+
+cdef class _DecisionBuffer:
+    cdef int[::1] sequence, event, investor, project_slot
+    cdef public int count, limit
+
+    def __init__(self, int limit):
+        self.limit = max(1, limit)
+        self.sequence = np.empty(self.limit, dtype=np.int32)
+        self.event = np.empty(self.limit, dtype=np.int32)
+        self.investor = np.empty(self.limit, dtype=np.int32)
+        self.project_slot = np.empty(self.limit, dtype=np.int32)
+        self.count = 0
+
+    def append(self, int sequence, int event, int investor, int project_slot=-1):
+        cdef int slot = self.count
+        if slot >= self.limit:
+            raise RuntimeError('Недостаточная ёмкость decision journal')
+        self.sequence[slot] = sequence
+        self.event[slot] = event
+        self.investor[slot] = investor
+        self.project_slot[slot] = project_slot
+        self.count = slot+1

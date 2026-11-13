@@ -95,6 +95,13 @@ class _ProjectBatch:
         self.available_inputs = np.zeros(len(names['good_names']), dtype=np.float64)
         self.upstream_cache = _UpstreamCache(len(self.accounts))
         self.initial_state['upstream_candidates'] = self.upstream_cache
+        self.project_table = _ProjectTable(names, max(16, len(self.accounts)*4))
+        for account in self.accounts.values():
+            if account.get('project'):
+                self.project_table.append(names, account['project'])
+        self.queue_table = _QueueTable(names, self.meta.get('investment_queue', []),
+                                       max(16, len(self.accounts)*2))
+        self.decision_buffer = _DecisionBuffer(max(64, len(self.accounts)*12))
         self.dynamic_cache = [None]*len(self.accounts)
         self.live_dynamic = dict(
             lr_state=_int32([names['state_index'][state] for state, province in self.initial_state['labor_reserved'].index]),
@@ -132,6 +139,8 @@ class _ProjectBatch:
             project_revision=state['index']['project_revision'])
 
     def record_candidate(self, investor, project, rng_before):
+        self.decision_buffer.append(self.execution_seq, 1,
+            self.names['account_index'][investor['id']])
         row = dict(execution_seq=self.execution_seq, event='candidate',
             investor=investor['id'], project=copy.deepcopy(project))
         if self.trace:
@@ -167,10 +176,10 @@ class _ProjectBatch:
     def _refresh_project_arrays(self):
         """Живой индекс меняется только при commit, а не перед инвестором."""
         offsets, tiles, prices, capacities = [0], [], [], []
-        index = self.initial_state['index']
         for good in self.goods:
-            for location, price, capacity in index['projects'].get(good, ()):
-                tiles.append(self.names['tile_index'][location['tile_id']])
+            rows = self.project_table.rows_for(self.names['good_index'][good])
+            for tile, price, capacity in rows:
+                tiles.append(tile)
                 prices.append(price)
                 capacities.append(capacity)
             offsets.append(len(tiles))
@@ -349,6 +358,12 @@ class _ProjectBatch:
         if index is not None:
             index['projects'][project['good']].append((dict(project['location']),
                 project['expected_price'], project['capacity']))
+        self.project_table.append(self.names, project)
+        self.decision_buffer.append(self.execution_seq, 2,
+            self.names['account_index'][project.get('investor', project.get('owner_id', ''))]
+            if project.get('investor', project.get('owner_id')) in self.names['account_index'] else -1,
+            self.project_table.count-1)
+        if index is not None:
             index['project_revision'] += 1
         self.reserve_investment_project(project)
         self._refresh_project_arrays()
@@ -664,8 +679,10 @@ class _ProjectBatch:
         elif evaluate:
             flow_balances = self._investment_state['flow_balances']
         queue = self.meta.setdefault('investment_queue', [])
+        self.queue_table = _QueueTable(self.names, queue, max(16, len(self.accounts)*2))
         waiting = []
-        for item in queue:
+        for qslot in range(self.queue_table.count):
+            item = self.queue_table.payload[qslot]
             investor = self.accounts.get(item.get('investor'))
             project = item.get('project')
             if not investor or investor.get('project') or not project:
@@ -679,6 +696,8 @@ class _ProjectBatch:
                 self.report['investment_decisions'].append(dict(
                     kind='investment_decision', investor=investor['id'], outcome='resumed',
                     **copy.deepcopy(project)))
+                self.decision_buffer.append(self.execution_seq, 3,
+                    self.names['account_index'][investor['id']], self.project_table.count-1)
             else:
                 waiting.append(item)
         queue[:] = waiting
@@ -757,8 +776,10 @@ class _ProjectBatch:
                                     x.get('project', {}).get('location', {}).get('province_id'))
                                    for x in queue}
                     if queue_key not in queued_keys:
-                        queue.append(dict(created=self.meta['month'], investor=a['id'],
-                                          project=copy.deepcopy(project)))
+                        queued = dict(created=self.meta['month'], investor=a['id'],
+                                      project=copy.deepcopy(project))
+                        queue.append(queued)
+                        self.queue_table.append(self.names, queued)
                     project = None
             if project:
                 self._investment_state['flow_reserved'].replace(flow_trial)
@@ -812,4 +833,6 @@ def native_project_requests(dict inv, dict support, dict names, dict snapshot, o
         upstream_diagnostics=batch.upstream_cache.materialize_diagnostics(
             names, batch.prior_upstream_diagnostics),
         reservations=batch.reservations, journal=batch.journal,
+        decision_buffer=batch.decision_buffer,
+        project_table=batch.project_table, queue_table=batch.queue_table,
         investor_order=batch.investor_order, due=due, investors=investors)
