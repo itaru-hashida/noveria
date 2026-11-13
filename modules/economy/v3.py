@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 
 from .support import EPS, EconomyServices
+from .native import stock_boundary as _stock
 from .food_diagnostics import FoodDiagnostics
 
 
@@ -899,11 +900,9 @@ class Economy(EconomyServices):
         return result
 
     def add_stock(self, account, good, quantity, value=0):
-        before = self.accounts[account]['stock'].get(good, 0)
-        result = super().add_stock(account, good, quantity, value)
-        self._update_physical_stock_total(good, before,
-            self.accounts[account]['stock'].get(good, 0))
-        return result
+        # Индекс физических запасов обновляет stock-ядро: оно видит before/after
+        # без повторного чтения словаря на каждой операции.
+        return _stock.add_stock(self, account, good, quantity, value)
 
     def _update_physical_stock_total(self, good, before, after):
         """Обновить ленивый индекс физических запасов, если он уже построен."""
@@ -1634,11 +1633,7 @@ class Economy(EconomyServices):
     def use_stock(self, account, good, quantity):
         if quantity > self.free_stock(account, good)+EPS:
             raise ValueError('Товар уже закреплён за продажей или стройкой')
-        before = self.accounts[account]['stock'].get(good, 0)
-        result = super().use_stock(account, good, quantity)
-        self._update_physical_stock_total(good, before,
-            self.accounts[account]['stock'].get(good, 0))
-        return result
+        return _stock.use_stock(self, account, good, quantity)
 
     def order(self, participant, good, quantity, side, price, purpose):
         if not math.isfinite(quantity) or not math.isfinite(price) or price <= 0 or quantity < 0:

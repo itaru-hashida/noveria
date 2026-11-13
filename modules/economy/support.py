@@ -10,9 +10,11 @@ from pathlib import Path
 import networkx as nx
 
 from modules.geography import topology
+from modules.economy.native import stock_boundary as _stock
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / 'content/economy.json'
 EPS = 1e-7
+_stock.configure(EPS)
 PLANNING_DEFAULTS = dict(price_step=0.05, minimum_price=1e-6, maximum_price=1e9, initial_sales_fraction=0.5)
 # Дороги обычно не меняются между месяцами, а WorldService заново загружает
 # Economy. Кэш процесса переживает такую загрузку, но разделён отпечатком карты.
@@ -103,20 +105,12 @@ class EconomyServices:
         self.report['flows'].append(dict(sender=sender, recipient=recipient, gold=amount, reason=reason))
 
     def add_stock(self, account, good, quantity, value=0):
-        a = self.accounts[account]
-        a['stock'][good] = a['stock'].get(good, 0) + quantity
-        a['values'][good] = a['values'].get(good, 0) + value
+        # Горячая операция вынесена в stock-ядро (Cython, иначе эталон на Python).
+        # Арифметика над object сохраняет int/float тип остатка, как в V3.
+        _stock.add_stock(self, account, good, quantity, value)
 
     def use_stock(self, account, good, quantity):
-        a = self.accounts[account]
-        available = a['stock'].get(good, 0)
-        if quantity < -EPS or quantity > available + EPS:
-            raise ValueError('Двойное расходование товара')
-        quantity = min(quantity, available)
-        value = a['values'].get(good, 0) * quantity / available if available > 0 else 0
-        a['stock'][good] = max(0, available - quantity)
-        a['values'][good] = max(0, a['values'].get(good, 0) - value)
-        return value
+        return _stock.use_stock(self, account, good, quantity)
 
     def total_stock(self):
         return {g: sum(a['stock'].get(g, 0) for a in self.accounts.values()) for g in self.goods}

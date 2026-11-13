@@ -15,6 +15,7 @@ tmp/
 # Локальные продукты сборки Cython.
 modules/economy/native/build/
 modules/economy/native/serial_step.c
+modules/economy/native/stock_kernel.c
 modules/economy/native/*.so
 modules/economy/native/*.pyd
 # Артефакты сборки расширений вне modules/economy/native.
