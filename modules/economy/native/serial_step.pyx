@@ -1579,3 +1579,787 @@ def public_project_preparation(dict data, object rng):
     """Восемь последовательных фаз через public_project_requests."""
     recovery_preparation(data, rng)
     public_project_requests(data)
+
+
+# ---------------------------------------------------------------------------
+# Шаг 4: чистый native project_candidate (без commit, без подключения к step)
+# ---------------------------------------------------------------------------
+
+from libc.stdlib cimport malloc, free
+from libc.math cimport isnan, fabs
+
+
+cdef double _csum(double* values, Py_ssize_t n) noexcept nogil:
+    """Компенсированное сложение Неумайера как в CPython 3.12 sum(float)."""
+    cdef Py_ssize_t i
+    cdef double s = 0.0, c = 0.0, x, t
+    for i in range(n):
+        x = values[i]
+        t = s + x
+        if fabs(s) >= fabs(x):
+            c += (s - t) + x
+        else:
+            c += (x - t) + s
+        s = t
+    return s + c
+
+
+cdef int _find_pair(int[::1] keys_a, int[::1] keys_b, int count,
+                    int a, int b) noexcept nogil:
+    cdef int i
+    for i in range(count):
+        if keys_a[i] == a and keys_b[i] == b:
+            return i
+    return -1
+
+
+cdef int _find_triple(int[::1] keys_a, int[::1] keys_b, int[::1] keys_c,
+                      int count, int a, int b, int c) noexcept nogil:
+    cdef int i
+    for i in range(count):
+        if keys_a[i] == a and keys_b[i] == b and keys_c[i] == c:
+            return i
+    return -1
+
+
+cdef double _lookup2_or_zero(int[::1] keys_a, int[::1] keys_b,
+                             double[::1] values, int count,
+                             int a, int b) noexcept nogil:
+    cdef int i
+    for i in range(count):
+        if keys_a[i] == a and keys_b[i] == b:
+            return values[i]
+    return 0.0
+
+
+cdef double _sig_field(dict sup, int state, int province, int good,
+                       int field) except? -1.0:
+    """field: 0=volume 1=unmet 2=price 3=landed 4=limit. -1.0 = ключ не найден."""
+    cdef int idx = _find_triple(sup['sig_state'], sup['sig_province'],
+                                sup['sig_good'], sup['sig_count'],
+                                state, province, good)
+    if idx < 0:
+        return -1.0
+    if field == 0:
+        return sup['sig_volume'][idx]
+    if field == 1:
+        return sup['sig_unmet'][idx]
+    if field == 2:
+        return sup['sig_price'][idx]
+    if field == 3:
+        return sup['sig_landed'][idx]
+    return sup['sig_limit'][idx]
+
+
+cdef void _book_range(dict sup, int tile, int good, int* start, int* end) except *:
+    cdef int idx = _find_pair(sup['bk_tile'], sup['bk_good'], sup['bk_count'],
+                              tile, good)
+    if idx < 0:
+        raise ValueError('candidate support: книга (%d, %d) не упакована'
+                         % (tile, good))
+    start[0] = sup['bk_offset'][idx]
+    end[0] = sup['bk_offset'][idx + 1]
+
+
+cdef double _rf_value(dict sup, int tile, int good, int exclude) except? -1.0:
+    cdef int idx = _find_triple(sup['rf_tile'], sup['rf_good'], sup['rf_exclude'],
+                                sup['rf_count'], tile, good, exclude)
+    if idx < 0:
+        raise ValueError('candidate support: ref price (%d, %d, %d) не упакован'
+                         % (tile, good, exclude))
+    return sup['rf_value'][idx]
+
+
+cdef void _quoted_cost_native(dict inv, dict sup, int tile, int good, int exclude,
+                              double quantity,
+                              double* out_value, double* out_ceiling) except *:
+    """Точная копия quoted_cost: книга, затем recovery fallback."""
+    cdef int start, end, i, firm
+    cdef double left = quantity, value = 0.0, ceiling = 0.0
+    cdef double q, price, reference, best = 0.0, d, freight, weight
+    cdef bint any_quote = False
+    cdef double eps = inv['eps']
+    cdef int[::1] rq_offset = inv['recovery_quote_offset']
+    cdef int[::1] rq_firm = inv['recovery_quote_firm']
+    cdef double[::1] rq_price = inv['recovery_quote_price']
+    cdef int[::1] ent_tile = inv['enterprise_tile']
+    cdef int[::1] ent_account = inv['enterprise_account']
+    cdef double[:, ::1] distances = sup['distances']
+    _book_range(sup, tile, good, &start, &end)
+    cdef double[::1] bk_price = sup['bk_price']
+    cdef int[::1] bk_participant = sup['bk_participant']
+    cdef double[::1] bk_remaining = sup['bk_remaining']
+    cdef unsigned char[::1] bk_active = sup['bk_active']
+    for i in range(start, end):
+        if bk_participant[i] == exclude or bk_remaining[i] <= eps or not bk_active[i]:
+            continue
+        q = min(left, bk_remaining[i])
+        value += q*bk_price[i]
+        ceiling = max(ceiling, bk_price[i])
+        left -= q
+        if left <= eps:
+            break
+    if left > eps:
+        reference = _rf_value(sup, tile, good, exclude)
+        weight = inv['good_weight'][good]
+        for i in range(rq_offset[good], rq_offset[good + 1]):
+            firm = rq_firm[i]
+            if ent_account[firm] == exclude:
+                continue
+            d = distances[ent_tile[firm], tile]
+            if isnan(d):
+                continue
+            freight = d*weight*inv['transport_rate']
+            price = rq_price[i] + freight
+            if not any_quote or price < best:
+                best = price
+                any_quote = True
+        if any_quote:
+            reference = max(reference, best)
+        value += left*reference
+        ceiling = max(ceiling, reference)
+    out_value[0] = value
+    out_ceiling[0] = max(ceiling, eps)
+
+
+cdef double _unit_cost_native(dict inv, dict sup, int tile, int good,
+                              int exclude) except? -1.0:
+    """Точная копия unit_cost: компенсированные суммы raw и wear."""
+    cdef int i, input_good
+    cdef double* raw_terms = <double*> malloc(64*sizeof(double))
+    cdef double* wear_terms = <double*> malloc(64*sizeof(double))
+    if raw_terms == NULL or wear_terms == NULL:
+        free(raw_terms); free(wear_terms)
+        raise MemoryError()
+    cdef int[::1] in_off = inv['recipe_input_offset']
+    cdef int[::1] in_good = inv['recipe_input_good']
+    cdef double[::1] in_value = inv['recipe_input_value']
+    cdef int[::1] eq_off = inv['recipe_equipment_offset']
+    cdef int[::1] eq_good = inv['recipe_equipment_good']
+    cdef double[::1] eq_value = inv['recipe_equipment_value']
+    cdef double[::1] wear_rate = sup['good_wear_rate']
+    cdef Py_ssize_t n_raw = 0, n_wear = 0
+    cdef double result
+    for i in range(in_off[good], in_off[good + 1]):
+        input_good = in_good[i]
+        raw_terms[n_raw] = in_value[i]*_rf_value(sup, tile, input_good, exclude)
+        n_raw += 1
+    for i in range(eq_off[good], eq_off[good + 1]):
+        input_good = eq_good[i]
+        wear_terms[n_wear] = (eq_value[i]*wear_rate[input_good]) \
+            *_rf_value(sup, tile, input_good, exclude)
+        n_wear += 1
+    result = inv['good_labor'][good]*inv['wage'] \
+        + _csum(raw_terms, n_raw) + _csum(wear_terms, n_wear)
+    free(raw_terms); free(wear_terms)
+    return result
+
+
+cdef double _net_price_native(dict inv, dict sup, int tile, int good,
+                              double price, int exclude) except? -1.0:
+    """Точная копия net_price по упакованным customer quotes."""
+    cdef int idx = _find_pair(sup['cq_tile'], sup['cq_good'], sup['cq_count'],
+                              tile, good)
+    if idx < 0:
+        raise ValueError('candidate support: customer quotes (%d, %d) не упакованы'
+                         % (tile, good))
+    cdef int start = sup['cq_offset'][idx], end = sup['cq_offset'][idx + 1]
+    cdef int i
+    cdef double quantity = 0.0, final_quantity = 0.0, limit, landed, volume
+    cdef int[::1] cq_participant = sup['cq_participant']
+    cdef double[::1] cq_price = sup['cq_price']
+    cdef double[::1] cq_limit = sup['cq_limit']
+    cdef double[::1] cq_remaining = sup['cq_remaining']
+    cdef double[::1] cq_reserved = sup['cq_reserved']
+    cdef unsigned char[::1] cq_final = sup['cq_final']
+    cdef double eps = inv['eps']
+    for i in range(start, end):
+        if cq_participant[i] == exclude:
+            continue
+        limit = cq_limit[i]
+        if limit+eps < price:
+            continue
+        landed = price+(cq_price[i]-limit)
+        volume = min(cq_remaining[i], cq_reserved[i]/max(landed, eps))
+        quantity += volume
+        if cq_final[i]:
+            final_quantity += volume
+    cdef double share
+    if quantity > eps:
+        share = final_quantity/quantity
+    else:
+        share = 1.0 if inv['good_consumer'][good] else 0.0
+    return price*(1-inv['consumption_tax']*share)
+
+
+cdef double _customer_limit_native(dict sup, int tile, int good,
+                                   int exclude) except? -1.0:
+    """Лучшая цена спроса не самого инвестора; -1.0 = лимита нет."""
+    cdef int idx = _find_pair(sup['ld_tile'], sup['ld_good'], sup['ld_count'],
+                              tile, good)
+    if idx < 0:
+        raise ValueError('candidate support: leaders (%d, %d) не упакованы'
+                         % (tile, good))
+    cdef double limit0 = sup['ld_limit0'][idx]
+    cdef int part0 = sup['ld_part0'][idx]
+    cdef double limit1 = sup['ld_limit1'][idx]
+    cdef int part1 = sup['ld_part1'][idx]
+    if part0 != exclude and limit0 > 0:
+        return limit0
+    if part1 != exclude and limit1 > 0:
+        return limit1
+    return -1.0
+
+
+cdef double _investment_demand_native(dict inv, dict sup, dict dyn,
+                                      int tile, int good, double price,
+                                      int exclude) except? -1.0:
+    """Точная копия investment_demand для quote_firm одного кандидата."""
+    cdef int i, j, s, pos
+    cdef double volume, covered, residual = 0.0
+    cdef double eps = inv['eps']
+    cdef double weight = inv['good_weight'][good]
+    cdef double rate = inv['transport_rate']
+    cdef double[:, ::1] distances = sup['distances']
+
+    # cheap = {order_id: remaining} по всем sells[good]
+    cdef int[::1] gs_offset = sup['gs_offset']
+    cdef double[::1] gs_remaining = sup['gs_remaining']
+    cdef int cheap_start = gs_offset[good], cheap_end = gs_offset[good + 1]
+    cdef double* cheap = <double*> malloc((cheap_end-cheap_start)*sizeof(double))
+    if cheap == NULL:
+        raise MemoryError()
+    for i in range(cheap_end-cheap_start):
+        cheap[i] = gs_remaining[cheap_start+i]
+
+    # suppliers: базовые фирмы, затем проекты живого индекса; копии на вызов
+    cdef int[::1] sup_offset = sup['sup_offset']
+    cdef int n_base = sup_offset[good+1]-sup_offset[good]
+    cdef int[::1] pj_offset = dyn['pj_offset']
+    cdef int n_pj = pj_offset[good+1]-pj_offset[good]
+    cdef int n_sup = n_base+n_pj
+    cdef double* sup_cap = <double*> malloc((n_sup if n_sup > 0 else 1)*sizeof(double))
+    if sup_cap == NULL:
+        free(cheap)
+        raise MemoryError()
+    cdef int[::1] sup_tile = sup['sup_tile']
+    cdef double[::1] sup_price = sup['sup_price']
+    cdef double[::1] sup_capacity = sup['sup_capacity']
+    cdef int[::1] pj_tile = dyn['pj_tile']
+    cdef double[::1] pj_price = dyn['pj_price']
+    cdef double[::1] pj_capacity = dyn['pj_capacity']
+    for s in range(n_base):
+        sup_cap[s] = sup_capacity[sup_offset[good]+s]
+    for s in range(n_pj):
+        sup_cap[n_base+s] = pj_capacity[pj_offset[good]+s]
+
+    # группы спроса: отсев по цене, вставка в порядке следования строк
+    cdef int dq_idx = _find_pair(sup['dq_tile'], sup['dq_good'], sup['dq_count'],
+                                 tile, good)
+    if dq_idx < 0:
+        free(cheap); free(sup_cap)
+        raise ValueError('candidate support: demand rows (%d, %d) не упакованы'
+                         % (tile, good))
+    cdef int dq_start = sup['dq_offset'][dq_idx], dq_end = sup['dq_offset'][dq_idx+1]
+    cdef int n_rows = dq_end-dq_start
+    cdef int* g_part = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
+    cdef int* g_tile = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
+    cdef double* g_price = <double*> malloc((n_rows if n_rows > 0 else 1)*sizeof(double))
+    cdef double* g_volume = <double*> malloc((n_rows if n_rows > 0 else 1)*sizeof(double))
+    cdef int* g_row = <int*> malloc((n_rows if n_rows > 0 else 1)*sizeof(int))
+    if g_part == NULL or g_tile == NULL or g_price == NULL or g_volume == NULL \
+            or g_row == NULL:
+        free(cheap); free(sup_cap); free(g_part); free(g_tile); free(g_price)
+        free(g_volume); free(g_row)
+        raise MemoryError()
+    cdef int n_groups = 0, found
+    cdef int[::1] dq_participant = sup['dq_participant']
+    cdef int[::1] dq_order_tile = sup['dq_order_tile']
+    cdef double[::1] dq_order_price = sup['dq_order_price']
+    cdef double[::1] dq_limit = sup['dq_limit']
+    cdef double[::1] dq_freight = sup['dq_freight']
+    cdef double[::1] dq_remaining = sup['dq_remaining']
+    cdef double[::1] dq_reserved = sup['dq_reserved']
+    cdef double row_volume
+    for i in range(dq_start, dq_end):
+        if dq_limit[i]+eps < price:
+            continue
+        row_volume = min(dq_remaining[i],
+                         dq_reserved[i]/max(price+dq_freight[i], eps))
+        found = -1
+        for j in range(n_groups):
+            if g_part[j] == dq_participant[i] and g_tile[j] == dq_order_tile[i] \
+                    and g_price[j] == dq_order_price[i]:
+                found = j
+                break
+        if found < 0:
+            found = n_groups
+            g_part[n_groups] = dq_participant[i]
+            g_tile[n_groups] = dq_order_tile[i]
+            g_price[n_groups] = dq_order_price[i]
+            g_row[n_groups] = i
+            g_volume[n_groups] = 0.0
+            n_groups += 1
+        g_volume[found] += row_volume
+
+    cdef int bk_start, bk_end
+    cdef int[::1] bk_participant = sup['bk_participant']
+    cdef double[::1] bk_remaining = sup['bk_remaining']
+    cdef unsigned char[::1] bk_active = sup['bk_active']
+    cdef double[::1] bk_price = sup['bk_price']
+    cdef int[::1] bk_sellpos = sup['bk_sellpos']
+    cdef double d, freight, landed_price
+    cdef int supply_tile
+    cdef double supply_price
+    for j in range(n_groups):
+        if g_part[j] == exclude:
+            continue
+        if dq_limit[g_row[j]]+eps < price:
+            continue
+        volume = g_volume[j]
+        # дешёвые офферы покупателя группы
+        _book_range(sup, g_tile[j], good, &bk_start, &bk_end)
+        for i in range(bk_start, bk_end):
+            if bk_participant[i] == g_part[j] or bk_remaining[i] <= eps \
+                    or not bk_active[i]:
+                continue
+            if bk_price[i] > g_price[j]+eps:
+                break
+            pos = bk_sellpos[i]
+            covered = min(volume, cheap[pos])
+            cheap[pos] -= covered
+            volume -= covered
+        # поставщики
+        for s in range(n_sup):
+            if volume <= eps:
+                break
+            if sup_cap[s] <= eps:
+                continue
+            if s < n_base:
+                supply_tile = sup_tile[sup_offset[good]+s]
+                supply_price = sup_price[sup_offset[good]+s]
+            else:
+                supply_tile = pj_tile[pj_offset[good]+s-n_base]
+                supply_price = pj_price[pj_offset[good]+s-n_base]
+            d = distances[supply_tile, g_tile[j]]
+            if isnan(d):
+                continue
+            freight = d*weight*rate
+            landed_price = supply_price+freight
+            if landed_price <= g_price[j]+eps:
+                covered = min(volume, sup_cap[s])
+                sup_cap[s] -= covered
+                volume -= covered
+        residual += volume
+
+    free(cheap); free(sup_cap); free(g_part); free(g_tile); free(g_price)
+    free(g_volume); free(g_row)
+    return residual
+
+
+cdef object _recipe_requirements_native(dict inv, int good, double quantity):
+    """Точная копия recipe_requirements: DFS со стеком, += в порядке обхода."""
+    cdef int MAXD = 32
+    cdef int[::1] in_off = inv['recipe_input_offset']
+    cdef int[::1] in_good = inv['recipe_input_good']
+    cdef double[::1] in_value = inv['recipe_input_value']
+    cdef int n_goods = len(in_off)-1
+    cdef int* stack_good = <int*> malloc(1024*sizeof(int))
+    cdef double* stack_amount = <double*> malloc(1024*sizeof(double))
+    cdef int* stack_size = <int*> malloc(1024*sizeof(int))
+    cdef int* stack_path = <int*> malloc(1024*MAXD*sizeof(int))
+    cdef int* req_good = <int*> malloc(n_goods*sizeof(int))
+    cdef double* req_value = <double*> malloc(n_goods*sizeof(double))
+    cdef int* cur_path = <int*> malloc(MAXD*sizeof(int))
+    if stack_good == NULL or stack_amount == NULL or stack_size == NULL \
+            or stack_path == NULL or req_good == NULL or req_value == NULL \
+            or cur_path == NULL:
+        free(stack_good); free(stack_amount); free(stack_size); free(stack_path)
+        free(req_good); free(req_value); free(cur_path)
+        raise MemoryError()
+    cdef int n_req = 0
+    cdef int top = 0
+    cdef int i, j, product, input_good, size, found
+    cdef double amount, required
+    cdef bint cyclic
+    stack_good[0] = good
+    stack_amount[0] = quantity
+    stack_size[0] = 0
+    top = 1
+    while top > 0:
+        top -= 1
+        product = stack_good[top]
+        amount = stack_amount[top]
+        size = stack_size[top]
+        for i in range(size):
+            cur_path[i] = stack_path[top*MAXD+i]
+        cyclic = False
+        for i in range(size):
+            if cur_path[i] == product:
+                cyclic = True
+                break
+        if cyclic:
+            free(stack_good); free(stack_amount); free(stack_size)
+            free(stack_path); free(req_good); free(req_value); free(cur_path)
+            raise ValueError('Цикл рецептов')
+        for i in range(in_off[product], in_off[product+1]):
+            input_good = in_good[i]
+            required = amount*in_value[i]
+            found = -1
+            for j in range(n_req):
+                if req_good[j] == input_good:
+                    found = j
+                    break
+            if found < 0:
+                req_good[n_req] = input_good
+                req_value[n_req] = 0.0
+                found = n_req
+                n_req += 1
+            req_value[found] += required
+            stack_good[top] = input_good
+            stack_amount[top] = required
+            stack_size[top] = size+1
+            for j in range(size):
+                stack_path[top*MAXD+j] = cur_path[j]
+            stack_path[top*MAXD+size] = product
+            top += 1
+    result = [(int(req_good[i]), req_value[i]) for i in range(n_req)]
+    free(stack_good); free(stack_amount); free(stack_size); free(stack_path)
+    free(req_good); free(req_value); free(cur_path)
+    return result
+
+
+def evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
+                               object rng, int derived_good, double derived_amount,
+                               int demand_region_province, bint parent_present):
+    """Чистый native project_candidate: один инвестор, без commit и мутаций.
+
+    Возвращает candidate result, диагностику и trace. RNG: только profile и
+    выбор resource tile — тем же rng-объектом в том же порядке, что V3.
+    Packed state не мутируется.
+    """
+    cdef int i, j, pid, good, resource, start, end, rt_idx, n_tiles
+    cdef double eps = inv['eps']
+    cdef double minimum_capacity = inv['minimum_capacity']
+    cdef double wage = inv['wage']
+    cdef double overhead = inv['enterprise_overhead_rate']
+    cdef double startup_cash = inv['startup_cash']
+    cdef double payback = inv['investment_payback_months']
+    cdef double extraction = inv['extraction_per_tile']
+    cdef int month = inv['current_month']
+    cdef int stall_months = inv['project_stall_months']
+    cdef double[:, ::1] distances = sup['distances']
+    cdef int[::1] account_state = inv['account_state']
+    cdef int[::1] account_tile = inv['account_tile']
+    cdef double[::1] account_balance = inv['account_balance']
+    cdef double[::1] account_reserved = inv['account_reserved']
+    cdef double[::1] account_protected = inv['account_protected']
+    cdef double[::1] account_optimism = inv['account_optimism']
+    cdef double[::1] account_risk_tolerance = inv['account_risk_tolerance']
+    cdef double[:, ::1] account_stock = inv['account_stock']
+    cdef double[::1] good_labor = inv['good_labor']
+    cdef double[::1] good_weight = inv['good_weight']
+    cdef double[::1] good_price = inv['good_price']
+    cdef int[::1] good_resource = inv['good_resource']
+    cdef int[::1] construction_good = inv['construction_good']
+    cdef double[::1] construction_value = inv['construction_value']
+    cdef int n_construction = len(construction_good)
+    cdef int[::1] eq_off = inv['recipe_equipment_offset']
+    cdef int[::1] eq_good = inv['recipe_equipment_good']
+    cdef double[::1] eq_value = inv['recipe_equipment_value']
+    cdef int[::1] loc_tile = sup['loc_tile']
+    cdef int[::1] loc_state = sup['loc_state']
+    cdef int[::1] mk_province = dyn['mk_province']
+    cdef int[::1] mk_good = dyn['mk_good']
+    cdef int mk_count = dyn['mk_count']
+    cdef unsigned char[::1] al_mask = dyn['al_mask']
+    cdef bint al_present = dyn['al_present']
+    cdef bint exp_present = dyn['exp_present']
+    cdef int exp_good = dyn['exp_good']
+    cdef int exp_province = dyn['exp_province']
+    cdef int exp_state = dyn['exp_state']
+    cdef int exp_tile = dyn['exp_tile']
+    cdef bint exp_city = dyn['exp_city_present']
+
+    cdef int investor_state = account_state[investor]
+    cdef int investor_tile = account_tile[investor]
+    cdef double optimism = account_optimism[investor]
+    cdef double risk = account_risk_tolerance[investor]
+
+    # markets: упакованные отсортированные пары + derived
+    cdef int* markets_pid = <int*> malloc((mk_count+1)*sizeof(int))
+    cdef int* markets_good = <int*> malloc((mk_count+1)*sizeof(int))
+    if markets_pid == NULL or markets_good == NULL:
+        raise MemoryError()
+    cdef int n_markets = mk_count
+    for i in range(mk_count):
+        markets_pid[i] = mk_province[i]
+        markets_good[i] = mk_good[i]
+    # derived-пара уже вставлена в dyn['mk_*'] harness'ом в строковом
+    # порядке Python (sorted(markets)); native использует список как есть
+    cdef bint derived_present = derived_good >= 0
+
+    cdef int max_candidates = n_markets
+    cdef double* c_capacity = <double*> malloc(max_candidates*sizeof(double))
+    cdef double* c_price = <double*> malloc(max_candidates*sizeof(double))
+    cdef double* c_profit = <double*> malloc(max_candidates*sizeof(double))
+    cdef double* c_investment = <double*> malloc(max_candidates*sizeof(double))
+    cdef double* c_unit_full = <double*> malloc(max_candidates*sizeof(double))
+    cdef double* c_working = <double*> malloc(max_candidates*sizeof(double))
+    cdef int* c_good = <int*> malloc(max_candidates*sizeof(int))
+    cdef int* c_tile = <int*> malloc(max_candidates*sizeof(int))
+    cdef int* c_pid = <int*> malloc(max_candidates*sizeof(int))
+    cdef int* c_state = <int*> malloc(max_candidates*sizeof(int))
+    cdef int* c_city = <int*> malloc(max_candidates*sizeof(int))
+    cdef double* c_key = <double*> malloc(max_candidates*sizeof(double))
+    if c_capacity == NULL or c_price == NULL or c_profit == NULL \
+            or c_investment == NULL or c_unit_full == NULL or c_working == NULL \
+            or c_good == NULL or c_tile == NULL or c_pid == NULL \
+            or c_state == NULL or c_city == NULL or c_key == NULL:
+        raise MemoryError()
+    cdef int n_candidates = 0
+
+    cdef int max_diag = n_markets+4
+    cdef int* d_pid = <int*> malloc(max_diag*sizeof(int))
+    cdef int* d_good = <int*> malloc(max_diag*sizeof(int))
+    cdef int* d_stage = <int*> malloc(max_diag*sizeof(int))
+    cdef double* d_v1 = <double*> malloc(max_diag*sizeof(double))
+    cdef double* d_v2 = <double*> malloc(max_diag*sizeof(double))
+    cdef double* d_v3 = <double*> malloc(max_diag*sizeof(double))
+    cdef double* d_v4 = <double*> malloc(max_diag*sizeof(double))
+    if d_pid == NULL or d_good == NULL or d_stage == NULL or d_v1 == NULL \
+            or d_v2 == NULL or d_v3 == NULL or d_v4 == NULL:
+        raise MemoryError()
+    cdef int n_diag = 0
+
+    cdef double demand, capacity, labor, used, limit, sig_price, price
+    cdef double unit, fixed_unit, net, margin, distance
+    cdef double material, delivery, equipment_capital, available, startup
+    cdef double working, investment, profit, horizon, key
+    cdef double best_key = -1.7976931348623157e308
+    cdef int best = -1
+    cdef double qc_value, qc_ceiling
+    cdef double* terms = <double*> malloc(64*sizeof(double))
+    if terms == NULL:
+        raise MemoryError()
+    cdef int loc_tile_idx, loc_state_idx, city_present
+    cdef bint is_derived_market
+    cdef int n_eq
+
+    for j in range(n_markets):
+        pid = markets_pid[j]
+        good = markets_good[j]
+        if al_present and not al_mask[good]:
+            continue
+        if exp_present and (good != exp_good or pid != exp_province):
+            continue
+        if exp_present:
+            loc_state_idx = exp_state
+            loc_tile_idx = exp_tile
+            city_present = exp_city
+        else:
+            loc_state_idx = loc_state[pid]
+            loc_tile_idx = loc_tile[pid]
+            city_present = 0
+        if loc_state_idx != investor_state:
+            continue
+        resource = good_resource[good]
+        n_tiles = 0
+        if resource >= 0:
+            rt_idx = _find_triple(sup['rt_state'], sup['rt_province'],
+                                  sup['rt_resource'], sup['rt_count'],
+                                  investor_state, pid, resource)
+            if rt_idx < 0:
+                continue
+            start = sup['rt_offset'][rt_idx]
+            end = sup['rt_offset'][rt_idx+1]
+            n_tiles = end-start
+            if n_tiles == 0:
+                continue
+            if exp_present:
+                loc_tile_idx = exp_tile
+            else:
+                order = list(range(n_tiles))
+                rng.shuffle(order)
+                loc_tile_idx = sup['rt_tile'][start+order[0]]
+            city_present = 0
+
+        limit = _customer_limit_native(sup, loc_tile_idx, good, investor)
+        sig_price = _sig_field(sup, loc_state_idx, pid, good, 2)
+        if limit != -1.0:
+            price = limit
+        elif sig_price != -1.0 and not isnan(sig_price) and sig_price != 0.0:
+            price = sig_price
+        else:
+            price = good_price[good]
+
+        demand = _investment_demand_native(inv, sup, dyn, loc_tile_idx, good,
+                                           price, investor) \
+            - account_stock[investor, good]
+        if demand < 0:
+            demand = 0.0
+        is_derived_market = derived_present and good == derived_good
+        if is_derived_market and derived_amount > demand:
+            demand = derived_amount
+        if demand < minimum_capacity:
+            d_pid[n_diag] = pid; d_good[n_diag] = good; d_stage[n_diag] = 1
+            d_v1[n_diag] = demand; d_v2[n_diag] = minimum_capacity
+            d_v3[n_diag] = 0.0; d_v4[n_diag] = 0.0
+            n_diag += 1
+            continue
+        if is_derived_market:
+            capacity = min(demand, derived_amount)
+        else:
+            capacity = demand
+        labor = _lookup2_or_zero(dyn['la_state'], dyn['la_province'],
+                                 dyn['la_value'], dyn['la_count'],
+                                 loc_state_idx, pid)
+        labor -= _lookup2_or_zero(dyn['lr_state'], dyn['lr_province'],
+                                  dyn['lr_value'], dyn['lr_count'],
+                                  loc_state_idx, pid)
+        capacity = min(capacity, labor/good_labor[good])
+        if resource >= 0:
+            used = _lookup2_or_zero(dyn['ru_province'], dyn['ru_resource'],
+                                    dyn['ru_value'], dyn['ru_count'],
+                                    pid, resource)
+            used += _lookup2_or_zero(dyn['rr_province'], dyn['rr_resource'],
+                                     dyn['rr_value'], dyn['rr_count'],
+                                     pid, resource)
+            capacity = min(capacity, max(0.0, n_tiles*extraction-used))
+        if capacity < minimum_capacity:
+            d_pid[n_diag] = pid; d_good[n_diag] = good; d_stage[n_diag] = 2
+            d_v1[n_diag] = capacity; d_v2[n_diag] = minimum_capacity
+            d_v3[n_diag] = 0.0; d_v4[n_diag] = 0.0
+            n_diag += 1
+            continue
+        unit = _unit_cost_native(inv, sup, loc_tile_idx, good, investor)
+        fixed_unit = good_labor[good]*wage*overhead
+        net = _net_price_native(inv, sup, loc_tile_idx, good, price, investor)
+        margin = net-unit-fixed_unit
+        if margin <= eps:
+            d_pid[n_diag] = pid; d_good[n_diag] = good; d_stage[n_diag] = 3
+            d_v1[n_diag] = margin; d_v2[n_diag] = unit+fixed_unit; d_v3[n_diag] = net
+            d_v4[n_diag] = 0.0
+            n_diag += 1
+            continue
+        distance = distances[investor_tile, loc_tile_idx]
+        if isnan(distance):
+            d_pid[n_diag] = pid; d_good[n_diag] = good; d_stage[n_diag] = 4
+            d_v1[n_diag] = 0.0; d_v2[n_diag] = 0.0; d_v3[n_diag] = 0.0
+            d_v4[n_diag] = 0.0
+            n_diag += 1
+            continue
+        # bill = construction_bill(1); material/delivery/equipment через quoted_cost
+        for i in range(n_construction):
+            terms[i] = (construction_value[i]*1.0/minimum_capacity) \
+                *good_weight[construction_good[i]]
+        delivery = _csum(terms, n_construction)*distance*inv['transport_rate']
+        for i in range(n_construction):
+            q = construction_value[i]*1.0/minimum_capacity
+            _quoted_cost_native(inv, sup, investor_tile, construction_good[i],
+                                investor, q, &qc_value, &qc_ceiling)
+            terms[i] = q*qc_value/max(q, eps)
+        material = _csum(terms, n_construction)
+        n_eq = eq_off[good+1]-eq_off[good]
+        for i in range(n_eq):
+            _quoted_cost_native(inv, sup, investor_tile, eq_good[eq_off[good]+i],
+                                investor, eq_value[eq_off[good]+i],
+                                &qc_value, &qc_ceiling)
+            terms[i] = eq_value[eq_off[good]+i]*qc_ceiling
+        equipment_capital = _csum(terms, n_eq)
+        available = account_balance[investor]-account_reserved[investor] \
+            -account_protected[investor]
+        if available < 0:
+            available = 0.0
+        startup = 0.0 if exp_present else startup_cash
+        # project_finances
+        capacity = min(capacity, max(0.0, available-startup)
+                       /max(material+delivery+unit+equipment_capital, eps))
+        working = capacity*equipment_capital
+        if not exp_present:
+            working += max(startup, capacity*(unit+fixed_unit))
+        investment = capacity*(material+delivery)+working
+        profit = capacity*margin
+        if capacity < minimum_capacity:
+            d_pid[n_diag] = pid; d_good[n_diag] = good; d_stage[n_diag] = 5
+            d_v1[n_diag] = capacity; d_v2[n_diag] = minimum_capacity
+            d_v3[n_diag] = 0.0; d_v4[n_diag] = 0.0
+            n_diag += 1
+            continue
+        # profile: RNG только при отсутствии полей
+        if isnan(optimism):
+            optimism = rng.uniform(0.7, 1.3)
+        if isnan(risk):
+            risk = rng.uniform(0.1, 0.9)
+        horizon = payback*(0.5+risk)
+        if investment > available+eps or profit*horizon < investment:
+            d_pid[n_diag] = pid; d_good[n_diag] = good; d_stage[n_diag] = 6
+            d_v1[n_diag] = investment; d_v2[n_diag] = available
+            d_v3[n_diag] = profit; d_v4[n_diag] = horizon
+            n_diag += 1
+            continue
+        c_good[n_candidates] = good
+        c_capacity[n_candidates] = capacity
+        c_price[n_candidates] = price
+        c_profit[n_candidates] = profit
+        c_investment[n_candidates] = investment
+        c_unit_full[n_candidates] = unit+fixed_unit
+        c_working[n_candidates] = working
+        c_tile[n_candidates] = loc_tile_idx
+        c_pid[n_candidates] = pid
+        c_state[n_candidates] = loc_state_idx
+        c_city[n_candidates] = city_present
+        c_key[n_candidates] = profit*payback-investment
+        n_candidates += 1
+
+    # max по ключу, первый максимум при равенстве
+    for i in range(n_candidates):
+        if best < 0 or c_key[i] > best_key:
+            best = i
+            best_key = c_key[i]
+
+    cdef object chain = None
+    if best >= 0:
+        chain = _recipe_requirements_native(inv, c_good[best], c_capacity[best])
+
+    result = dict(
+        candidate_present=best >= 0,
+        investor=investor,
+        good=int(c_good[best]) if best >= 0 else -1,
+        capacity=c_capacity[best] if best >= 0 else 0.0,
+        expected_price=c_price[best] if best >= 0 else 0.0,
+        expected_profit=c_profit[best] if best >= 0 else 0.0,
+        expected_investment=c_investment[best] if best >= 0 else 0.0,
+        expected_unit_cost=c_unit_full[best] if best >= 0 else 0.0,
+        working_cash=c_working[best] if best >= 0 else 0.0,
+        location_tile=int(c_tile[best]) if best >= 0 else -1,
+        location_province=int(c_pid[best]) if best >= 0 else -1,
+        location_state=int(c_state[best]) if best >= 0 else -1,
+        city_present=bool(c_city[best]) if best >= 0 else False,
+        expansion=bool(exp_present),
+        derived_value=(derived_amount if (best >= 0 and derived_present
+                                          and int(c_good[best]) == derived_good)
+                       else None),
+        dependency_expires=(month+stall_months) if parent_present else None,
+        created=month,
+        optimism=optimism,
+        risk_tolerance=risk,
+        chain=chain,
+        candidate_count=n_candidates,
+        diagnostics=[(int(d_pid[i]), int(d_good[i]), int(d_stage[i]),
+                      d_v1[i], d_v2[i], d_v3[i], d_v4[i])
+                     for i in range(n_diag)],
+        candidates=[(int(c_pid[i]), int(c_good[i]), c_capacity[i], c_price[i],
+                     c_profit[i], c_investment[i], c_working[i],
+                     c_unit_full[i], int(c_tile[i]))
+                    for i in range(n_candidates)],
+    )
+
+    free(markets_pid); free(markets_good)
+    free(c_capacity); free(c_price); free(c_profit); free(c_investment)
+    free(c_unit_full); free(c_working); free(c_good); free(c_tile); free(c_pid)
+    free(c_state); free(c_city); free(c_key)
+    free(d_pid); free(d_good); free(d_stage)
+    free(d_v1); free(d_v2); free(d_v3); free(d_v4)
+    free(terms)
+    return result
