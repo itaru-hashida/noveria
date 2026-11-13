@@ -140,12 +140,10 @@ class _ProjectBatch:
 
     def record_candidate(self, investor, project, rng_before):
         self.decision_buffer.append(self.execution_seq, 1,
-            self.names['account_index'][investor['id']])
-        row = dict(execution_seq=self.execution_seq, event='candidate',
-            investor=investor['id'], project=copy.deepcopy(project))
-        if self.trace:
-            row.update(rng_before=rng_before, rng_after=self.rng_digest())
-        self.journal.append(row)
+            self.names['account_index'][investor['id']], -1,
+            dict(project=copy.deepcopy(project), rng_before=rng_before,
+                 rng_after=self.rng_digest()) if self.trace else
+            dict(project=copy.deepcopy(project)))
         self.execution_seq += 1
 
     def build_investment_state(self):
@@ -359,19 +357,17 @@ class _ProjectBatch:
             index['projects'][project['good']].append((dict(project['location']),
                 project['expected_price'], project['capacity']))
         self.project_table.append(self.names, project)
-        self.decision_buffer.append(self.execution_seq, 2,
-            self.names['account_index'][project.get('investor', project.get('owner_id', ''))]
-            if project.get('investor', project.get('owner_id')) in self.names['account_index'] else -1,
-            self.project_table.count-1)
         if index is not None:
             index['project_revision'] += 1
         self.reserve_investment_project(project)
         self._refresh_project_arrays()
-        row = dict(execution_seq=self.execution_seq, event='register_project',
-            project=copy.deepcopy(project))
-        if self.trace:
-            row['reservations'] = self.reservation_snapshot()
-        self.journal.append(row)
+        self.decision_buffer.append(self.execution_seq, 2,
+            self.names['account_index'][project.get('investor', project.get('owner_id', ''))]
+            if project.get('investor', project.get('owner_id')) in self.names['account_index'] else -1,
+            self.project_table.count-1,
+            dict(project=copy.deepcopy(project),
+                 reservations=self.reservation_snapshot()) if self.trace else
+            dict(project=copy.deepcopy(project)))
         self.execution_seq += 1
 
     def investment_flow_balance(self, state_id, good, full=False):
@@ -832,7 +828,7 @@ def native_project_requests(dict inv, dict support, dict names, dict snapshot, o
         dirty_goods=batch._investment_dirty_goods,
         upstream_diagnostics=batch.upstream_cache.materialize_diagnostics(
             names, batch.prior_upstream_diagnostics),
-        reservations=batch.reservations, journal=batch.journal,
+        reservations=batch.reservations, journal=None,
         decision_buffer=batch.decision_buffer,
         project_table=batch.project_table, queue_table=batch.queue_table,
         investor_order=batch.investor_order, due=due, investors=investors)

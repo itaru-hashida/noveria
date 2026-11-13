@@ -534,6 +534,7 @@ cdef class _QueueTable:
 cdef class _DecisionBuffer:
     cdef int[::1] sequence, event, investor, project_slot
     cdef public int count, limit
+    cdef public object payload
 
     def __init__(self, int limit):
         self.limit = max(1, limit)
@@ -541,9 +542,11 @@ cdef class _DecisionBuffer:
         self.event = np.empty(self.limit, dtype=np.int32)
         self.investor = np.empty(self.limit, dtype=np.int32)
         self.project_slot = np.empty(self.limit, dtype=np.int32)
+        self.payload = []
         self.count = 0
 
-    def append(self, int sequence, int event, int investor, int project_slot=-1):
+    def append(self, int sequence, int event, int investor, int project_slot=-1,
+               object payload=None):
         cdef int slot = self.count
         if slot >= self.limit:
             raise RuntimeError('Недостаточная ёмкость decision journal')
@@ -551,4 +554,19 @@ cdef class _DecisionBuffer:
         self.event[slot] = event
         self.investor[slot] = investor
         self.project_slot[slot] = project_slot
+        self.payload.append(payload)
         self.count = slot+1
+
+    def materialize(self, names):
+        events = {1: 'candidate', 2: 'register_project', 3: 'resume'}
+        rows = []
+        for i in range(self.count):
+            payload = self.payload[i] or {}
+            event_name = events.get(int(self.event[i]), 'decision')
+            row = dict(execution_seq=int(self.sequence[i]), event=event_name)
+            if event_name != 'register_project':
+                row['investor'] = (names['account_names'][int(self.investor[i])]
+                                   if self.investor[i] >= 0 else None)
+            row.update(payload)
+            rows.append(row)
+        return rows

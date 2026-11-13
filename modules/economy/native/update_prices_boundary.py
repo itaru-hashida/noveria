@@ -933,8 +933,9 @@ def pack_project_requests(engine, sells):
     return inv, support, names, snapshot
 
 
-def apply_project_requests(engine, result):
+def apply_project_requests(engine, result, names):
     """Материализовать готовый журнал; оценки и commit уже завершены."""
+    result['journal'] = result['decision_buffer'].materialize(names)
     for aid, row in result['accounts'].items():
         target = engine.accounts[aid]
         for key in ('project', 'optimism', 'risk_tolerance'):
@@ -969,7 +970,7 @@ def run_native_project_requests(engine, sells):
     packed = time.perf_counter()
     result = serial_step.native_project_requests(inv, support, names, snapshot, engine.rng)
     calculated = time.perf_counter()
-    apply_project_requests(engine, result)
+    apply_project_requests(engine, result, names)
     applied = time.perf_counter()
     result['timings'] = dict(pack=packed-started, native=calculated-packed,
                              apply=applied-calculated)
