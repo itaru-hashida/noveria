@@ -13,6 +13,29 @@ from . import load_serial_step
 # the immutable route signature and the exact tile ordering.
 _PROJECT_DISTANCE_MATRICES = {}
 
+# update_prices packs the same rule/goods topology every turn. Recipes and
+# goods membership change only with content reloads, so their derived flat
+# arrays are rebuilt solely when the signature below changes.
+_UPDATE_PRICES_STATIC = {}
+# Directed distance matrix of pack_update_prices, keyed by the map route
+# signature plus the exact sorted tile ordering of the pack.
+_UPDATE_PRICES_DISTANCES = {}
+
+
+def _update_static_signature(engine, goods):
+    """Ключ инвариантов товаров: состав, рецепты, износ, труд и сборка."""
+    parts = []
+    for good in goods:
+        recipe = engine.goods[good]
+        parts.append((good, recipe['weight'], recipe['labor'], recipe['price'],
+                      bool(recipe.get('resource')), tuple(sorted(recipe['inputs'].items())),
+                      tuple(sorted(recipe.get('equipment', {}).items())),
+                      tuple(sorted(engine.equipment_wear(recipe, 1).items()))))
+    return (tuple(parts), tuple(engine.cfg['construction'].items()),
+            float(engine.cfg['minimum_capacity']),
+            tuple(engine.cfg['construction_modes'])
+            if 'construction_modes' in engine.cfg else ())
+
 
 def _indices(values):
     return {value: index for index, value in enumerate(values)}
@@ -86,6 +109,107 @@ def _project_matrix_buffer(engine, name, shape):
     return value
 
 
+def _update_distance_matrix(engine, tiles):
+    """Directed distance matrix of one update_prices pack, reused across turns.
+
+    Native phases only read `distances`, so the packed array can outlive a
+    single turn. The key is the immutable route signature maintained by the
+    engine plus the exact tile ordering: a road edit calls invalidate_routes
+    and changes the signature, and the engine's own once-per-month graph-shape
+    check is triggered first so an editor change that only altered the graph
+    shape is caught as well. Values are copied straight from the same
+    directed NetworkX route trees the original loop queried, so the packed
+    floats stay bit-identical.
+    """
+    if tiles:
+        engine.path(tiles[0], tiles[0])
+    key = (engine._route_cache_key, tuple(tiles))
+    cached = _UPDATE_PRICES_DISTANCES.get(key)
+    if cached is not None:
+        return cached
+    distances = np.full((len(tiles), len(tiles)), np.nan, dtype=np.float64)
+    for source_index, source in enumerate(tiles):
+        engine.path(source, source)
+        route_row = engine.paths[source][0]
+        row = distances[source_index]
+        for target_index, target in enumerate(tiles):
+            distance = route_row.get(target)
+            if distance is not None:
+                row[target_index] = distance
+    if len(_UPDATE_PRICES_DISTANCES) >= 8:
+        _UPDATE_PRICES_DISTANCES.clear()
+    _UPDATE_PRICES_DISTANCES[key] = distances
+    return distances
+
+
+def _update_resource_ok(engine, enterprises):
+    """Флаг «у провинции есть ресурс фирмы», пересчитываемый по провинциям.
+
+    Прежний цикл перебирал все 1200 клеток для каждой фирмы. Множество
+    (провинция, ресурс) считается один раз за упаковку, а порядок результата
+    остаётся порядком фирм.
+    """
+    available = set()
+    for tile in engine.tiles.values():
+        province = tile['province_id']
+        for resource in tile['resources']:
+            available.add((province, resource))
+    result = []
+    for enterprise in enterprises:
+        resource = engine.goods[enterprise['good']]['resource']
+        result.append(not resource
+                      or (enterprise['province_id'], resource) in available)
+    return result
+
+
+def _update_sold_now(engine, enterprises):
+    """Сумма проданного по каждой фирме одним проходом по сделкам.
+
+    Слагаемые для пары (фирма, товар) собираются в том же порядке, в каком их
+    видел прежний цикл `sum(... for t in trades if ...)`, и складываются
+    встроенным sum: он суммирует float с компенсацией, поэтому результат
+    побитово совпадает с прежним.
+    """
+    quantities = {}
+    for trade in engine.report['trades']:
+        quantities.setdefault((trade['seller'], trade['good']), []).append(trade['quantity'])
+    return [sum(quantities.get((e['id'], e['good']), ())) for e in enterprises]
+
+
+def _update_recipe_arrays(engine, goods, good_index):
+    """Плоские recipe-массивы, пересобираемые только при смене товаров.
+
+    Порядок входов и износа обязан повторять порядок dict рецепта V3, а не
+    общий goods index: native складывает cost в этом порядке. Ключ включает
+    саму сигнатуру рецептов и текущий good_index, поэтому новый мир или
+    перезагрузка контента дают пересборку.
+    """
+    signature = (_update_static_signature(engine, goods), tuple(good_index))
+    entry = _UPDATE_PRICES_STATIC.get('recipes')
+    if entry is not None and entry[0] == signature:
+        return entry[1]
+    input_offsets = [0]
+    input_goods, input_values = [], []
+    wear_offsets = [0]
+    wear_goods, wear_values = [], []
+    for product in goods:
+        recipe = engine.goods[product]
+        for good, ratio in recipe['inputs'].items():
+            input_goods.append(good_index[good])
+            input_values.append(ratio)
+        input_offsets.append(len(input_goods))
+        for good, ratio in engine.equipment_wear(recipe, 1).items():
+            wear_goods.append(good_index[good])
+            wear_values.append(ratio)
+        wear_offsets.append(len(wear_goods))
+    result = (input_offsets, input_goods, input_values,
+              wear_offsets, wear_goods, wear_values)
+    if len(_UPDATE_PRICES_STATIC) >= 8:
+        _UPDATE_PRICES_STATIC.clear()
+    _UPDATE_PRICES_STATIC['recipes'] = (signature, result)
+    return result
+
+
 def pack_update_prices(engine):
     """Изолировать объектное состояние Python от числового native-входа."""
     accounts = list(engine.accounts.values())
@@ -136,12 +260,7 @@ def pack_update_prices(engine):
     tile_ids.update(a['project']['location']['tile_id'] for a in accounts if a.get('project'))
     tiles = sorted(tile_ids)
     tile_index = _indices(tiles)
-    distances = np.full((len(tiles), len(tiles)), np.nan, dtype=np.float64)
-    for source_index, source in enumerate(tiles):
-        for target_index, target in enumerate(tiles):
-            distance, _ = engine.path(source, target)
-            if distance is not None:
-                distances[source_index, target_index] = distance
+    distances = _update_distance_matrix(engine, tiles)
 
     subject_enterprise, subject_account = [], []
     subject_good, subject_tile, subject_state, subject_province = [], [], [], []
@@ -171,25 +290,11 @@ def pack_update_prices(engine):
     recovery_order = sorted(range(len(enterprises)),
         key=lambda i: (engine.depth(enterprises[i]['good']), enterprises[i]['id']))
     # Порядок сложения cost должен совпадать с dict/recipe V3, а не с общим goods index.
-    input_offsets = [0]
-    input_goods, input_values = [], []
-    wear_offsets = [0]
-    wear_goods, wear_values = [], []
-    for product in goods:
-        recipe = engine.goods[product]
-        for good, ratio in recipe['inputs'].items():
-            input_goods.append(good_index[good])
-            input_values.append(ratio)
-        input_offsets.append(len(input_goods))
-        for good, ratio in engine.equipment_wear(recipe, 1).items():
-            wear_goods.append(good_index[good])
-            wear_values.append(ratio)
-        wear_offsets.append(len(wear_goods))
-    resource_ok = []
-    for enterprise in enterprises:
-        resource = engine.goods[enterprise['good']]['resource']
-        resource_ok.append(not resource or any(t['province_id'] == enterprise['province_id']
-            and resource in t['resources'] for t in engine.tiles.values()))
+    # Рецепты меняются только с контентом, поэтому плоские массивы берутся из
+    # кэша по сигнатуре товаров и сборки.
+    input_offsets, input_goods, input_values, wear_offsets, wear_goods, wear_values = \
+        _update_recipe_arrays(engine, goods, good_index)
+    resource_ok = _update_resource_ok(engine, enterprises)
 
     # Sell intents используют тот же плоский state. Порядок аккаунтов задаёт native
     # shuffle; внутри аккаунта entries уже отсортированы по названию товара.
@@ -470,8 +575,7 @@ def pack_update_prices(engine):
         enterprise_account=_int32([account_index[e['id']] for e in enterprises]),
         enterprise_available_from=_int32([e['available_from'] for e in enterprises]),
         enterprise_sales_forecast=_float64([e['sales_forecast'] for e in enterprises]),
-        enterprise_sold_now=_float64([sum(t['quantity'] for t in engine.report['trades']
-            if t['seller'] == e['id'] and t['good'] == e['good']) for e in enterprises]),
+        enterprise_sold_now=_float64(_update_sold_now(engine, enterprises)),
         enterprise_history_count=_int32([min(3, len(e.get('sales_history', []))) for e in enterprises]),
         enterprise_history_sold=_float64([[h.get('sold', 0) for h in e.get('sales_history', [])[-3:]]+[0]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
         enterprise_history_output=_float64([[h.get('output', 0) for h in e.get('sales_history', [])[-3:]]+[0]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
