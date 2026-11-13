@@ -3561,6 +3561,9 @@ class Economy(EconomyServices):
             from shadow.investment_batch import run_async_snapshot_batch
             async_snapshot = run_async_snapshot_batch(self, sells)
             self.report['investment_mode'] = investment_mode
+        elif native_mode == 'cython':
+            from .native.update_prices_boundary import run_native_project_requests
+            run_native_project_requests(self, sells)
         else:
             self.project_requests(sells)
         timings['preparation'] = time.perf_counter()-started

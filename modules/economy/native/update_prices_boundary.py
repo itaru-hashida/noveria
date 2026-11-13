@@ -1,5 +1,6 @@
 """Общий flat pack/journal/apply для native-фаз V3 до owner_requests."""
 import time
+import types
 
 import numpy as np
 
@@ -880,6 +881,130 @@ def run_native_public_projects(engine):
     """Общий native boundary до конца public_project_requests."""
     return _run(engine, include_recovery=True, include_sells=True, include_households=True,
                 include_owners=True, include_enterprise_recovery=True, include_public=True)
+
+
+def _native_project_candidate_method(engine, sells):
+    """Return a V3-shaped candidate method backed by the native evaluator.
+
+    This is deliberately an orchestration adapter: project_requests still owns
+    all commits and reservations, while the pure candidate calculation is
+    replaced without duplicating its RNG calls.
+    """
+    from . import serial_step
+
+    inv_data = inv_meta = support = support_meta = None
+    original = engine.project_candidate
+
+    def refresh_mutable():
+        """Refresh only fields changed by the preceding investor commit."""
+        accounts = list(engine.accounts.values())
+        goods = list(engine.goods)
+        ai = inv_meta['account_index']
+        gi = inv_meta['good_index']
+        for account in accounts:
+            i = ai[account['id']]
+            inv_data['account_balance'][i] = account['balance']
+            inv_data['account_reserved'][i] = account.get('reserved', 0.0)
+            inv_data['account_protected'][i] = account.get('protected', 0.0)
+            inv_data['account_optimism'][i] = account.get('optimism', np.nan)
+            inv_data['account_risk_tolerance'][i] = account.get('risk_tolerance', np.nan)
+            for good in goods:
+                inv_data['account_stock'][i, gi[good]] = account['stock'].get(good, 0.0)
+                inv_data['account_stock_reserved'][i, gi[good]] = \
+                    account.get('stock_reserved', {}).get(good, 0.0)
+
+    def candidate(self, investor, current_sells, **kwargs):
+        nonlocal support, support_meta
+        derived = kwargs.get('derived_demand') or {}
+        region = kwargs.get('demand_region')
+        pairs = {(region, good) for good in derived if region}
+        nonlocal inv_data, inv_meta
+        if inv_data is None:
+            inv_data, inv_meta = pack_investment_state(self, sells=current_sells)
+            support, support_meta = build_candidate_support(
+                self, current_sells, inv_data, inv_meta, extra_pairs=pairs)
+        refresh_mutable()
+        if pairs and not pairs.issubset(support_meta['covered_pairs']):
+            support, support_meta = build_candidate_support(
+                self, current_sells, inv_data, inv_meta,
+                extra_pairs=set(support_meta['covered_pairs']) | pairs)
+        account_index = inv_meta['account_index'][investor['id']]
+        dynamic = build_candidate_dynamic(
+            self, support_meta, account_index, kwargs.get('allowed_goods'))
+        good_index = inv_meta['good_index']
+        derived_good, derived_amount = -1, 0.0
+        if len(derived) > 1:
+            raise ValueError('native candidate supports one derived good')
+        if derived:
+            good, derived_amount = next(iter(derived.items()))
+            derived_good = good_index[good]
+        province_index = inv_meta['province_index']
+        region_index = province_index[region] if region else -1
+        result = serial_step.evaluate_project_candidate(
+            inv_data, support, dynamic, account_index, self.rng,
+            derived_good, derived_amount, region_index,
+            bool(kwargs.get('parent_project_id')))
+        # V3 profile() lazily writes these fields on the investor.  Native
+        # evaluation must materialize the same observable mutation before the
+        # sequential commit loop continues.
+        if not np.isnan(result['optimism']):
+            investor['optimism'] = result['optimism']
+        if not np.isnan(result['risk_tolerance']):
+            investor['risk_tolerance'] = result['risk_tolerance']
+        if not result['candidate_present']:
+            if kwargs.get('diagnostics') is not None:
+                names = {1: 'demand', 2: 'capacity', 3: 'margin', 4: 'route',
+                         5: 'funding_capacity', 6: 'payback'}
+                for pid, good, stage, v1, v2, v3, v4 in result['diagnostics']:
+                    row = dict(investor=investor['id'],
+                               good=next(g for g, i in good_index.items() if i == good),
+                               province_id=next(p for p, i in province_index.items() if i == pid),
+                               stage=names[stage])
+                    kwargs['diagnostics'].append(row)
+            return None
+        good = next(g for g, i in good_index.items() if i == result['good'])
+        tiles = {i: t for t, i in support_meta['tile_index'].items()}
+        provinces = {i: p for p, i in province_index.items()}
+        states = {i: s for s, i in inv_meta['state_index'].items()}
+        tile_id = tiles[result['location_tile']]
+        province = provinces[result['location_province']]
+        state = states[result['location_state']]
+        if result['expansion']:
+            city_id = self.enterprises[investor['id']].get('city_id')
+        elif self.goods[good].get('resource'):
+            city_id = None
+        else:
+            city_id = self.location(province).get('city_id')
+        location = dict(state_id=state, province_id=province,
+                        city_id=city_id,
+                        tile_id=tile_id)
+        chain = {next(g for g, i in good_index.items() if i == gi): amount
+                 for gi, amount in (result['chain'] or [])}
+        return dict(good=good, capacity=result['capacity'], location=location,
+                    materials={}, working_cash=result['working_cash'],
+                    expected_price=result['expected_price'],
+                    expected_profit=result['expected_profit'],
+                    expected_investment=result['expected_investment'],
+                    expected_unit_cost=result['expected_unit_cost'],
+                    expansion=result['expansion'], created=result['created'],
+                    chain_requirements=chain, project_id=
+                    f"{investor['id']}:{good}:{province}:{self.meta['month']}",
+                    parent_project_id=kwargs.get('parent_project_id'),
+                    derived_demand=(derived.get(good) if derived else None),
+                    dependency_expires=(self.meta['month'] + self.cfg.get('project_stall_months', 12)
+                                        if kwargs.get('parent_project_id') else None))
+
+    return types.MethodType(candidate, engine), original
+
+
+def run_native_project_requests(engine, sells):
+    """Run the existing sequential V3 commit loop with native candidates."""
+    method, original = _native_project_candidate_method(engine, sells)
+    engine.project_candidate = method
+    try:
+        return engine.project_requests(sells)
+    finally:
+        engine.project_candidate = original
 
 
 def pack_investment_state(engine, data=None, meta=None, sells=None):
