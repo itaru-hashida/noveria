@@ -10,6 +10,39 @@ serial_step = pytest.importorskip('modules.economy.native.serial_step')
 from test_economy_native_update import engine
 
 
+@pytest.mark.parametrize('landed_signal', [None, 0.0, 7.25])
+def test_compact_reference_offers_preserve_single_participant_exclusion(landed_signal):
+    class Context:
+        engine = type('Engine', (), {'goods': {'g': {'price': 9.0}}})()
+
+        def book(self, tile, good):
+            assert (tile, good) == ('tile', 'g')
+            return [
+                (1.0, dict(id='01', participant='a', remaining=0.0, status='open')),
+                (2.0, dict(id='02', participant='a', remaining=1.0, status='open')),
+                (2.5, dict(id='03', participant='a', remaining=1.0, status='open')),
+                (3.0, dict(id='04', participant='b', remaining=1.0, status='open')),
+                (4.0, dict(id='05', participant='c', remaining=1.0, status='expired')),
+                (5.0, dict(id='06', participant='c', remaining=1.0, status='open')),
+            ]
+
+        def signal(self, state, province, good):
+            assert (state, province, good) == ('s', 'p', 'g')
+            return {'landed_price': landed_signal}
+
+    ctx = Context()
+    top = boundary._top_live_reference_offers(ctx, 'tile', 'g')
+    assert top == [(2.0, 'a'), (3.0, 'b')]
+    for excluded in ('a', 'b', 'c', 'other'):
+        expected = next((price for price, sell in ctx.book('tile', 'g')
+                         if sell['participant'] != excluded and sell['remaining'] > boundary.EPS
+                         and sell['status'] not in ('cancelled', 'expired')),
+                        landed_signal or ctx.engine.goods['g']['price'])
+        actual = boundary._reference_price_from_top(
+            ctx, 's', 'p', 'g', excluded, top)
+        assert actual == expected
+
+
 @pytest.mark.parametrize('review', ['full', 'targeted', 'skipped'])
 def test_project_batch_one_boundary_without_python_decision_callbacks(monkeypatch, review):
     reference = engine()

@@ -1682,6 +1682,37 @@ def _equipment_wear(engine, recipe):
             for good, ratio in recipe.get('equipment', {}).items()}
 
 
+def _top_live_reference_offers(ctx, tile_id, good):
+    """Return the first live offer from each of the two best sellers.
+
+    ``ctx.book`` is sorted by landed price and offer ID. Reference prices
+    exclude one participant, so the best offer from the first distinct
+    participant not excluded is sufficient; two distinct participants cover
+    every single-participant exclusion.
+    """
+    result = []
+    participants = set()
+    for price, sell in ctx.book(tile_id, good):
+        participant = sell['participant']
+        if participant in participants:
+            continue
+        if sell['remaining'] <= EPS or sell['status'] in ('cancelled', 'expired'):
+            continue
+        participants.add(participant)
+        result.append((price, participant))
+        if len(result) == 2:
+            break
+    return result
+
+
+def _reference_price_from_top(ctx, state_id, province_id, good, exclude_id, top_offers):
+    for price, participant in top_offers:
+        if participant != exclude_id:
+            return price
+    signal = ctx.signal(state_id, province_id, good)
+    return signal['landed_price'] or ctx.engine.goods[good]['price']
+
+
 def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), all_goods=False):
     """Построить статические flat-таблицы для native project_candidate.
 
@@ -1910,7 +1941,30 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     # --- reference prices ---
     ref_keys = sorted(ref_keys, key=lambda k: (tile_index[k[2]], good_index[k[3]],
                                                account_index.get(k[4], -1)))
-    rf_value = [ctx.ref_price(s, p, t, g, x) for s, p, t, g, x in ref_keys]
+    # One exclusion can only remove one participant. Keep only the best live
+    # offer per participant, then use at most two distinct participants for
+    # every lookup. Deduplicate the Cython key after sorting and retain its
+    # first row, matching _find_triple's legacy first-match behavior.
+    compact_ref_keys = []
+    seen_ref_keys = set()
+    for key in ref_keys:
+        lookup = (tile_index[key[2]], good_index[key[3]],
+                  account_index.get(key[4], -1))
+        if lookup in seen_ref_keys:
+            continue
+        seen_ref_keys.add(lookup)
+        compact_ref_keys.append(key)
+    top_ref_cache = {}
+    rf_value = []
+    for state_id, province_id, tile_id, good, exclude_id in compact_ref_keys:
+        book_key = (tile_id, good)
+        top = top_ref_cache.get(book_key)
+        if top is None:
+            top = _top_live_reference_offers(ctx, tile_id, good)
+            top_ref_cache[book_key] = top
+        rf_value.append(_reference_price_from_top(
+            ctx, state_id, province_id, good, exclude_id, top))
+    ref_keys = compact_ref_keys
 
     # --- customer quotes / demand rows / leaders ---
     cq_keys = sorted(cq_keys, key=lambda k: (tile_index[k[0]], good_index[k[1]]))
