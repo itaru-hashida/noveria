@@ -317,3 +317,45 @@ def test_candidate_rng_digests(comparison_73129, comparison_17):
     for records in (comparison_73129, comparison_17):
         mismatch = [r for r in records if r['rng_after_py'] != r['rng_after_native']]
         assert not mismatch
+
+
+def test_candidate_support_uses_lazy_supplier_contract(world_73129):
+    """Support отдаёт сырые фирмы, а supplier-строки заполняет батч.
+
+    После перехода на lazy market support `build_candidate_support` больше не
+    считает `sup_price`/`sup_capacity` в Python: их заполняет Cython при
+    первом запросе рынка из `_ProjectBatch.ensure_suppliers`. Одиночный
+    `evaluate_project_candidate` такого батча не имеет, поэтому harness обязан
+    подставлять свою реализацию того же контракта — иначе native читает нули и
+    расходится с Python по capacity.
+    """
+    from candidate_compare import _LazySupplierRows
+    from modules.economy.native.update_prices_boundary import (
+        build_candidate_support, pack_investment_state)
+
+    engine, sells = world_73129
+    inv, meta = pack_investment_state(engine, sells=sells)
+    support, support_meta = build_candidate_support(engine, sells, inv, meta)
+    # Новый формат: только сырые строки фирм, никакой готовой таблицы покрытия.
+    assert 'covered_pairs' not in support_meta
+    assert not support['sup_price'].any()
+    assert not support['sup_capacity'].any()
+
+    replica = _LazySupplierRows(support_meta['ctx'], support, meta)
+    good_index = meta['good_index']
+    tile_index = support_meta['tile_index']
+    filled = []
+    for good in engine.goods:
+        component_tile = next(
+            tile for tile, index in tile_index.items()
+            if int(support['tile_component'][index]) >= 0)
+        replica.ensure_suppliers(good_index[good], tile_index[component_tile])
+        filled.extend(i for i in range(len(support['sup_price']))
+                      if support['sup_price'][i] != 0 or support['sup_capacity'][i] != 0)
+    assert filled, 'lazy supplier replica не заполнила ни одной строки'
+
+    # Повторный вызов не пересчитывает уже закрытый рынок.
+    before = support['sup_price'].copy()
+    replica.ensure_suppliers(good_index[next(iter(engine.goods))],
+                             tile_index[component_tile])
+    assert (support['sup_price'] == before).all()

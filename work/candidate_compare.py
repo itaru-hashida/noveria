@@ -37,6 +37,68 @@ STAGE_KEYS = {
 }
 
 
+class _LazySupplierRows:
+    """Заполнить supplier-строки support вне `_ProjectBatch`.
+
+    `build_candidate_support` теперь упаковывает только сырые поля фирм:
+    `sup_price`/`sup_capacity` оставлены нулями, а значения для конкретного
+    (товар, компонента) рынка считает Cython при первом запросе из
+    `_ProjectBatch.ensure_suppliers`. В production это происходит внутри
+    батча; здесь тот же контракт воспроизводится в Python-обёртке.
+
+    Значения зависят только от фирмы (unit cost, net price, свободные
+    деньги, труд и предел ресурса), а не от рынка-покупателя, поэтому один
+    проход `ctx.suppliers(good)` закрывает все component-рынки товара.
+    """
+
+    def __init__(self, ctx, support, inv_meta):
+        self.ctx = ctx
+        self.support = support
+        self.good_name = {i: g for g, i in inv_meta['good_index'].items()}
+        self.account_name = {i: a for a, i in inv_meta['account_index'].items()}
+        self._filled = set()
+        self._values = {}
+        # Native отбрасывает фирмы без собственных и владельческих денег
+        # (`funds <= EPS`) независимо от all_goods, поэтому replica контекста
+        # обязана вести себя так же.
+        ctx.include_unfunded = False
+
+    def _values_for(self, good_index):
+        good = self.good_name[good_index]
+        values = self._values.get(good)
+        if values is None:
+            values = {firm['id']: (price, capacity)
+                      for firm, price, capacity in self.ctx.suppliers(good)}
+            self._values[good] = values
+        return values
+
+    def ensure_suppliers(self, good, tile):
+        support = self.support
+        component = int(support['tile_component'][tile])
+        key = int(good)*int(support['supplier_component_count'])+component
+        if key in self._filled:
+            return
+        self._filled.add(key)
+        values = self._values_for(good)
+        start = int(support['sup_market_offset'][key])
+        end = int(support['sup_market_offset'][key+1])
+        for i in range(start, end):
+            entry = values.get(self.account_name[int(support['sup_account'][i])])
+            if entry is None:
+                continue
+            support['sup_price'][i] = entry[0]
+            support['sup_capacity'][i] = entry[1]
+
+    def touch_capacity(self, state, province, resource):
+        """Не материализовать ledger: проход должен остаться Python-проходом.
+
+        Production-батч касается `labor_reserved`/`resource_reserved`, создавая
+        нулевые записи. Python-путь создаёт их сам ровно в тех же местах, а
+        лишние нули меняют только длину плоских массивов, не значения, поэтому
+        обёртка ledger не трогает и не сдвигает ход симуляции.
+        """
+
+
 def _native_diag_to_dicts(record, inv_meta):
     pid_name = {i: p for p, i in inv_meta['province_index'].items()}
     good_name = {i: g for g, i in inv_meta['good_index'].items()}
@@ -140,21 +202,30 @@ def run_candidate_comparison(seed, months, extra_resource_calls=0):
         if len(derived) > 1:
             raise AssertionError('ожидался один derived good: %r' % derived)
         region = kwargs.get('demand_region')
-        needed = ({(region, good) for good in derived} if region else set())
         # packed state ДО Python-вызова (pack read-only)
         cache_key = (self.meta['month'], id(sells))
         if cache_key not in state_cache:
             inv_data, inv_meta = pack_investment_state(self, sells=sells)
-            sup, smeta = build_candidate_support(self, sells, inv_data, inv_meta,
-                                                 extra_pairs=needed)
+            # Рыночный support теперь ленивый: в нём лежат сырые строки заявок
+            # и одна матрица расстояний, поэтому любая пара (провинция, товар) —
+            # включая синтетический derived-рынок — считается по требованию.
+            # Готовой таблицы покрытия больше нет, и support собирается ровно
+            # один раз на снимок sells.
+            sup, smeta = build_candidate_support(self, sells, inv_data, inv_meta)
             state_cache[cache_key] = (inv_data, inv_meta, sup, smeta, {})
-        inv_data0, inv_meta0, sup, smeta, inv_versions = state_cache[cache_key]
-        uncovered = needed-set(smeta['covered_pairs'])
-        if uncovered:
-            sup, smeta = build_candidate_support(
-                self, sells, inv_data0, inv_meta0,
-                extra_pairs=set(smeta['covered_pairs']) | needed)
-            state_cache[cache_key] = (inv_data0, inv_meta0, sup, smeta, {})
+        inv_data0, inv_meta0, sup, smeta, lazy_state = state_cache[cache_key]
+        # support сам по себе неизменяем: единственное, что Cython заполняет в
+        # нём по ходу, — supplier-строки и рыночные кэши, поэтому между
+        # вызовами одного прохода ведём только эти ложные кэши, не пересобирая
+        # support.
+        lazy_suppliers = lazy_state.get('suppliers')
+        if lazy_suppliers is None:
+            lazy_suppliers = _LazySupplierRows(smeta['ctx'], sup, inv_meta0)
+            lazy_state['suppliers'] = lazy_suppliers
+            # Тот же контракт, что и `native_project_requests`: Cython зовёт
+            # `ensure_suppliers` из `_investment_demand_native` только когда
+            # support несёт собственный батч.
+            sup['batch'] = lazy_suppliers
         # inv_pack строится один раз на проход; между вызовами в проходе
         # меняются только ленивые профили (native читает их и ничего больше
         # из мутируемого); обновляем эти два массива из живых аккаунтов
@@ -251,7 +322,6 @@ def run_candidate_comparison(seed, months, extra_resource_calls=0):
                 resource_goods = [g for g, r in self.goods.items()
                                   if r['resource']]
                 calls = []
-                needed = set()
                 for account in private_investors:
                     for good in resource_goods:
                         resource = self.goods[good]['resource']
@@ -263,13 +333,6 @@ def run_candidate_comparison(seed, months, extra_resource_calls=0):
                         if not provinces:
                             continue
                         calls.append((account, good, provinces[0]))
-                        needed.add((provinces[0], good))
-                entry = state_cache.get(cache_key)
-                if entry is not None and needed-set(entry[3]['covered_pairs']):
-                    sup, smeta = build_candidate_support(
-                        self, sells, entry[0], entry[1],
-                        extra_pairs=set(entry[3]['covered_pairs']) | needed)
-                    state_cache[cache_key] = (entry[0], entry[1], sup, smeta, {})
                 for account, good, province in calls:
                     saved_profiles.setdefault(
                         account['id'],
