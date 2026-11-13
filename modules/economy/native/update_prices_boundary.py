@@ -30,6 +30,62 @@ def _uint8(values):
     return np.asarray(values, dtype=np.uint8)
 
 
+def _project_static_index(engine, name, values):
+    """Reuse stable ID indexes between project packs; rebuild on membership/order change."""
+    engine = getattr(engine, 'engine', engine)
+    values = tuple(values)
+    cache = getattr(engine, '_native_project_index_cache', None)
+    if cache is None:
+        cache = {}
+        engine._native_project_index_cache = cache
+    entry = cache.get(name)
+    if entry is not None and entry[0] == values:
+        return entry[1]
+    index = _indices(values)
+    cache[name] = (values, index)
+    return index
+
+
+def _reuse_project_numeric_buffers(engine, arrays):
+    """Keep account/project/queue NumPy storage alive across monthly packs."""
+    engine = getattr(engine, 'engine', engine)
+    cache = getattr(engine, '_native_project_numeric_buffers', None)
+    if cache is None:
+        cache = {}
+        engine._native_project_numeric_buffers = cache
+    for name, value in tuple(arrays.items()):
+        if not isinstance(value, np.ndarray):
+            continue
+        if not (name.startswith(('account_', 'project_', 'queue_'))
+                or name in ('investor_account',)):
+            continue
+        previous = cache.get(name)
+        if (previous is not None and previous.shape == value.shape
+                and previous.dtype == value.dtype and previous.flags.c_contiguous):
+            # Reuse storage. In particular, Cython memoryviews and callers that
+            # retain the pack result see a stable buffer address across turns.
+            np.copyto(previous, value)
+            arrays[name] = previous
+        else:
+            cache[name] = value
+    return arrays
+
+
+def _project_matrix_buffer(engine, name, shape):
+    engine = getattr(engine, 'engine', engine)
+    cache = getattr(engine, '_native_project_numeric_buffers', None)
+    if cache is None:
+        cache = {}
+        engine._native_project_numeric_buffers = cache
+    value = cache.get(name)
+    if value is None or value.shape != shape or value.dtype != np.float64:
+        value = np.zeros(shape, dtype=np.float64)
+        cache[name] = value
+    else:
+        value.fill(0.0)
+    return value
+
+
 def pack_update_prices(engine):
     """Изолировать объектное состояние Python от числового native-входа."""
     accounts = list(engine.accounts.values())
@@ -1010,8 +1066,8 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
     accounts = list(engine.accounts.values())
     enterprises = list(engine.enterprises.values())
     goods = list(engine.goods)
-    account_id_rank = {aid: rank for rank, aid in enumerate(
-        sorted(a['id'] for a in accounts))}
+    account_id_rank = _project_static_index(
+        engine, 'account_rank', sorted(a['id'] for a in accounts))
     if data is not None and meta is not None:
         account_index = meta['account_index']
         enterprise_index = meta['enterprise_index']
@@ -1019,9 +1075,11 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
         distances = data['distances']
         tile_index = None  # восстанавливается ниже по meta, если нужно
     else:
-        account_index = _indices(a['id'] for a in accounts)
-        enterprise_index = _indices(e['id'] for e in enterprises)
-        good_index = _indices(goods)
+        account_index = _project_static_index(
+            engine, 'accounts', (a['id'] for a in accounts))
+        enterprise_index = _project_static_index(
+            engine, 'enterprises', (e['id'] for e in enterprises))
+        good_index = _project_static_index(engine, 'goods', goods)
         distances = None
         tile_index = None
 
@@ -1085,8 +1143,9 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
     kind_codes = {'private': 0, 'merchant': 1, 'treasury': 2, 'municipal': 3,
                   'enterprise': 4, 'household': 5}
     n_acc, n_goods = len(accounts), len(goods)
-    account_stock = np.zeros((n_acc, n_goods), dtype=np.float64)
-    account_stock_reserved = np.zeros((n_acc, n_goods), dtype=np.float64)
+    account_stock = _project_matrix_buffer(engine, 'account_stock', (n_acc, n_goods))
+    account_stock_reserved = _project_matrix_buffer(
+        engine, 'account_stock_reserved', (n_acc, n_goods))
     for index, account in enumerate(accounts):
         for good, quantity in account['stock'].items():
             account_stock[index, good_index[good]] = quantity
@@ -1102,7 +1161,8 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
             project_accounts.append(index)
             project_raw.append(_copy.deepcopy(project))
     n_proj = len(project_accounts)
-    project_materials = np.zeros((n_proj, n_goods), dtype=np.float64)
+    project_materials = _project_matrix_buffer(
+        engine, 'project_materials', (n_proj, n_goods))
     chain_offsets = [0]
     chain_goods, chain_values = [], []
     for slot, project in enumerate(project_raw):
@@ -1420,6 +1480,8 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
         investment_state_present=state is not None,
         investment_index_present=index_snapshot is not None,
     )
+
+    inv_data = _reuse_project_numeric_buffers(engine, inv_data)
 
     inv_meta = dict(
         account_index=account_index,
