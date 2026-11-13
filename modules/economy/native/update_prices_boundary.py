@@ -1444,7 +1444,7 @@ class _CandidateContext:
     V3 заполнил бы их в том же месяце теми же значениями.
     """
 
-    def __init__(self, engine, sells):
+    def __init__(self, engine, sells, distances=None, tile_index=None):
         self.engine = engine
         self.sells = sells
         self.eps = EPS
@@ -1460,9 +1460,51 @@ class _CandidateContext:
         self._ref = {}
         self._quotes = {}
         self._dq_rows = {}
+        self._route_components = {}
+        self._orders_by_good = {}
+        self._sell_rows_by_market = {}
+        self._buy_rows_by_market = {}
+        for order in self.orders:
+            if order.get('side') == 'buy':
+                self._orders_by_good.setdefault(order.get('good'), []).append(order)
+        self.distances = distances
+        self.tile_index = tile_index or {}
+
+    def route_component(self, tile_id):
+        result = self._route_components.get(tile_id)
+        if result is None:
+            result = self.engine.route_component(tile_id)
+            self._route_components[tile_id] = result
+        return result
+
+    def sells_in_component(self, good, component):
+        key = (good, component)
+        rows = self._sell_rows_by_market.get(key)
+        if rows is None:
+            rows = [sell for sell in self.sells.get(good, ())
+                    if self.route_component(sell['tile_id']) == component]
+            self._sell_rows_by_market[key] = rows
+        return rows
+
+    def buys_in_component(self, good, component):
+        key = (good, component)
+        rows = self._buy_rows_by_market.get(key)
+        if rows is None:
+            rows = [order for order in self._orders_by_good.get(good, ())
+                    if self.route_component(order['tile_id']) == component]
+            self._buy_rows_by_market[key] = rows
+        return rows
 
     def landed(self, seller_tile, buyer_tile, good, price):
-        distance, _ = self.engine.path(seller_tile, buyer_tile)
+        if self.distances is not None:
+            si = self.tile_index.get(seller_tile)
+            bi = self.tile_index.get(buyer_tile)
+            distance = (self.distances[si, bi]
+                        if si is not None and bi is not None else np.nan)
+            if np.isnan(distance):
+                return None
+        else:
+            distance, _ = self.engine.path(seller_tile, buyer_tile)
         if distance is None:
             return None
         weight = self.engine.goods[good]['weight']
@@ -1474,11 +1516,9 @@ class _CandidateContext:
         entry = self._books.get(key)
         if entry is not None:
             return entry
-        component = self.engine.route_component(buyer_tile)
+        component = self.route_component(buyer_tile)
         options = []
-        for sell in self.sells.get(good, []):
-            if self.engine.route_component(sell['tile_id']) != component:
-                continue
+        for sell in self.sells_in_component(good, component):
             quote = self.landed(sell['tile_id'], buyer_tile, good, sell['price'])
             if quote:
                 options.append((quote[0], sell))
@@ -1531,12 +1571,8 @@ class _CandidateContext:
         entry = self._quotes.get(key)
         if entry is None:
             rows = []
-            component = self.engine.route_component(tile_id)
-            for order in self.orders:
-                if order['side'] != 'buy' or order['good'] != good:
-                    continue
-                if self.engine.route_component(order['tile_id']) != component:
-                    continue
+            component = self.route_component(tile_id)
+            for order in self.buys_in_component(good, component):
                 quote = self.landed(tile_id, order['tile_id'], good, 0)
                 if quote:
                     rows.append((order, quote[1]))
@@ -1597,12 +1633,8 @@ class _CandidateContext:
         entry = self._dq_rows.get(key)
         if entry is None:
             entry = []
-            component = self.engine.route_component(tile_id)
-            for order in self.orders:
-                if order['side'] != 'buy' or order['good'] != good:
-                    continue
-                if self.engine.route_component(order['tile_id']) != component:
-                    continue
+            component = self.route_component(tile_id)
+            for order in self.buys_in_component(good, component):
                 quote = self.landed(tile_id, order['tile_id'], good, 0)
                 if not quote or order['remaining'] <= EPS \
                         or order['status'] in ('cancelled', 'expired'):
@@ -1731,8 +1763,6 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     extra_pairs: дополнительные (province_id, good) пары для derived-рынков
     (например, синтетический derived_demand): покрываются их локации.
     """
-    ctx = _CandidateContext(engine, sells)
-    ctx.include_unfunded = all_goods
     account_index = inv_meta['account_index']
     good_index = inv_meta['good_index']
     state_index = inv_meta['state_index']
@@ -1792,6 +1822,9 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
         if len(_PROJECT_DISTANCE_MATRICES) >= 8:
             _PROJECT_DISTANCE_MATRICES.clear()
         _PROJECT_DISTANCE_MATRICES[distance_key] = distances
+    ctx = _CandidateContext(engine, sells, distances=distances,
+                            tile_index=tile_index)
+    ctx.include_unfunded = all_goods
     tile_ids_by_index = {i: t for t, i in tile_index.items()}
 
     # --- market signal по всем ключам истории ---
@@ -1831,11 +1864,11 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     book_keys, ref_pairs, cq_keys, dq_keys, ld_keys = set(), set(), set(), set(), set()
     construction_goods = list(engine.cfg['construction'])
     market_goods = set()
-    for i in investor_indices:
-        account = accounts[i]
-        market_tile = account.get('cell_id') or account['tile_id']
-        state_id = account['state_id']
-        province_id = engine.market_province(account)
+    investor_states = sorted({accounts[i]['state_id'] for i in investor_indices})
+    # Market locations belong to the state, not to an investor. Building these
+    # keys once per state avoids repeating the same resource-tile expansion for
+    # every account in that state.
+    for state_id in investor_states:
         markets = index['markets'].get(state_id, ()) if index is not None else ()
         for pid, good in markets:
             market_goods.add(good)
@@ -1853,10 +1886,13 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
                     ref_pairs.add((tile_id, input_good))
                 for equip_good in recipe.get('equipment', {}):
                     ref_pairs.add((tile_id, equip_good))
+    for i in investor_indices:
+        account = accounts[i]
+        market_tile = account.get('cell_id') or account['tile_id']
         for good in construction_goods:
             book_keys.add((market_tile, good))
             ref_pairs.add((market_tile, good))
-        for good in list(market_goods):
+        for good in market_goods:
             for equip_good in engine.goods[good].get('equipment', {}):
                 book_keys.add((market_tile, equip_good))
                 ref_pairs.add((market_tile, equip_good))
@@ -1880,12 +1916,11 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
             cq_keys.add((tile_id, good))
             dq_keys.add((tile_id, good))
             ld_keys.add((tile_id, good))
-            for account in accounts:
-                ref_pairs.add((tile_id, good))
-                for input_good in recipe['inputs']:
-                    ref_pairs.add((tile_id, input_good))
-                for equip_good in recipe.get('equipment', {}):
-                    ref_pairs.add((tile_id, equip_good))
+            ref_pairs.add((tile_id, good))
+            for input_good in recipe['inputs']:
+                ref_pairs.add((tile_id, input_good))
+            for equip_good in recipe.get('equipment', {}):
+                ref_pairs.add((tile_id, equip_good))
     covered_pairs.update(extra_pairs)
     if all_goods:
         market_goods.update(goods)
