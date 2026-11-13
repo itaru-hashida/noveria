@@ -210,8 +210,138 @@ def _update_recipe_arrays(engine, goods, good_index):
     return result
 
 
+def _native_update_state(engine):
+    """Persistent native-состояние pack'а update_prices на движке."""
+    state = getattr(engine, '_native_update_state', None)
+    if state is None:
+        state = load_serial_step().NativeUpdateState()
+        engine._native_update_state = state
+    return state
+
+
+def _update_layout(accounts, enterprises, goods, tiles):
+    """Подпись индексации: порядок счетов, фирм, товаров и площадок.
+
+    Пока она та же, стабильные массивы и буферы состояния переиспользуются.
+    Смена состава или порядка означает новую индексацию: прежние массивы
+    относятся к другим позициям, поэтому состояние сбрасывается целиком.
+    """
+    return (tuple(a['id'] for a in accounts),
+            tuple(a['kind'] for a in accounts),
+            tuple(e['id'] for e in enterprises),
+            tuple(goods), tuple(tiles))
+
+
+def _update_resource_signature(engine):
+    """Подпись ресурсов карты: от неё зависит флаг «у провинции есть ресурс».
+
+    Ресурсы клетки меняются только вместе с картой или перезагрузкой контента,
+    но не через invalidate_routes. Поэтому подпись входит в ключ стабильной
+    части: правка ресурса обязана пересобрать флаги предприятий.
+    """
+    return tuple((tile['id'], tuple(tile['resources']))
+                 for tile in engine.tiles.values())
+
+
+def _update_static_arrays(engine, state, layout, goods, good_index,
+                          accounts, enterprises, tiles):
+    """Стабильные массивы pack'а: товары, рецепты, порядок и расстояния."""
+    key = (layout, _update_static_signature(engine, goods),
+           tuple(sorted(engine.cfg['basic_needs'].items())),
+           tuple(sorted(engine.cfg['extra_needs'].items())),
+           _update_resource_signature(engine),
+           # Топология маршрутов: правка дороги меняет ключ и сбрасывает
+           # матрицу расстояний вместе с остальными стабильными массивами.
+           engine._route_cache_key)
+    static = state.static
+    if static.get('key') == key and 'distances' in static:
+        return static
+    static.clear()
+    static['key'] = key
+    static['distances'] = _update_distance_matrix(engine, tiles)
+    static['good_weight'] = _float64([engine.goods[g]['weight'] for g in goods])
+    static['good_default_price'] = _float64([engine.goods[g]['price'] for g in goods])
+    static['good_labor'] = _float64([engine.goods[g]['labor'] for g in goods])
+    static['good_consumer'] = _uint8(
+        [g in (engine.cfg['basic_needs'] | engine.cfg['extra_needs']) for g in goods])
+    static['recovery_order'] = _int32(sorted(range(len(enterprises)),
+        key=lambda i: (engine.depth(enterprises[i]['good']), enterprises[i]['id'])))
+    (input_offsets, input_goods, input_values,
+     wear_offsets, wear_goods, wear_values) = _update_recipe_arrays(
+        engine, goods, good_index)
+    static['recovery_input_offset'] = _int32(input_offsets)
+    static['recovery_input_good'] = _int32(input_goods)
+    static['recovery_input_value'] = _float64(input_values)
+    static['recovery_wear_offset'] = _int32(wear_offsets)
+    static['recovery_wear_good'] = _int32(wear_goods)
+    static['recovery_wear_value'] = _float64(wear_values)
+    equipment_offsets, equipment_goods, equipment_values = [0], [], []
+    for product in goods:
+        for good, ratio in engine.goods[product].get('equipment', {}).items():
+            equipment_goods.append(good_index[good])
+            equipment_values.append(ratio)
+        equipment_offsets.append(len(equipment_goods))
+    static['recovery_equipment_offset'] = _int32(equipment_offsets)
+    static['recovery_equipment_good'] = _int32(equipment_goods)
+    static['recovery_equipment_value'] = _float64(equipment_values)
+    construction = list(engine.cfg['construction'])
+    static['construction_good'] = _int32([good_index[g] for g in construction])
+    static['construction_ratio'] = _float64(
+        [engine.cfg['construction'][g]/engine.cfg['minimum_capacity']
+         for g in construction])
+    static['construction_amount'] = _float64([engine.cfg['construction'][g]
+                                              for g in construction])
+    static['owner_basket_good'] = _int32([good_index[g] for g in ('bread', 'fish', 'cloth')])
+    # Множество (провинция, ресурс) зависит только от карты: держим его в
+    # стабильной части, чтобы не перебирать 1200 клеток каждый ход.
+    static['resource_pairs'] = {(tile['province_id'], resource)
+                                for tile in engine.tiles.values()
+                                for resource in tile['resources']}
+    basic_goods = list(engine.cfg['basic_needs'])
+    extra_goods = list(engine.cfg['extra_needs'])
+    static['household_basic_good'] = _int32([good_index[g] for g in basic_goods])
+    static['household_basic_rate'] = _float64([engine.cfg['basic_needs'][g] for g in basic_goods])
+    static['household_basic_rate_by_good'] = _float64(
+        [engine.cfg['basic_needs'].get(g, 0) for g in goods])
+    static['household_extra_good'] = _int32([good_index[g] for g in extra_goods])
+    static['household_extra_rate'] = _float64([engine.cfg['extra_needs'][g] for g in extra_goods])
+    static['seller_order'] = _int32(sorted(range(len(accounts)),
+                                           key=lambda i: accounts[i]['id']))
+    static['household_order'] = _int32(
+        sorted((i for i, a in enumerate(accounts) if a['kind'] == 'household'),
+               key=lambda i: accounts[i]['id']))
+    static['owner_order'] = _int32(
+        sorted((i for i, a in enumerate(accounts) if a['kind'] in ('private', 'merchant')),
+               key=lambda i: accounts[i]['id']))
+    static['enterprise_recovery_order'] = _int32(
+        sorted(range(len(enterprises)), key=lambda i: enterprises[i]['id']))
+    return static
+
+
+def _update_order_buffer(state, name, canonical):
+    """Рабочая копия канонического порядка: native перемешивает её на месте.
+
+    Стабильный массив в состоянии не должен меняться между ходами, поэтому
+    каждый pack получает собственную копию в переиспользуемом буфере. Копия
+    делается в уже выделенную память, так что новых аллокаций нет.
+    """
+    buffer = state.buffer(name, canonical.shape, canonical.dtype, None)
+    np.copyto(buffer, canonical)
+    return buffer
+
+
 def pack_update_prices(engine):
-    """Изолировать объектное состояние Python от числового native-входа."""
+    """Изолировать объектное состояние Python от числового native-входа.
+
+    Стабильные индексы, рецепты и матрица расстояний живут в
+    ``NativeUpdateState`` на движке и пересобираются только при смене
+    индексации, карты или товаров. Динамические значения (цены, склады,
+    заявки, резервы) каждый ход перезаписываются в те же numpy-буферы:
+    выделение памяти прекращается, а заполнение тяжёлых групп выполняет
+    Cython. Арифметика и порядок float-операций не меняются — заполнение
+    только копирует значения в исходном порядке.
+    """
+    started = time.perf_counter()
     accounts = list(engine.accounts.values())
     enterprises = list(engine.enterprises.values())
     goods = list(engine.goods)
@@ -260,104 +390,47 @@ def pack_update_prices(engine):
     tile_ids.update(a['project']['location']['tile_id'] for a in accounts if a.get('project'))
     tiles = sorted(tile_ids)
     tile_index = _indices(tiles)
-    distances = _update_distance_matrix(engine, tiles)
 
-    subject_enterprise, subject_account = [], []
-    subject_good, subject_tile, subject_state, subject_province = [], [], [], []
-    subject_price, subject_last, subject_previous = [], [], []
-    subject_history_count, subject_is_stock = [], []
-    for enterprise, account, good, price, history, is_stock in subjects:
-        a = accounts[account]
-        subject_enterprise.append(enterprise)
-        subject_account.append(account)
-        subject_good.append(good_index[good])
-        market_tile = enterprises[enterprise]['tile_id'] if enterprise >= 0 else a.get('cell_id') or a['tile_id']
-        subject_tile.append(tile_index[market_tile])
-        subject_state.append(state_index[a['state_id']])
-        subject_province.append(province_index[a['province_id']])
-        subject_price.append(price)
-        subject_last.append(history[-1]['sold'] if history else 0.0)
-        subject_previous.append(history[-2]['sold'] if len(history) > 1 else 0.0)
-        subject_history_count.append(len(history))
-        subject_is_stock.append(is_stock)
+    state = _native_update_state(engine)
+    layout = _update_layout(accounts, enterprises, goods, tiles)
+    if state.layout_key != layout:
+        state.reset()
+        state.layout_key = layout
+    static = _update_static_arrays(engine, state, layout, goods, good_index,
+                                   accounts, enterprises, tiles)
+    distances = static['distances']
+    seller_order = _update_order_buffer(state, 'seller_order_work',
+                                        static['seller_order'])
+    household_order = _update_order_buffer(state, 'household_order_work',
+                                           static['household_order'])
+    owner_order = _update_order_buffer(state, 'owner_order_work',
+                                       static['owner_order'])
 
-    enterprise_stock = np.zeros((len(enterprises), len(goods)), dtype=np.float64)
-    for enterprise in enterprises:
-        stock = accounts[account_index[enterprise['id']]]['stock']
-        for good, quantity in stock.items():
-            enterprise_stock[enterprise_index[enterprise['id']], good_index[good]] = quantity
+    subject_by_pair = {}
+    for index, (_, account, good, _, _, is_stock) in enumerate(subjects):
+        if is_stock:
+            subject_by_pair[(account, good_index[good])] = index
+    state.fill_prices(subjects, accounts, enterprises, good_index, tile_index,
+                      state_index, province_index)
+    state.fill_accounts(accounts, enterprise_index, good_index, state_index,
+                        province_index, tile_index, engine.tiles, engine.entities)
+    state.fill_enterprises(enterprises, good_index, account_index, tile_index,
+                           getattr(engine, '_trades_by_seller', {}),
+                           engine.rules['initial_sales_fraction'],
+                           engine.goods, static['resource_pairs'])
+    state.fill_enterprise_stock(len(goods))
+    capacity = sum(len(a['stock']) for a in accounts)
+    state.fill_sells(accounts, engine.enterprises, engine.goods, good_index,
+                     subject_by_pair, capacity)
 
-    recovery_order = sorted(range(len(enterprises)),
-        key=lambda i: (engine.depth(enterprises[i]['good']), enterprises[i]['id']))
-    # Порядок сложения cost должен совпадать с dict/recipe V3, а не с общим goods index.
-    # Рецепты меняются только с контентом, поэтому плоские массивы берутся из
-    # кэша по сигнатуре товаров и сборки.
-    input_offsets, input_goods, input_values, wear_offsets, wear_goods, wear_values = \
-        _update_recipe_arrays(engine, goods, good_index)
-    resource_ok = _update_resource_ok(engine, enterprises)
-
-    # Sell intents используют тот же плоский state. Порядок аккаунтов задаёт native
-    # shuffle; внутри аккаунта entries уже отсортированы по названию товара.
-    account_stock = np.zeros((len(accounts), len(goods)), dtype=np.float64)
-    account_reserved = np.zeros((len(accounts), len(goods)), dtype=np.float64)
-    account_locked = np.zeros((len(accounts), len(goods)), dtype=np.float64)
-    sell_offsets = [0]
-    sell_goods, sell_ask_prices, sell_ask_present = [], [], []
-    sell_subjects = []
-    subject_by_pair = {(account, good_index[good]): index
-                       for index, (_, account, good, _, _, is_stock) in enumerate(subjects) if is_stock}
-    sell_input_ratios, sell_equipment_ratios = [], []
-    for account_index_value, account in enumerate(accounts):
-        for good, quantity in account['stock'].items():
-            good_index_value = good_index[good]
-            account_stock[account_index_value, good_index_value] = quantity
-        for good, quantity in account.get('stock_reserved', {}).items():
-            account_reserved[account_index_value, good_index[good]] = quantity
-        enterprise = engine.enterprises.get(account['id'])
-        recipe = engine.goods[enterprise['good']] if enterprise else None
-        for good in sorted(account['stock']):
-            good_index_value = good_index[good]
-            account_locked[account_index_value, good_index_value] = engine.locked_material(account['id'], good)
-            sell_goods.append(good_index_value)
-            is_output = enterprise is not None and good == enterprise['good']
-            sell_ask_prices.append(account.get('ask_prices', {}).get(good, engine.goods[good]['price']))
-            sell_ask_present.append(not is_output and good in account.get('ask_prices', {}))
-            sell_subjects.append(subject_by_pair.get((account_index_value, good_index_value), -1))
-            sell_input_ratios.append(recipe['inputs'].get(good, 0) if recipe else 0)
-            sell_equipment_ratios.append(recipe.get('equipment', {}).get(good, 0) if recipe else 0)
-        sell_offsets.append(len(sell_goods))
-    seller_order = sorted(range(len(accounts)), key=lambda i: accounts[i]['id'])
-    sell_capacity = len(sell_goods)
-    household_order = sorted((i for i, a in enumerate(accounts) if a['kind'] == 'household'),
-                             key=lambda i: accounts[i]['id'])
     basic_goods = list(engine.cfg['basic_needs'])
     extra_goods = list(engine.cfg['extra_needs'])
     household_capacity = len(household_order)*(len(basic_goods)+len(extra_goods))
-    owner_order = sorted((i for i, a in enumerate(accounts) if a['kind'] in ('private', 'merchant')),
-                         key=lambda i: accounts[i]['id'])
     owner_capacity = len(owner_order)*3
-    # project_cash_reserve читает уже созданные household orders, поэтому в native
-    # передаются все заявки, а не только public orders из update_prices.
-    construction = list(engine.cfg['construction'])
-    construction_offsets = [0]
-    construction_goods, construction_values, construction_amounts = [], [], []
-    project_capacity, project_working, project_delivery = [], [], []
-    project_tiles = []
-    for account in accounts:
-        project = account.get('project')
-        project_capacity.append(project['capacity'] if project else 0.0)
-        project_working.append(project['working_cash'] if project else 0.0)
-        project_delivery.append(project.get('delivery', 0) if project else 0.0)
-        project_tiles.append(tile_index[project['location']['tile_id']] if project else -1)
-    for good in construction:
-        construction_goods.append(good_index[good])
-        construction_values.append(engine.cfg['construction'][good]/engine.cfg['minimum_capacity'])
-        construction_amounts.append(engine.cfg['construction'][good])
-    construction_offsets.append(len(construction_goods))
+
     tile_ids.update(o['tile_id'] for o in demand_orders)
     if any(o['tile_id'] not in tile_index for o in demand_orders):
         raise ValueError('Маршрутная матрица не содержит площадку заявки')
-    owner_basket = [good_index[g] for g in ('bread', 'fish', 'cloth')]
     public_requests = []
     for account in sorted(accounts, key=lambda a: a['id']):
         for project in account.get('public_projects', []):
@@ -372,184 +445,208 @@ def pack_update_prices(engine):
                 public_requests.append((account_index[account['id']], project, 'support_stock',
                     good_index[good], float(project['max_workers']*per_worker), 2))
     public_capacity = len(public_requests)
-    public_release_capacity = max(1, public_capacity*sell_capacity)
+    public_release_capacity = max(1, public_capacity*capacity)
     demand_capacity = len(demand_orders)+household_capacity+owner_capacity+public_capacity
-    def demand_field(name, default=0):
-        return [o.get(name, default) for o in demand_orders] + [default]*(demand_capacity-len(demand_orders))
-    equipment_offsets = [0]
-    equipment_goods, equipment_values = [], []
-    for product in goods:
-        for good, ratio in engine.goods[product].get('equipment', {}).items():
-            equipment_goods.append(good_index[good])
-            equipment_values.append(ratio)
-        equipment_offsets.append(len(equipment_goods))
 
+    project_capacity, project_working, project_delivery = [], [], []
+    project_tiles = []
+    for account in accounts:
+        project = account.get('project')
+        project_capacity.append(project['capacity'] if project else 0.0)
+        project_working.append(project['working_cash'] if project else 0.0)
+        project_delivery.append(project.get('delivery', 0) if project else 0.0)
+        project_tiles.append(tile_index[project['location']['tile_id']] if project else -1)
+
+    state.fill_public(public_orders, good_index, tile_index, account_index)
+    state.fill_feedback(feedback, good_index, tile_index)
+    state.fill_market(market_rows, state_index, province_index, good_index)
+    state.fill_demand(demand_orders, good_index, account_index, tile_index,
+                      demand_capacity)
+
+    buffer = state.buffer
     data = dict(
-        subject_enterprise=_int32(subject_enterprise),
-        subject_account=_int32(subject_account),
-        subject_good=_int32(subject_good),
-        subject_tile=_int32(subject_tile),
-        subject_state=_int32(subject_state),
-        subject_province=_int32(subject_province),
-        subject_price=_float64(subject_price),
-        subject_last_sold=_float64(subject_last),
-        subject_previous_sold=_float64(subject_previous),
-        subject_history_count=_int32(subject_history_count),
-        subject_is_stock=_uint8(subject_is_stock),
-        new_prices=np.empty(len(subjects), dtype=np.float64),
-        trace_branch=np.zeros(len(subjects), dtype=np.int32),
-        trace_limits=np.full(len(subjects), np.nan, dtype=np.float64),
-        trace_competitor=np.full(len(subjects), np.nan, dtype=np.float64),
-        trace_budget=np.full(len(subjects), np.nan, dtype=np.float64),
-        trace_signal_volume=np.zeros(len(subjects), dtype=np.float64),
-        enterprise_good=_int32([good_index[e['good']] for e in enterprises]),
-        enterprise_tile=_int32([tile_index[e['tile_id']] for e in enterprises]),
-        enterprise_price=_float64([e['price'] for e in enterprises]),
-        enterprise_stock=enterprise_stock,
-        order_good=_int32([good_index[o['good']] for o in public_orders]),
-        order_tile=_int32([tile_index[o['tile_id']] for o in public_orders]),
-        order_participant=_int32([account_index[o['participant']] for o in public_orders]),
-        order_price=_float64([o['price'] for o in public_orders]),
-        order_remaining=_float64([o['remaining'] for o in public_orders]),
-        order_active=_uint8([o['status'] not in ('cancelled', 'expired') for o in public_orders]),
-        feedback_good=_int32([good_index[o['good']] for o in feedback]),
-        feedback_tile=_int32([tile_index[o['tile_id']] for o in feedback]),
-        feedback_budget=_float64([o['budget_price'] for o in feedback]),
-        market_state=_int32([state_index[r['state_id']] for r in market_rows]),
-        market_province=_int32([province_index[r['province_id']] for r in market_rows]),
-        market_good=_int32([good_index[r['good']] for r in market_rows]),
-        market_volume=_float64([r['volume'] for r in market_rows]),
-        market_landed_component=_float64([r['trade_gold']+r['freight'] for r in market_rows]),
+        subject_enterprise=state.data['subject_enterprise'],
+        subject_account=state.data['subject_account'],
+        subject_good=state.data['subject_good'],
+        subject_tile=state.data['subject_tile'],
+        subject_state=state.data['subject_state'],
+        subject_province=state.data['subject_province'],
+        subject_price=state.data['subject_price'],
+        subject_last_sold=state.data['subject_last_sold'],
+        subject_previous_sold=state.data['subject_previous_sold'],
+        subject_history_count=state.data['subject_history_count'],
+        subject_is_stock=state.data['subject_is_stock'],
+        new_prices=buffer('new_prices', (len(subjects),), np.float64, None),
+        trace_branch=buffer('trace_branch', (len(subjects),), np.int32, 0),
+        trace_limits=buffer('trace_limits', (len(subjects),), np.float64, np.nan),
+        trace_competitor=buffer('trace_competitor', (len(subjects),), np.float64, np.nan),
+        trace_budget=buffer('trace_budget', (len(subjects),), np.float64, np.nan),
+        trace_signal_volume=buffer('trace_signal_volume', (len(subjects),), np.float64, 0),
+        enterprise_good=state.data['enterprise_good'],
+        enterprise_tile=state.data['enterprise_tile'],
+        enterprise_price=state.data['enterprise_price'],
+        enterprise_stock=state.data['enterprise_stock'],
+        order_good=state.data['order_good'],
+        order_tile=state.data['order_tile'],
+        order_participant=state.data['order_participant'],
+        order_price=state.data['order_price'],
+        order_remaining=state.data['order_remaining'],
+        order_active=state.data['order_active'],
+        feedback_good=state.data['feedback_good'],
+        feedback_tile=state.data['feedback_tile'],
+        feedback_budget=state.data['feedback_budget'],
+        market_state=state.data['market_state'],
+        market_province=state.data['market_province'],
+        market_good=state.data['market_good'],
+        market_volume=state.data['market_volume'],
+        market_landed_component=state.data['market_landed_component'],
         market_history_len=len(engine.meta.get('market_history', [])),
         distances=distances,
-        good_weight=_float64([engine.goods[g]['weight'] for g in goods]),
+        good_weight=static['good_weight'],
         transport_rate=float(engine.cfg['transport_rate']),
         price_step=float(engine.rules['price_step']),
         minimum_price=float(engine.rules['minimum_price']),
         maximum_price=float(engine.rules['maximum_price']),
         eps=float(EPS),
-        recovery_order=_int32(recovery_order),
-        enterprise_recovery_order=_int32(sorted(range(len(enterprises)),
-            key=lambda i: enterprises[i]['id'])),
-        recovery_had_price=_uint8(['production_price' in e for e in enterprises]),
-        recovery_production_price=np.full(len(enterprises), np.nan, dtype=np.float64),
-        recovery_quote_count=np.zeros(len(goods), dtype=np.int32),
-        recovery_quote_enterprise=np.zeros((len(goods), len(enterprises)), dtype=np.int32),
-        recovery_quote_price=np.zeros((len(goods), len(enterprises)), dtype=np.float64),
-        enterprise_suspended=_uint8([bool(e.get('suspended')) for e in enterprises]),
-        enterprise_resource_ok=_uint8(resource_ok),
-        recovery_input_offset=_int32(input_offsets),
-        recovery_input_good=_int32(input_goods),
-        recovery_input_value=_float64(input_values),
-        recovery_wear_offset=_int32(wear_offsets),
-        recovery_wear_good=_int32(wear_goods),
-        recovery_wear_value=_float64(wear_values),
-        good_default_price=_float64([engine.goods[g]['price'] for g in goods]),
-        good_labor=_float64([engine.goods[g]['labor'] for g in goods]),
-        good_consumer=_uint8([g in (engine.cfg['basic_needs'] | engine.cfg['extra_needs'])
-                              for g in goods]),
+        recovery_order=_update_order_buffer(state, 'recovery_order_work',
+                                            static['recovery_order']),
+        enterprise_recovery_order=_update_order_buffer(
+            state, 'enterprise_recovery_order_work',
+            static['enterprise_recovery_order']),
+        recovery_had_price=state.data['recovery_had_price'],
+        recovery_production_price=buffer('recovery_production_price',
+            (len(enterprises),), np.float64, np.nan),
+        recovery_quote_count=buffer('recovery_quote_count', (len(goods),), np.int32, 0),
+        recovery_quote_enterprise=buffer('recovery_quote_enterprise',
+            (len(goods), len(enterprises)), np.int32, 0),
+        recovery_quote_price=buffer('recovery_quote_price',
+            (len(goods), len(enterprises)), np.float64, 0),
+        enterprise_suspended=state.data['enterprise_suspended'],
+        enterprise_resource_ok=state.data['enterprise_resource_ok'],
+        recovery_input_offset=static['recovery_input_offset'],
+        recovery_input_good=static['recovery_input_good'],
+        recovery_input_value=static['recovery_input_value'],
+        recovery_wear_offset=static['recovery_wear_offset'],
+        recovery_wear_good=static['recovery_wear_good'],
+        recovery_wear_value=static['recovery_wear_value'],
+        good_default_price=static['good_default_price'],
+        good_labor=static['good_labor'],
+        good_consumer=static['good_consumer'],
         wage=float(engine.cfg['wage']),
         markup=float(engine.cfg['markup']),
         consumption_tax=float(engine.cfg['consumption_tax']),
-        account_enterprise=_int32([enterprise_index.get(a['id'], -1) for a in accounts]),
-        account_household=_uint8([a['kind'] == 'household' for a in accounts]),
-        account_stock=account_stock,
-        account_stock_reserved=account_reserved,
-        account_locked=account_locked,
-        enterprise_closed=_uint8([e['status'] == 'closed' for e in enterprises]),
-        enterprise_capacity=_float64([e['capacity'] for e in enterprises]),
-        enterprise_planned=_float64([e.get('production_plan', {}).get('output', 0)
-                                     for e in enterprises]),
-        enterprise_recent=_float64([max((h.get('output', 0) for h in e.get('sales_history', [])[-3:]),
-            default=e['capacity']*engine.rules['initial_sales_fraction']) for e in enterprises]),
+        account_enterprise=state.data['account_enterprise'],
+        account_household=state.data['account_household'],
+        account_stock=state.data['account_stock'],
+        account_stock_reserved=state.data['account_stock_reserved'],
+        account_locked=state.data['account_locked'],
+        enterprise_closed=state.data['enterprise_closed'],
+        enterprise_capacity=state.data['enterprise_capacity'],
+        enterprise_planned=state.data['enterprise_planned'],
+        enterprise_recent=state.data['enterprise_recent'],
         input_buffer=float(engine.cfg['input_buffer']),
-        seller_order=_int32(seller_order),
-        sell_offset=_int32(sell_offsets),
-        sell_good=_int32(sell_goods),
-        sell_ask_price=_float64(sell_ask_prices),
-        sell_ask_present=_uint8(sell_ask_present),
-        sell_subject=_int32(sell_subjects),
-        sell_input_ratio=_float64(sell_input_ratios),
-        sell_equipment_ratio=_float64(sell_equipment_ratios),
-        sell_order_account=np.zeros(sell_capacity, dtype=np.int32),
-        sell_order_entry=np.zeros(sell_capacity, dtype=np.int32),
-        sell_order_good=np.zeros(sell_capacity, dtype=np.int32),
-        sell_order_quantity=np.zeros(sell_capacity, dtype=np.float64),
-        sell_order_initial_quantity=np.zeros(sell_capacity, dtype=np.float64),
-        sell_order_remaining=np.zeros(sell_capacity, dtype=np.float64),
-        sell_order_backing=np.zeros(sell_capacity, dtype=np.float64),
-        sell_order_price=np.zeros(sell_capacity, dtype=np.float64),
-        sell_order_index=np.zeros(sell_capacity, dtype=np.int32),
-        sell_execution_seq=np.zeros(sell_capacity, dtype=np.int32),
+        seller_order=seller_order,
+        sell_offset=state.data['sell_offset'],
+        sell_good=state.data['sell_good'],
+        sell_ask_price=state.data['sell_ask_price'],
+        sell_ask_present=state.data['sell_ask_present'],
+        sell_subject=state.data['sell_subject'],
+        sell_input_ratio=state.data['sell_input_ratio'],
+        sell_equipment_ratio=state.data['sell_equipment_ratio'],
+        sell_order_account=buffer('sell_order_account', (capacity,), np.int32, 0),
+        sell_order_entry=buffer('sell_order_entry', (capacity,), np.int32, 0),
+        sell_order_good=buffer('sell_order_good', (capacity,), np.int32, 0),
+        sell_order_quantity=buffer('sell_order_quantity', (capacity,), np.float64, 0),
+        sell_order_initial_quantity=buffer('sell_order_initial_quantity',
+                                           (capacity,), np.float64, 0),
+        sell_order_remaining=buffer('sell_order_remaining', (capacity,), np.float64, 0),
+        sell_order_backing=buffer('sell_order_backing', (capacity,), np.float64, 0),
+        sell_order_price=buffer('sell_order_price', (capacity,), np.float64, 0),
+        sell_order_index=buffer('sell_order_index', (capacity,), np.int32, 0),
+        sell_execution_seq=buffer('sell_execution_seq', (capacity,), np.int32, 0),
         sell_order_count=0,
         initial_order_count=len(engine.report['orders']),
-        account_state=_int32([state_index[a['state_id']] for a in accounts]),
-        account_province=_int32([province_index[engine.market_province(a)] for a in accounts]),
-        account_tile=_int32([tile_index[engine.market_tile(a)] for a in accounts]),
-        account_balance=_float64([a['balance'] for a in accounts]),
-        account_money_reserved=_float64([a.get('reserved', 0) for a in accounts]),
-        account_protected=_float64([a.get('protected', 0) for a in accounts]),
-        account_population=_float64([engine.population(a) for a in accounts]),
-        household_order=_int32(household_order),
-        household_basic_good=_int32([good_index[g] for g in basic_goods]),
-        household_basic_rate=_float64([engine.cfg['basic_needs'][g] for g in basic_goods]),
-        household_basic_rate_by_good=_float64([engine.cfg['basic_needs'].get(g, 0) for g in goods]),
-        household_extra_good=_int32([good_index[g] for g in extra_goods]),
-        household_extra_rate=_float64([engine.cfg['extra_needs'][g] for g in extra_goods]),
+        account_state=state.data['account_state'],
+        account_province=state.data['account_province'],
+        account_tile=state.data['account_tile'],
+        account_balance=state.data['account_balance'],
+        account_money_reserved=state.data['account_money_reserved'],
+        account_protected=state.data['account_protected'],
+        account_population=state.data['account_population'],
+        household_order=household_order,
+        household_basic_good=static['household_basic_good'],
+        household_basic_rate=static['household_basic_rate'],
+        household_basic_rate_by_good=static['household_basic_rate_by_good'],
+        household_extra_good=static['household_extra_good'],
+        household_extra_rate=static['household_extra_rate'],
         basic_budget_revision=bool(engine.BASIC_BUDGET_REVISION),
-        household_quote_ceiling=np.zeros((len(accounts), len(goods)), dtype=np.float64),
-        household_offer_index=np.zeros(sell_capacity, dtype=np.int32),
-        household_offer_landed=np.zeros(sell_capacity, dtype=np.float64),
-        household_sort_good=np.zeros(len(basic_goods), dtype=np.int32),
-        household_request_account=np.zeros(household_capacity, dtype=np.int32),
-        household_request_good=np.zeros(household_capacity, dtype=np.int32),
-        household_request_needed=np.zeros(household_capacity, dtype=np.float64),
-        household_request_missing=np.zeros(household_capacity, dtype=np.float64),
-        household_request_price=np.zeros(household_capacity, dtype=np.float64),
-        household_request_fraction=np.zeros(household_capacity, dtype=np.float64),
-        household_request_basic=np.zeros(household_capacity, dtype=np.uint8),
-        household_order_quantity=np.zeros(household_capacity, dtype=np.float64),
-        household_order_reserved=np.zeros(household_capacity, dtype=np.float64),
-        household_budget_price=np.zeros(household_capacity, dtype=np.float64),
-        household_unfunded=np.zeros(household_capacity, dtype=np.uint8),
-        household_order_index=np.full(household_capacity, -1, dtype=np.int32),
-        household_execution_seq=np.full(household_capacity, -1, dtype=np.int32),
+        household_quote_ceiling=buffer('household_quote_ceiling',
+            (len(accounts), len(goods)), np.float64, 0),
+        household_offer_index=buffer('household_offer_index', (capacity,), np.int32, 0),
+        household_offer_landed=buffer('household_offer_landed', (capacity,), np.float64, 0),
+        household_sort_good=buffer('household_sort_good', (len(basic_goods),), np.int32, 0),
+        household_request_account=buffer('household_request_account',
+                                         (household_capacity,), np.int32, 0),
+        household_request_good=buffer('household_request_good',
+                                      (household_capacity,), np.int32, 0),
+        household_request_needed=buffer('household_request_needed',
+                                        (household_capacity,), np.float64, 0),
+        household_request_missing=buffer('household_request_missing',
+                                         (household_capacity,), np.float64, 0),
+        household_request_price=buffer('household_request_price',
+                                       (household_capacity,), np.float64, 0),
+        household_request_fraction=buffer('household_request_fraction',
+                                          (household_capacity,), np.float64, 0),
+        household_request_basic=buffer('household_request_basic',
+                                       (household_capacity,), np.uint8, 0),
+        household_order_quantity=buffer('household_order_quantity',
+                                        (household_capacity,), np.float64, 0),
+        household_order_reserved=buffer('household_order_reserved',
+                                        (household_capacity,), np.float64, 0),
+        household_budget_price=buffer('household_budget_price',
+                                      (household_capacity,), np.float64, 0),
+        household_unfunded=buffer('household_unfunded',
+                                  (household_capacity,), np.uint8, 0),
+        household_order_index=buffer('household_order_index',
+                                     (household_capacity,), np.int32, -1),
+        household_execution_seq=buffer('household_execution_seq',
+                                       (household_capacity,), np.int32, -1),
         household_request_count=0,
         household_order_count_created=household_capacity,
-        demand_order_good=_int32([good_index[o['good']] for o in demand_orders]
-                                 +[0]*(demand_capacity-len(demand_orders))),
-        demand_order_participant=_int32([account_index[o['participant']] for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
-        demand_order_tile=_int32([tile_index[o['tile_id']] for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
-        demand_order_price=_float64(demand_field('price')),
-        demand_order_remaining=_float64(demand_field('remaining')),
-        demand_order_reserved=_float64(demand_field('reserved')),
-        demand_order_active=_uint8([o['status'] not in ('cancelled', 'expired') for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
-        demand_order_final=_uint8(demand_field('final_consumption', False)),
-        demand_order_construction=_uint8([o['purpose'] == 'Строительные материалы' for o in demand_orders]+[0]*(demand_capacity-len(demand_orders))),
+        demand_order_good=state.data['demand_order_good'],
+        demand_order_participant=state.data['demand_order_participant'],
+        demand_order_tile=state.data['demand_order_tile'],
+        demand_order_price=state.data['demand_order_price'],
+        demand_order_remaining=state.data['demand_order_remaining'],
+        demand_order_reserved=state.data['demand_order_reserved'],
+        demand_order_active=state.data['demand_order_active'],
+        demand_order_final=state.data['demand_order_final'],
+        demand_order_construction=state.data['demand_order_construction'],
         demand_order_count=len(demand_orders),
         project_capacity=_float64(project_capacity),
         project_working=_float64(project_working),
         project_delivery=_float64(project_delivery),
         project_tile=_int32(project_tiles),
-        construction_good=_int32(construction_goods),
-        construction_ratio=_float64(construction_values),
-        construction_amount=_float64(construction_amounts),
+        construction_good=static['construction_good'],
+        construction_ratio=static['construction_ratio'],
+        construction_amount=static['construction_amount'],
         minimum_capacity=float(engine.cfg['minimum_capacity']),
-        owner_order=_int32(owner_order),
-        owner_basket_good=_int32(owner_basket),
+        owner_order=owner_order,
+        owner_basket_good=static['owner_basket_good'],
         owner_consumption_rate=float(engine.cfg['owner_consumption_rate']),
         owner_family_size=float(engine.OWNER_FAMILY_SIZE),
         owner_food_quality=float(engine.OWNER_FOOD_QUALITY),
-        owner_account=np.zeros(len(owner_order), dtype=np.int32),
-        owner_project_reserve=np.zeros(len(owner_order), dtype=np.float64),
-        owner_free_cash=np.zeros(len(owner_order), dtype=np.float64),
-        owner_budget=np.zeros(len(owner_order), dtype=np.float64),
-        owner_request_good=np.zeros(owner_capacity, dtype=np.int32),
-        owner_order_quantity=np.zeros(owner_capacity, dtype=np.float64),
-        owner_order_reserved=np.zeros(owner_capacity, dtype=np.float64),
-        owner_order_price=np.zeros(owner_capacity, dtype=np.float64),
-        owner_order_index=np.full(owner_capacity, -1, dtype=np.int32),
-        owner_execution_seq=np.full(owner_capacity, -1, dtype=np.int32),
+        owner_account=buffer('owner_account', (len(owner_order),), np.int32, 0),
+        owner_project_reserve=buffer('owner_project_reserve',
+                                     (len(owner_order),), np.float64, 0),
+        owner_free_cash=buffer('owner_free_cash', (len(owner_order),), np.float64, 0),
+        owner_budget=buffer('owner_budget', (len(owner_order),), np.float64, 0),
+        owner_request_good=buffer('owner_request_good', (owner_capacity,), np.int32, 0),
+        owner_order_quantity=buffer('owner_order_quantity', (owner_capacity,), np.float64, 0),
+        owner_order_reserved=buffer('owner_order_reserved', (owner_capacity,), np.float64, 0),
+        owner_order_price=buffer('owner_order_price', (owner_capacity,), np.float64, 0),
+        owner_order_index=buffer('owner_order_index', (owner_capacity,), np.int32, -1),
+        owner_execution_seq=buffer('owner_execution_seq', (owner_capacity,), np.int32, -1),
         owner_request_count=0,
         owner_order_count_created=0,
         public_request_account=_int32([row[0] for row in public_requests]),
@@ -558,69 +655,90 @@ def pack_update_prices(engine):
         public_request_purpose=_int32([row[5] for row in public_requests]),
         public_request_held=_float64([row[1][row[2]].get(goods[row[3]], 0)
                                       for row in public_requests]),
-        public_held=np.zeros(public_capacity, dtype=np.float64),
-        public_order_quantity=np.zeros(public_capacity, dtype=np.float64),
-        public_order_reserved=np.zeros(public_capacity, dtype=np.float64),
-        public_order_price=np.zeros(public_capacity, dtype=np.float64),
-        public_order_index=np.full(public_capacity, -1, dtype=np.int32),
-        public_release_request=np.zeros(public_release_capacity, dtype=np.int32),
-        public_release_sell=np.zeros(public_release_capacity, dtype=np.int32),
-        public_release_quantity=np.zeros(public_release_capacity, dtype=np.float64),
+        public_held=buffer('public_held', (public_capacity,), np.float64, 0),
+        public_order_quantity=buffer('public_order_quantity',
+                                     (public_capacity,), np.float64, 0),
+        public_order_reserved=buffer('public_order_reserved',
+                                     (public_capacity,), np.float64, 0),
+        public_order_price=buffer('public_order_price', (public_capacity,), np.float64, 0),
+        public_order_index=buffer('public_order_index', (public_capacity,), np.int32, -1),
+        public_release_request=buffer('public_release_request',
+                                      (public_release_capacity,), np.int32, 0),
+        public_release_sell=buffer('public_release_sell',
+                                   (public_release_capacity,), np.int32, 0),
+        public_release_quantity=buffer('public_release_quantity',
+                                       (public_release_capacity,), np.float64, 0),
         public_release_count=0,
         public_order_count_created=0,
-        recovery_equipment_offset=_int32(equipment_offsets),
-        recovery_equipment_good=_int32(equipment_goods),
-        recovery_equipment_value=_float64(equipment_values),
-        enterprise_owner=_int32([account_index[e['owner_id']] for e in enterprises]),
-        enterprise_account=_int32([account_index[e['id']] for e in enterprises]),
-        enterprise_available_from=_int32([e['available_from'] for e in enterprises]),
-        enterprise_sales_forecast=_float64([e['sales_forecast'] for e in enterprises]),
+        recovery_equipment_offset=static['recovery_equipment_offset'],
+        recovery_equipment_good=static['recovery_equipment_good'],
+        recovery_equipment_value=static['recovery_equipment_value'],
+        enterprise_owner=state.data['enterprise_owner'],
+        enterprise_account=state.data['enterprise_account'],
+        enterprise_available_from=state.data['enterprise_available_from'],
+        enterprise_sales_forecast=state.data['enterprise_sales_forecast'],
         enterprise_sold_now=_float64(_update_sold_now(engine, enterprises)),
-        enterprise_history_count=_int32([min(3, len(e.get('sales_history', []))) for e in enterprises]),
-        enterprise_history_sold=_float64([[h.get('sold', 0) for h in e.get('sales_history', [])[-3:]]+[0]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
-        enterprise_history_output=_float64([[h.get('output', 0) for h in e.get('sales_history', [])[-3:]]+[0]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
-        enterprise_previous_output=_float64([e.get('planned_output', 0) for e in enterprises]),
+        enterprise_history_count=state.data['enterprise_history_count'],
+        enterprise_history_sold=state.data['enterprise_history_sold'],
+        enterprise_history_output=state.data['enterprise_history_output'],
+        enterprise_previous_output=state.data['enterprise_previous_output'],
         enterprise_overhead_rate=float(engine.cfg.get('enterprise_overhead_rate', 0)),
         output_overstock_factor=float(engine.cfg['output_overstock_factor']),
         output_decline_rate=float(engine.cfg['output_decline_rate']),
         stock_planning_revision=int(engine.STOCK_PLANNING_REVISION),
         current_month=int(engine.meta['month']),
-        sell_active=np.ones(sell_capacity, dtype=np.uint8),
-        sell_remaining=np.zeros(sell_capacity, dtype=np.float64),
-        demand_group_participant=np.zeros(demand_capacity, dtype=np.int32),
-        demand_group_tile=np.zeros(demand_capacity, dtype=np.int32),
-        demand_group_price=np.zeros(demand_capacity, dtype=np.float64),
-        demand_group_limit=np.zeros(demand_capacity, dtype=np.float64),
-        demand_group_freight=np.zeros(demand_capacity, dtype=np.float64),
-        demand_group_volume=np.zeros(demand_capacity, dtype=np.float64),
-        recovery_enterprise=np.full(len(enterprises), -1, dtype=np.int32),
-        recovery_transfer=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_hold=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_reopened=np.zeros(len(enterprises), dtype=np.uint8),
-        recovery_cancel_sell=np.full((len(enterprises), sell_capacity), -1, dtype=np.int32),
-        recovery_cancel_count=np.zeros(len(enterprises), dtype=np.int32),
+        sell_active=buffer('sell_active', (capacity,), np.uint8, 1),
+        sell_remaining=buffer('sell_remaining', (capacity,), np.float64, 0),
+        demand_group_participant=buffer('demand_group_participant',
+                                        (demand_capacity,), np.int32, 0),
+        demand_group_tile=buffer('demand_group_tile', (demand_capacity,), np.int32, 0),
+        demand_group_price=buffer('demand_group_price', (demand_capacity,), np.float64, 0),
+        demand_group_limit=buffer('demand_group_limit', (demand_capacity,), np.float64, 0),
+        demand_group_freight=buffer('demand_group_freight', (demand_capacity,), np.float64, 0),
+        demand_group_volume=buffer('demand_group_volume', (demand_capacity,), np.float64, 0),
+        recovery_enterprise=buffer('recovery_enterprise', (len(enterprises),), np.int32, -1),
+        recovery_transfer=buffer('recovery_transfer', (len(enterprises),), np.float64, 0),
+        recovery_hold=buffer('recovery_hold', (len(enterprises),), np.float64, 0),
+        recovery_reopened=buffer('recovery_reopened', (len(enterprises),), np.uint8, 0),
+        recovery_cancel_sell=buffer('recovery_cancel_sell',
+                                    (len(enterprises), capacity), np.int32, -1),
+        recovery_cancel_count=buffer('recovery_cancel_count',
+                                     (len(enterprises),), np.int32, 0),
         recovery_outlook_count=0,
-        recovery_debug_target=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_debug_demand=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_debug_margin=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_debug_required=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_debug_forecast=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_debug_expected=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_stock_cache_set=np.zeros(len(enterprises), dtype=np.uint8),
-        recovery_market_version=np.zeros((len(enterprises), len(goods)), dtype=np.int32),
+        recovery_debug_target=buffer('recovery_debug_target',
+                                     (len(enterprises),), np.float64, 0),
+        recovery_debug_demand=buffer('recovery_debug_demand',
+                                     (len(enterprises),), np.float64, 0),
+        recovery_debug_margin=buffer('recovery_debug_margin',
+                                     (len(enterprises),), np.float64, 0),
+        recovery_debug_required=buffer('recovery_debug_required',
+                                       (len(enterprises),), np.float64, 0),
+        recovery_debug_forecast=buffer('recovery_debug_forecast',
+                                       (len(enterprises),), np.float64, 0),
+        recovery_debug_expected=buffer('recovery_debug_expected',
+                                       (len(enterprises),), np.float64, 0),
+        recovery_stock_cache_set=buffer('recovery_stock_cache_set',
+                                        (len(enterprises),), np.uint8, 0),
+        recovery_market_version=buffer('recovery_market_version',
+                                       (len(enterprises), len(goods)), np.int32, 0),
         recovery_market_version_work=_int32([
             getattr(engine, '_market_quote_versions', {}).get(g, 0) for g in goods]),
-        recovery_expected_cost=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_expected_price=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_planned_price=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_fixed_cost=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_fixed_unit=np.zeros(len(enterprises), dtype=np.float64),
-        recovery_production_limit=np.zeros(len(enterprises), dtype=np.int32),
-        recovery_outlook_valid=np.zeros(len(enterprises), dtype=np.uint8),
-        enterprise_history_input_limited=_uint8([[bool(h.get('input_limited')) for h in e.get('sales_history', [])[-3:]]
-            +[False]*(3-min(3, len(e.get('sales_history', [])))) for e in enterprises]),
-        enterprise_trades_version=_int32([getattr(engine, '_trades_by_seller', {}).get(e['id'], 0)
-                                          for e in enterprises]),
+        recovery_expected_cost=buffer('recovery_expected_cost',
+                                      (len(enterprises),), np.float64, 0),
+        recovery_expected_price=buffer('recovery_expected_price',
+                                       (len(enterprises),), np.float64, 0),
+        recovery_planned_price=buffer('recovery_planned_price',
+                                      (len(enterprises),), np.float64, 0),
+        recovery_fixed_cost=buffer('recovery_fixed_cost',
+                                   (len(enterprises),), np.float64, 0),
+        recovery_fixed_unit=buffer('recovery_fixed_unit',
+                                   (len(enterprises),), np.float64, 0),
+        recovery_production_limit=buffer('recovery_production_limit',
+                                         (len(enterprises),), np.int32, 0),
+        recovery_outlook_valid=buffer('recovery_outlook_valid',
+                                      (len(enterprises),), np.uint8, 0),
+        enterprise_history_input_limited=state.data['enterprise_history_input_limited'],
+        enterprise_trades_version=state.data['enterprise_trades_version'],
     )
     meta = dict(subjects=subjects, ask_updates=ask_updates,
                 account_index=account_index, enterprise_index=enterprise_index,

@@ -2547,3 +2547,4 @@ cpdef evaluate_project_candidate(dict inv, dict sup, dict dyn, int investor,
 
 
 include "project_requests.pxi"
+include "update_state.pxi"
