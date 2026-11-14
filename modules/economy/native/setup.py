@@ -15,7 +15,10 @@ setup(
          Extension('offer_view', ['offer_view.pyx']),
          # Граница мутаций заявок: хранит живой список orders и не зависит ни
          # от представления, ни от stock-ядра.
-         Extension('order_store', ['order_store.pyx'])],
+         Extension('order_store', ['order_store.pyx']),
+         # Денежные колонки счетов: хранит живой словарь accounts и не зависит
+         # ни от заявок, ни от stock-ядра, ни от проектов.
+         Extension('cash_store', ['cash_store.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )

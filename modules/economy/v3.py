@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 
 from .support import EPS, EconomyServices
+from .native import cash_boundary as _cash
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import stock_boundary as _stock
@@ -1387,9 +1388,29 @@ class Economy(EconomyServices):
                 owner_consumption_tax=row['tax'], owner_consumption_freight=row['freight'])
 
     def transfer(self, sender, recipient, amount, reason):
+        """Перевод — единственная точка изменения ``balance``.
+
+        Проверки и арифметика те же, что в ``EconomyServices.transfer``, но
+        значения читает и пишет ``CashStore``: колонки остаются источником
+        истины, а словарь счёта получает зеркало. Дублирование тела нужно
+        потому, что ``super().transfer`` пишет в dict напрямую и обошёл бы
+        владельца полей. Порядок операций сохранён: проверка доступного
+        остатка, проверка конечности и знака, отсечение нуля, отсечение по
+        балансу, затем списание и зачисление.
+        """
         if amount > self.free_cash(sender)+EPS:
             raise ValueError('Деньги зарезервированы или недостаточны: '+sender)
-        return super().transfer(sender, recipient, amount, reason)
+        if not math.isfinite(amount) or amount < -EPS:
+            raise ValueError('Некорректный денежный перевод')
+        if amount <= 0:
+            return
+        cash = self.cash_store
+        balance = cash.get_balance(sender)
+        if amount > balance+EPS:
+            raise ValueError('Недостаточно золота для перевода')
+        amount = min(amount, balance)
+        cash.move_balance(sender, recipient, amount)
+        self.report['flows'].append(dict(sender=sender, recipient=recipient, gold=amount, reason=reason))
 
     def locked_material(self, account, good):
         a = self.accounts[account]
@@ -1627,6 +1648,22 @@ class Economy(EconomyServices):
             store = self._order_store = _order.OrderStore(orders)
         return store
 
+    @property
+    def cash_store(self):
+        """Единая граница денежных мутаций: живой словарь ``self.accounts``.
+
+        Хранилище не копирует счета: оно получает сам словарь и меняет
+        ``balance``/``reserved`` тех же словарей. Ссылка перепроверяется по
+        тождеству словаря — ``step`` пересобирает ``self.accounts`` сортировкой,
+        и без сверки граница писала бы в счета прошлого месяца. Горячие циклы
+        берут ссылку один раз на вызов.
+        """
+        accounts = self.accounts
+        store = self.__dict__.get('_cash_store')
+        if store is None or store.accounts is not accounts:
+            store = self._cash_store = _cash.CashStore(accounts)
+        return store
+
     def order(self, participant, good, quantity, side, price, purpose):
         if not math.isfinite(quantity) or not math.isfinite(price) or price <= 0 or quantity < 0:
             raise ValueError('Некорректная заявка')
@@ -1648,7 +1685,7 @@ class Economy(EconomyServices):
             state_id=a['state_id'], province_id=self.market_province(a), tile_id=self.market_tile(a),
             reserved=quantity*price if side == 'buy' else 0, backing=quantity*price if side == 'buy' else quantity)
         if side == 'buy':
-            a['reserved'] = a.get('reserved', 0)+o['reserved']
+            self.cash_store.add_reserved_cash(participant, o['reserved'])
         else:
             a.setdefault('stock_reserved', {})[good] = a.get('stock_reserved', {}).get(good, 0)+quantity
         self.order_store.append(o)
@@ -1685,7 +1722,7 @@ class Economy(EconomyServices):
         # границу берётся один раз, а не на каждое поле.
         store = self.order_store
         if order['side'] == 'buy':
-            a['reserved'] = max(0, a.get('reserved', 0)-order['reserved'])
+            self.cash_store.release_reserved_cash(order['participant'], order['reserved'])
             store.set_reserved(order, 0.0)
             self._demand_revision[order['good']] += 1
         else:
@@ -2030,7 +2067,7 @@ class Economy(EconomyServices):
         price = min(quote, ceiling, budget/buy['remaining'])
         if price > buy['price']+EPS:
             extra = buy['remaining']*(price-buy['price'])
-            a['reserved'] += extra
+            self.cash_store.add_reserved_cash(buy['participant'], extra)
             store = self.order_store
             store.set_reserved(buy, buy['reserved']+extra)
             buy.setdefault('initial_input_limit', buy['price'])
@@ -2048,6 +2085,9 @@ class Economy(EconomyServices):
         # Ссылка на границу берётся один раз на заявку: внутри цикла сделок
         # мутаций много, и property на каждую стоил бы дороже самой записи.
         store = self.order_store
+        # Денежная граница тоже одна на заявку: счета сдвигаются только между
+        # ходами, поэтому внутри цикла сделок тождество словаря не меняется.
+        cash = self.cash_store
         self.reprice_input_order(buy, sells)
         buyer = self.accounts[buy['participant']]
         if (buy.get('adaptive_household_budget') and buyer['kind'] == 'household'
@@ -2059,7 +2099,7 @@ class Economy(EconomyServices):
             price = max(buy['price'], min(ceiling, budget/buy['remaining']))
             if price > buy['price']+EPS:
                 extra = buy['remaining']*(price-buy['price'])
-                buyer['reserved'] += extra
+                cash.add_reserved_cash(buy['participant'], extra)
                 store.set_reserved(buy, buy['reserved']+extra)
                 buy.setdefault('initial_limit', buy['price'])
                 store.set_price(buy, price)
@@ -2096,7 +2136,9 @@ class Economy(EconomyServices):
                 # не затрагивая резервы других заявок и не меняя обычные сделки.
                 if q*price > self.free_cash(buy['participant'])+release+EPS:
                     release = min(buy['reserved'], max(release, q*price))
-                buyer['reserved'] = max(0, buyer['reserved']-release)
+                # Резерв счёта и резерв заявки — разные поля: первый освобождает
+                # исполненную часть, второй уменьшается на ту же сумму.
+                cash.release_reserved_cash(buy['participant'], release)
                 store.set_reserved(buy, max(0, buy['reserved']-release))
                 seller['stock_reserved'][buy['good']] = max(0, seller['stock_reserved'][buy['good']]-q)
                 value = self.use_stock(sell['participant'], buy['good'], q)
