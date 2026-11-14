@@ -8,6 +8,7 @@ from collections import defaultdict
 from .support import EPS, EconomyServices
 from .native import cash_boundary as _cash
 from .native import match_boundary as _match
+from .native import material_boundary as _material
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import stock_boundary as _stock
@@ -3191,37 +3192,8 @@ class Economy(EconomyServices):
             distance, _ = self.path(self.market_tile(a), loc['tile_id'])
             if distance is None:
                 continue
-            bill = self.construction_bill(project['capacity'])
-            delivery = sum(q*self.goods[g]['weight'] for g, q in bill.items())*distance*self.cfg['transport_rate']
-            project['delivery'] = delivery
-            # Сначала склад инвестора, затем площадка: обе перевозки реальны и входят в оценку.
-            a['protected'] = a.get('operating_protected', 0)+a.get('payroll_protected', 0)+project['working_cash']+delivery
-            if a['protected']+a.get('reserved', 0) > a['balance']+EPS:
-                a['protected'] = max(0, a['balance']-a.get('reserved', 0))
-            for g, quantity in bill.items():
-                held = project['materials'].get(g, 0)
-                assign = min(max(0, quantity-held), max(0, a['stock'].get(g, 0)-held))
-                release = max(0, assign-self.free_stock(a['id'], g))
-                for offer in sells.get(g, []):
-                    if offer['participant'] != a['id'] or offer['status'] in ('cancelled', 'expired'):
-                        continue
-                    take = min(release, offer['remaining'])
-                    if take <= EPS:
-                        continue
-                    # С рынка снимается только закреплённая часть, свободный остаток остаётся в продаже.
-                    offer['quantity'] -= take
-                    store.set_remaining(offer, offer['remaining']-take)
-                    offer['backing'] -= take
-                    a['stock_reserved'][g] = max(0, a['stock_reserved'].get(g, 0)-take)
-                    release -= take
-                    self.mark_market_quotes_dirty(g)
-                    if offer['remaining'] <= EPS:
-                        self.cancel_order(offer, 'Материалы закреплены за собственной стройкой')
-                assign = min(max(0, quantity-held), self.free_stock(a['id'], g))
-                project['materials'][g] = held+assign
-                missing = max(0, quantity-project['materials'][g])
-                _, price, _ = self.quoted_cost(a, g, missing, sells)
-                self.order(a['id'], g, missing, 'buy', price, 'Строительные материалы')
+            # Смета, доставка, защита денег и резерв материалов — в нативном срезе.
+            _material.request_project_materials(self, a, sells, EPS, store, distance)
 
     def finish_projects(self):
         for a in list(self.accounts.values()):
