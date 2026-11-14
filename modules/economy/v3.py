@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 
 from .support import EPS, EconomyServices
+from .native import cancel_boundary as _cancel
 from .native import cash_boundary as _cash
 from .native import delivery_boundary as _delivery
 from .native import match_boundary as _match
@@ -3182,16 +3183,10 @@ class Economy(EconomyServices):
             project = a.get('project')
             if not project:
                 continue
-            progress = sum(project['materials'].values())
-            if progress > project.get('progress_quantity', 0)+EPS:
-                project['last_progress'] = self.meta['month']
-            project['progress_quantity'] = progress
-            project.setdefault('last_progress', project['created'])
-            if self.meta['month']-project['last_progress'] >= self.cfg['project_stall_months']:
-                del a['project']
-                a['protected'] = a.get('operating_protected', 0)+a.get('payroll_protected', 0)
-                self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'],
-                    outcome='cancelled', reason='Стройка не продвигается'))
+            # Прогресс, порог простоя, причина и результат отмены — в нативном
+            # срезе: ядро обновляет progress-state и решает, отменять ли.
+            # Снятие проекта, protected и отчёт остаются хуком в границе.
+            if _cancel.cancel_stalled_project(self, a, EPS):
                 continue
             good = project['good']
             loc = project['location']
