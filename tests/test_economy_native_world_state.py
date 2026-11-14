@@ -281,7 +281,8 @@ def test_boundary_binds_compiled_class():
 
 
 def test_reference_state_has_the_same_surface():
-    for name in ('from_economy', 'sync', 'reset', 'snapshot_metadata'):
+    for name in ('from_economy', 'sync', 'reset', 'snapshot_metadata',
+                 'begin_step', 'end_step'):
         assert callable(getattr(world_boundary.WorldStatePython, name))
         assert callable(getattr(world_boundary.WorldState, name))
 
@@ -351,7 +352,280 @@ def test_world_state_does_not_change_game_values():
     assert game_digest(engine) == before
 
 
-# --- 7. Exact replay: состояние и RNG -----------------------------------
+# --- 7. Lifecycle native step -------------------------------------------
+class LifecycleSpy(world_boundary.WorldState):
+    """Контейнер, записывающий lifecycle-вызовы; поведение — родительское.
+
+    Наследник нужен, чтобы увидеть, сколько раз `step` открыл и закрыл шаг.
+    Собственных данных экономики он не заводит: только журнал вызовов.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+
+    def begin_step(self, economy):
+        self.calls.append(('begin', economy.meta['month']))
+        return super().begin_step(economy)
+
+    def end_step(self, economy, completed=True):
+        self.calls.append(('end', completed, economy.meta['month']))
+        return super().end_step(economy, completed=completed)
+
+
+def install_spy(engine):
+    """Поставить spy-контейнер в Economy до первого native-шага."""
+    spy = LifecycleSpy()
+    engine.__dict__['_world_state'] = spy
+    return spy
+
+
+def test_begin_step_called_once_per_native_step():
+    """Один native-шаг открывает lifecycle ровно один раз."""
+    engine = build_engine()
+    spy = install_spy(engine)
+    engine.step(native_mode='cython')
+    assert [call[0] for call in spy.calls] == ['begin', 'end']
+
+
+def test_end_step_called_once_after_successful_step():
+    """Успешный шаг закрывает lifecycle ровно один раз, с completed=True."""
+    engine = build_engine()
+    spy = install_spy(engine)
+    engine.step(native_mode='cython')
+    ends = [call for call in spy.calls if call[0] == 'end']
+    assert len(ends) == 1
+    assert ends[0][1] is True
+    assert spy.active is False
+    assert spy.completed_steps == 1
+    assert spy.aborted_steps == 0
+    assert spy.diagnostics['completed'] is True
+    assert spy.diagnostics['step'] == 1
+
+
+def test_lifecycle_runs_once_per_month():
+    """Три native-месяца — ровно три пары begin/end и один контейнер."""
+    engine = build_engine()
+    spy = install_spy(engine)
+    for _ in range(3):
+        engine.step(native_mode='cython')
+    assert [call[0] for call in spy.calls] == ['begin', 'end']*3
+    assert spy.step_index == 3
+    assert spy.completed_steps == 3
+    assert spy.aborted_steps == 0
+    assert engine.world_state is spy
+
+
+def test_python_mode_does_not_create_world_state():
+    """Python mode не создаёт контейнер: свойство остаётся ленивым."""
+    engine = build_engine()
+    engine.step()
+    assert '_world_state' not in engine.__dict__
+
+
+def test_python_mode_does_not_touch_existing_container():
+    """Если контейнер уже был, Python mode не открывает и не закрывает шаг."""
+    engine = build_engine()
+    spy = install_spy(engine)
+    engine.step()
+    assert spy.calls == []
+    assert spy.active is False
+    assert spy.step_index == 0
+
+
+def test_mixed_modes_open_lifecycle_only_for_native():
+    """Чередование режимов: lifecycle идёт только на native-месяцах."""
+    engine = build_engine()
+    spy = install_spy(engine)
+    engine.step()
+    engine.step(native_mode='cython')
+    engine.step()
+    engine.step(native_mode='cython')
+    assert [call[0] for call in spy.calls] == ['begin', 'end', 'begin', 'end']
+    assert spy.completed_steps == 2
+
+
+def test_begin_step_during_step_binds_existing_stores():
+    """В момент начала шага контейнер смотрит на текущие хранилища движка."""
+    engine = build_engine()
+    spy = install_spy(engine)
+    captured = {}
+
+    class Probe(LifecycleSpy):
+        def begin_step(self, economy):
+            result = super().begin_step(economy)
+            captured['orders'] = self.orders
+            captured['cash'] = self.cash
+            captured['live_orders'] = self.orders.orders
+            captured['live_accounts'] = self.cash.accounts
+            return result
+
+    engine.__dict__['_world_state'] = Probe()
+    engine.step(native_mode='cython')
+    # Привязка идёт к тем объектам, которые `step` уже пересобрал для месяца.
+    assert captured['live_accounts'] is engine.accounts
+    assert captured['live_orders'] is engine.report['orders']
+    assert captured['orders'] is engine.order_store
+    assert captured['cash'] is engine.cash_store
+
+
+def test_begin_step_does_not_change_game_values():
+    """begin_step не меняет ни счета, ни заявки, ни RNG."""
+    engine = build_engine()
+    engine.step()
+    before = game_digest(engine)
+    state = engine.world_state
+    state.begin_step(engine)
+    assert game_digest(engine) == before
+    state.end_step(engine)
+
+
+def test_end_step_reports_rebound_layout():
+    """Между begin и end отчёт пересобрали: end_step перепривязывается."""
+    engine = build_engine()
+    state = engine.world_state
+    state.begin_step(engine)
+    old_orders = state.orders
+    engine.report['orders'] = list(engine.report['orders'])
+    state.end_step(engine)
+    assert state.orders is not old_orders
+    assert state.orders.orders is engine.report['orders']
+    assert state.diagnostics['rebound'] is True
+    assert state.completed_steps == 1
+
+
+def test_repeated_begin_without_end_is_rejected():
+    """Два begin подряд — ошибка вызывающего кода, а не тихая перезапись."""
+    engine = build_engine()
+    state = engine.world_state
+    state.begin_step(engine)
+    with pytest.raises(RuntimeError):
+        state.begin_step(engine)
+    state.end_step(engine)
+
+
+def test_end_without_begin_is_rejected():
+    engine = build_engine()
+    state = engine.world_state
+    with pytest.raises(RuntimeError):
+        state.end_step(engine)
+
+
+def test_exception_inside_step_leaves_container_healthy():
+    """Исключение в native-фазах: шаг закрыт, контейнер пригоден для нового хода."""
+    engine = build_engine()
+    spy = install_spy(engine)
+
+    class Boom(RuntimeError):
+        pass
+
+    def explode(*args, **kwargs):
+        raise Boom('сбой внутри шага')
+
+    original = engine.plan_enterprises
+    engine.plan_enterprises = explode
+    try:
+        with pytest.raises(Boom):
+            engine.step(native_mode='cython')
+    finally:
+        engine.plan_enterprises = original
+
+    # Шаг прерван, но флаг снят: следующий begin_step не упрётся в открытый шаг.
+    assert spy.active is False
+    assert spy.aborted_steps == 1
+    assert spy.completed_steps == 0
+    assert spy.diagnostics['completed'] is False
+    # Ссылки остались рабочими: контейнер смотрит на живые хранилища.
+    assert spy.orders is engine.order_store
+    assert spy.orders.orders is engine.report['orders']
+    assert spy.cash.accounts is engine.accounts
+    # Следующий ход проходит штатно и переиспользует тот же контейнер.
+    engine.step(native_mode='cython')
+    assert spy.active is False
+    assert spy.completed_steps == 1
+    assert engine.world_state is spy
+
+
+def test_warm_native_step_reuses_state():
+    """Повторный warm step не пересоздаёт контейнер и хранилища месяцев."""
+    engine = build_engine()
+    spy = install_spy(engine)
+    engine.step(native_mode='cython')
+    first_orders, first_cash = spy.orders, spy.cash
+    first_sequence = list(spy.calls)
+    engine.step(native_mode='cython')
+    assert engine.world_state is spy
+    assert len(spy.calls) == len(first_sequence)+2
+    assert spy.calls[:len(first_sequence)] == first_sequence
+    # Хранилища перепривязаны к новому месяцу, а не унаследованы от прошлого.
+    assert spy.orders is not first_orders
+    assert spy.cash is not first_cash
+    assert spy.orders.orders is engine.report['orders']
+    assert spy.cash.accounts is engine.accounts
+    assert spy.completed_steps == 2
+
+
+def test_deepcopy_has_independent_lifecycle():
+    """Копия движка не наследует открытый шаг и считает свои шаги.
+
+    Копия снимается с движка после Python-месяца: ``deepcopy`` движка с живым
+    native update state пока не поддержан (memoryview в его полях), и это
+    свойство самого update state, а не контейнера. Проверяется lifecycle.
+    """
+    engine = build_engine()
+    engine.step()
+    state = engine.world_state
+    state.begin_step(engine)
+    clone = copy.deepcopy(engine)
+    assert clone.world_state is not state
+    assert clone.world_state.active is False
+    assert clone.world_state.step_index == 0
+    assert clone.world_state.completed_steps == 0
+    # Шаг оригинала продолжается и закрывается независимо от копии.
+    state.end_step(engine)
+    assert state.completed_steps == 1
+    assert clone.world_state.completed_steps == 0
+    # Копия проходит свой ход на своих хранилищах, оригинал не меняется.
+    clone.step()
+    assert clone.world_state.orders.orders is clone.report['orders']
+    assert clone.world_state.cash.accounts is clone.accounts
+
+
+def test_lifecycle_does_not_change_game_values():
+    """WorldState не трогает значения: digest игры тот же до и после шага.
+
+    Native-фазы — единственный источник изменений месяца. Контейнер лишь
+    привязывается и закрывает шаг, поэтому повторный проход ``begin``/``end``
+    поверх готового месяца не должен сдвинуть ни одного числа и ни одного
+    байта RNG.
+    """
+    engine = build_engine()
+    engine.step(native_mode='cython')
+    before = game_digest(engine)
+    before_state = state_digest(engine)
+    state = engine.world_state
+    state.begin_step(engine)
+    state.end_step(engine)
+    assert game_digest(engine) == before
+    assert state_digest(engine) == before_state
+
+
+def test_snapshot_metadata_reports_lifecycle():
+    """Сводка показывает счётчики шагов, не выдавая живых объектов."""
+    engine = build_engine()
+    engine.step(native_mode='cython')
+    meta = engine.world_state.snapshot_metadata()
+    assert meta['active'] is False
+    assert meta['step_index'] == 1
+    assert meta['completed_steps'] == 1
+    assert meta['aborted_steps'] == 0
+    assert meta['diagnostics']['completed'] is True
+    diagnostics = _values(meta['diagnostics'])
+    assert engine.report['orders'] not in diagnostics
+    assert engine.accounts not in diagnostics
+
+
+# --- 8. Exact replay: состояние и RNG -----------------------------------
 def state_digest(engine):
     payload = {
         'accounts': {a['id']: a for a in engine.accounts.values()},
@@ -377,7 +651,7 @@ def game_digest(engine):
                                      default=str).encode('utf-8')).hexdigest()
 
 
-def run_world(seed, months, python_state=False):
+def run_world(seed, months, python_state=False, native_mode='cython'):
     """Прогон мира; при ``python_state`` контейнер берёт Python-эталон."""
     import scenario_runner as sr
     from audit.profile_run import workdir
@@ -387,13 +661,13 @@ def run_world(seed, months, python_state=False):
         saved = v3._world
         v3._world = types.SimpleNamespace(WorldState=world_boundary.WorldStatePython)
     try:
-        with workdir(f'world_state_{seed}_{python_state}') as directory:
+        with workdir(f'world_state_{seed}_{python_state}_{native_mode}') as directory:
             db, service = sr.build_world(seed, directory, report_detail='standard')
             try:
                 engine = service.economy_state().engine
                 digests = []
                 for _ in range(months):
-                    engine.step(native_mode='cython')
+                    engine.step(native_mode=native_mode)
                     engine.validate()
                     digests.append(state_digest(engine))
                 return digests, repr(engine.rng.getstate())
@@ -404,6 +678,23 @@ def run_world(seed, months, python_state=False):
             v3._world = saved
 
 
+def run_world_engine(seed, months):
+    """Прогнать реальный мир и вернуть живой движок (для проверки lifecycle)."""
+    import scenario_runner as sr
+    from audit.profile_run import workdir
+
+    with workdir(f'world_state_lifecycle_{seed}') as directory:
+        db, service = sr.build_world(seed, directory, report_detail='standard')
+        try:
+            engine = service.economy_state().engine
+            for _ in range(months):
+                engine.step(native_mode='cython')
+            engine.validate()
+            return engine
+        finally:
+            db.close()
+
+
 @pytest.mark.parametrize('seed', [17, 73129])
 def test_exact_replay_matches_python_reference(seed):
     """native-контейнер и Python-эталон дают одно состояние и один RNG."""
@@ -411,6 +702,20 @@ def test_exact_replay_matches_python_reference(seed):
     python_state, python_rng = run_world(seed, 3, python_state=True)
     assert native_state == python_state
     assert native_rng == python_rng
+
+
+@pytest.mark.parametrize('seed', [17, 73129])
+def test_lifecycle_runs_every_native_month_of_real_world(seed):
+    """В реальном мире каждый из трёх native-месяцев закрыл свой lifecycle."""
+    engine = run_world_engine(seed, 3)
+    state = engine.world_state
+    assert state.completed_steps == 3
+    assert state.aborted_steps == 0
+    assert state.active is False
+    assert state.step_index == 3
+    assert state.diagnostics['step'] == 3
+    assert state.orders.orders is engine.report['orders']
+    assert state.cash.accounts is engine.accounts
 
 
 @pytest.mark.parametrize('seed', [17, 73129])

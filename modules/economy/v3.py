@@ -3458,207 +3458,223 @@ class Economy(EconomyServices):
                 production_cost=0, input_limited=False, fixed_cost_due=0, fixed_cost_paid=0,
                 dividends=0.0, working_reserve=0.0, project_reserve=0.0,
                 equipment_wear={})
-        if native_mode == 'cython':
-            from .native.update_prices_boundary import run_native_public_projects, run_update_prices
-            if planning_mode == 'lagged_batch':
-                run_update_prices(self)
+        # Lifecycle единого WorldState. Контейнер не считает экономику: он
+        # лишь привязывается к уже существующим хранилищам на время native-
+        # фаз. В Python mode шаг не открывается и WorldState не создаётся:
+        # ленивое свойство остаётся единственным способом его получить.
+        world = self.world_state if native_mode == 'cython' else None
+        completed = False
+        if world is not None:
+            world.begin_step(self)
+        try:
+            if native_mode == 'cython':
+                from .native.update_prices_boundary import run_native_public_projects, run_update_prices
+                if planning_mode == 'lagged_batch':
+                    run_update_prices(self)
+                else:
+                    run_native_public_projects(self)
             else:
-                run_native_public_projects(self)
-        else:
-            self.update_prices()
-        lagged_plans = None
-        lagged_firms = ()
-        if planning_mode == 'lagged_batch':
-            from shadow.lagged_batch import apply_plans, build_snapshot, plan_all, publish_sales
+                self.update_prices()
+            lagged_plans = None
+            lagged_firms = ()
+            if planning_mode == 'lagged_batch':
+                from shadow.lagged_batch import apply_plans, build_snapshot, plan_all, publish_sales
+                phase_started = time.perf_counter()
+                snapshot = build_snapshot(self)
+                lagged_plans = plan_all(snapshot)
+                lagged_firms = snapshot.eligible
+                timings['lagged_snapshot_planning'] = time.perf_counter()-phase_started
+                self.report['planning_mode'] = planning_mode
+            elif native_mode != 'cython':
+                self.prepare_recovery_quotes()
+            # В lagged_batch стартовые склады фирм публикуются их intents ровно один
+            # раз; заявки остальных участников и сам sell_orders не меняются.
+            if native_mode == 'cython' and planning_mode != 'lagged_batch':
+                sells = self.native_market['sells']
+            else:
+                sells = self.sell_orders(exclude=lagged_firms)
+            if planning_mode == 'lagged_batch':
+                publish_sales(self, lagged_plans, sells)
+            detail = self.report_detail()
+            if native_mode == 'cython' and planning_mode != 'lagged_batch':
+                households = self.native_households['households']
+                food_trace = self.native_households['food_trace']
+            else:
+                households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')
+                food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS and detail == 'deep' else None
+                self.household_requests(households, self.cfg['basic_needs'], 'Базовые нужды', sells)
+                self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
+            if native_mode != 'cython' or planning_mode == 'lagged_batch':
+                self.owner_requests(sells)
+            if planning_mode != 'lagged_batch' and native_mode != 'cython':
+                self.recover_enterprises(sells)
+            if native_mode != 'cython':
+                self.public_project_requests(sells)
+            # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
+            if investment_mode == 'snapshot_batch':
+                from shadow.investment_batch import run_snapshot_batch
+                investment_timings = run_snapshot_batch(self, sells, workers=investment_workers)
+                timings.update(investment_timings)
+                self.report['investment_mode'] = investment_mode
+            elif investment_mode == 'async_snapshot_batch':
+                from shadow.investment_batch import run_async_snapshot_batch
+                async_snapshot = run_async_snapshot_batch(self, sells)
+                self.report['investment_mode'] = investment_mode
+            elif native_mode == 'cython':
+                from .native.update_prices_boundary import run_native_project_requests
+                run_native_project_requests(self, sells)
+            else:
+                self.project_requests(sells)
+            timings['preparation'] = time.perf_counter()-started
             phase_started = time.perf_counter()
-            snapshot = build_snapshot(self)
-            lagged_plans = plan_all(snapshot)
-            lagged_firms = snapshot.eligible
-            timings['lagged_snapshot_planning'] = time.perf_counter()-phase_started
-            self.report['planning_mode'] = planning_mode
-        elif native_mode != 'cython':
-            self.prepare_recovery_quotes()
-        # В lagged_batch стартовые склады фирм публикуются их intents ровно один
-        # раз; заявки остальных участников и сам sell_orders не меняются.
-        if native_mode == 'cython' and planning_mode != 'lagged_batch':
-            sells = self.native_market['sells']
-        else:
-            sells = self.sell_orders(exclude=lagged_firms)
-        if planning_mode == 'lagged_batch':
-            publish_sales(self, lagged_plans, sells)
-        detail = self.report_detail()
-        if native_mode == 'cython' and planning_mode != 'lagged_batch':
-            households = self.native_households['households']
-            food_trace = self.native_households['food_trace']
-        else:
-            households = self.shuffled(a for a in self.accounts.values() if a['kind'] == 'household')
-            food_trace = FoodDiagnostics(self, households, sells) if self.FOOD_DIAGNOSTICS and detail == 'deep' else None
-            self.household_requests(households, self.cfg['basic_needs'], 'Базовые нужды', sells)
-            self.household_requests(households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
-        if native_mode != 'cython' or planning_mode == 'lagged_batch':
-            self.owner_requests(sells)
-        if planning_mode != 'lagged_batch' and native_mode != 'cython':
-            self.recover_enterprises(sells)
-        if native_mode != 'cython':
-            self.public_project_requests(sells)
-        # Строительные заявки реальны и обеспечены до расчёта потребностей в сырье.
-        if investment_mode == 'snapshot_batch':
-            from shadow.investment_batch import run_snapshot_batch
-            investment_timings = run_snapshot_batch(self, sells, workers=investment_workers)
-            timings.update(investment_timings)
-            self.report['investment_mode'] = investment_mode
-        elif investment_mode == 'async_snapshot_batch':
-            from shadow.investment_batch import run_async_snapshot_batch
-            async_snapshot = run_async_snapshot_batch(self, sells)
-            self.report['investment_mode'] = investment_mode
-        elif native_mode == 'cython':
-            from .native.update_prices_boundary import run_native_project_requests
-            run_native_project_requests(self, sells)
-        else:
-            self.project_requests(sells)
-        timings['preparation'] = time.perf_counter()-started
-        phase_started = time.perf_counter()
-        if planning_mode == 'lagged_batch':
-            apply_plans(self, lagged_plans)
-            timings['lagged_apply'] = time.perf_counter()-phase_started
-        elif enterprise_planner is None:
-            self.plan_enterprises(existing, sells)
-        else:
-            enterprise_planner(self, existing, sells)
-        timings['planning_execution'] = time.perf_counter()-phase_started
-        phase_started = time.perf_counter()
-        buys = [o for o in self.report['orders'] if o['side'] == 'buy']
-        # Местная базовая потребность получает первый доступ к местному офферу.
-        # Второй общий проход сохраняет импорт, экспорт и обычную конкуренцию
-        # за весь невыкупленный остаток. Это правило применимо к любому товару
-        # из ``basic_needs``, а не к отдельно названному хлебу.
-        for buy in self.shuffled([o for o in buys if o['purpose'] == 'Базовые нужды']):
-            self.match(buy, sells, local_only=True)
-        # Внешний цикл покупателей — в Cython. Список уже перемешан здесь,
-        # поэтому порядок и расход RNG остаются прежними; книга, наблюдения и
-        # финализация вызываются как хуки движка, а обход книги выполняет
-        # существующий внутренний цикл.
-        _match.run_buyers(self, self.shuffled(buys), sells, EPS,
-            _trade.commit_trade, _match.run_match)
-        if self.HOUSEHOLD_TOP_UP_REVISION:
-            self.household_top_up(households, sells)
-        self.record_market()
-        if food_trace:
-            food_trace.clearing(self, sells)
-        self._planning_orders = [self._planning_order_snapshot(order)
-            for order in self.report['orders']]
-        planning_sells = self._planning_market_snapshot(sells)
-        # Снимок спроса сделан до поздних доходов; остатки заявок больше не блокируют кассу.
-        store = self.order_store
-        for o in self.report['orders']:
-            if o['side'] == 'buy':
-                o['reserved_at_clearing'] = o['reserved']
-            execution_status, execution_reason = o['status'], o['reason']
-            self.cancel_order(o, 'Окончание торгов месяца')
-            if o['status'] == 'cancelled':
-                store.set_status(o, 'expired')
-                o['execution_status'] = execution_status
-                o['reason'] = execution_reason or 'Окончание торгов месяца'
-        timings['market_tail'] = time.perf_counter()-phase_started
-        phase_started = time.perf_counter()
-        self.reserve_expedited_construction_labor()
-        self.produce(existing, planning_sells)
-        self.advance_public_projects()
-        self.finish_projects()
-        self.consume_owner_purchases()
-        for a in households:
-            for good, need in a.get('needs', {}).items():
-                consumed = min(need['needed'], self.free_stock(a['id'], good))
-                self.use_stock(a['id'], good, consumed)
-                need.update(consumed=consumed, deficit=need['needed']-consumed)
-                self.report['consumed'][good] = self.report['consumed'].get(good, 0)+consumed
-        # История продаж собирается одним проходом по книгам и сделкам. Раньше
-        # для каждой фирмы заново перебирались все заявки месяца, а для каждого
-        # слота склада — все сделки: 1,7 млн итераций за ход при 230 фирмах.
-        # Слагаемые по-прежнему складываются встроенным sum: в Python 3.12 он
-        # суммирует float с компенсацией погрешности, и простое накопление в
-        # словаре дало бы расхождение в последнем знаке, а оно меняет траекторию.
-        offers_by_firm = {}
-        for o in self.report['orders']:
-            if o['side'] != 'sell':
-                continue
-            offers_by_firm.setdefault((o['participant'], o['good']), []).append(o)
-        for e in self.enterprises.values():
-            offers = offers_by_firm.get((e['id'], e['good']), ())
-            e['sales_history'] = (e.get('sales_history', [])+[dict(month=self.meta['month'],
-                sold=sum(o['quantity']-o['remaining'] for o in offers),
-                offered=sum(o['quantity'] for o in offers), output=e['output'],
-                input_limited=e.get('input_limited', False),
-                additional_demand=e.get('reachable_demand', 0) > EPS)])[-3:]
-        trades_by_account = {}
-        for t in self.report['trades']:
-            trades_by_account.setdefault((t['seller'], t['good']), []).append(t['quantity'])
-        for a in self.accounts.values():
-            for good in a['stock']:
-                history = a.setdefault('stock_sales_history', {}).get(good, [])
-                a['stock_sales_history'][good] = (history+[dict(sold=sum(
-                    trades_by_account.get((a['id'], good), ())))])[-3:]
-            hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
-            a['protected'] = min(a['balance'], hold)
-        self.settle(list(self.enterprises.values()), households)
-        self.pay_dividends(planning_sells)
-        self.update_demography()
-        self.apply_migration()
-        for a in self.accounts.values():
-            a['project_reserve'] = self.project_cash_reserve(a['id'], planning_sells)
-        if detail != 'none':
-            self.report['diagnostics'].extend(self.report['investment_decisions'])
-            self.report['diagnostics'].extend(dict(kind='owner_consumption', **copy.deepcopy(row))
-                for row in self.report['owner_consumption'])
-        timings['production_settlement'] = time.perf_counter()-phase_started
-        phase_started = time.perf_counter()
-        if detail == 'none':
-            self.update_welfare()
-        else:
-            self.summarize(prior_cash)
-            self.report['account_flows'] = []
-            sectors = defaultdict(float)
-            incoming_by_account, outgoing_by_account = defaultdict(float), defaultdict(float)
-            for f in self.report['flows']:
-                incoming_by_account[f['recipient']] += f['gold']
-                outgoing_by_account[f['sender']] += f['gold']
+            if planning_mode == 'lagged_batch':
+                apply_plans(self, lagged_plans)
+                timings['lagged_apply'] = time.perf_counter()-phase_started
+            elif enterprise_planner is None:
+                self.plan_enterprises(existing, sells)
+            else:
+                enterprise_planner(self, existing, sells)
+            timings['planning_execution'] = time.perf_counter()-phase_started
+            phase_started = time.perf_counter()
+            buys = [o for o in self.report['orders'] if o['side'] == 'buy']
+            # Местная базовая потребность получает первый доступ к местному офферу.
+            # Второй общий проход сохраняет импорт, экспорт и обычную конкуренцию
+            # за весь невыкупленный остаток. Это правило применимо к любому товару
+            # из ``basic_needs``, а не к отдельно названному хлебу.
+            for buy in self.shuffled([o for o in buys if o['purpose'] == 'Базовые нужды']):
+                self.match(buy, sells, local_only=True)
+            # Внешний цикл покупателей — в Cython. Список уже перемешан здесь,
+            # поэтому порядок и расход RNG остаются прежними; книга, наблюдения и
+            # финализация вызываются как хуки движка, а обход книги выполняет
+            # существующий внутренний цикл.
+            _match.run_buyers(self, self.shuffled(buys), sells, EPS,
+                _trade.commit_trade, _match.run_match)
+            if self.HOUSEHOLD_TOP_UP_REVISION:
+                self.household_top_up(households, sells)
+            self.record_market()
+            if food_trace:
+                food_trace.clearing(self, sells)
+            self._planning_orders = [self._planning_order_snapshot(order)
+                for order in self.report['orders']]
+            planning_sells = self._planning_market_snapshot(sells)
+            # Снимок спроса сделан до поздних доходов; остатки заявок больше не блокируют кассу.
+            store = self.order_store
+            for o in self.report['orders']:
+                if o['side'] == 'buy':
+                    o['reserved_at_clearing'] = o['reserved']
+                execution_status, execution_reason = o['status'], o['reason']
+                self.cancel_order(o, 'Окончание торгов месяца')
+                if o['status'] == 'cancelled':
+                    store.set_status(o, 'expired')
+                    o['execution_status'] = execution_status
+                    o['reason'] = execution_reason or 'Окончание торгов месяца'
+            timings['market_tail'] = time.perf_counter()-phase_started
+            phase_started = time.perf_counter()
+            self.reserve_expedited_construction_labor()
+            self.produce(existing, planning_sells)
+            self.advance_public_projects()
+            self.finish_projects()
+            self.consume_owner_purchases()
+            for a in households:
+                for good, need in a.get('needs', {}).items():
+                    consumed = min(need['needed'], self.free_stock(a['id'], good))
+                    self.use_stock(a['id'], good, consumed)
+                    need.update(consumed=consumed, deficit=need['needed']-consumed)
+                    self.report['consumed'][good] = self.report['consumed'].get(good, 0)+consumed
+            # История продаж собирается одним проходом по книгам и сделкам. Раньше
+            # для каждой фирмы заново перебирались все заявки месяца, а для каждого
+            # слота склада — все сделки: 1,7 млн итераций за ход при 230 фирмах.
+            # Слагаемые по-прежнему складываются встроенным sum: в Python 3.12 он
+            # суммирует float с компенсацией погрешности, и простое накопление в
+            # словаре дало бы расхождение в последнем знаке, а оно меняет траекторию.
+            offers_by_firm = {}
+            for o in self.report['orders']:
+                if o['side'] != 'sell':
+                    continue
+                offers_by_firm.setdefault((o['participant'], o['good']), []).append(o)
+            for e in self.enterprises.values():
+                offers = offers_by_firm.get((e['id'], e['good']), ())
+                e['sales_history'] = (e.get('sales_history', [])+[dict(month=self.meta['month'],
+                    sold=sum(o['quantity']-o['remaining'] for o in offers),
+                    offered=sum(o['quantity'] for o in offers), output=e['output'],
+                    input_limited=e.get('input_limited', False),
+                    additional_demand=e.get('reachable_demand', 0) > EPS)])[-3:]
+            trades_by_account = {}
+            for t in self.report['trades']:
+                trades_by_account.setdefault((t['seller'], t['good']), []).append(t['quantity'])
             for a in self.accounts.values():
-                incoming = incoming_by_account[a['id']]
-                outgoing = outgoing_by_account[a['id']]
-                self.report['account_flows'].append(dict(id=a['id'], kind=a['kind'], incoming=incoming, outgoing=outgoing, net=incoming-outgoing))
-            for f in self.report['flows']:
-                sectors[self.accounts[f['sender']]['kind'], self.accounts[f['recipient']]['kind']] += f['gold']
-            self.report['sector_flows'] = [dict(sender_kind=s, recipient_kind=r, gold=q) for (s, r), q in sorted(sectors.items())]
-            self.report['gold_after'] = self.gold()
-            self.report['balances'] = {kind: sum(a['balance'] for a in self.accounts.values() if a['kind'] == kind) for kind in sorted({a['kind'] for a in self.accounts.values()})}
-            total_gold = self.gold()
-            self.report['money_shares'] = {kind: balance/total_gold if total_gold else 0
-                for kind, balance in self.report['balances'].items()}
-            self.report['diagnostics'].extend(dict(kind='money_share', sector=kind, balance=balance,
-                share=self.report['money_shares'][kind]) for kind, balance in self.report['balances'].items())
-            self.report['stocks'] = self.total_stock()
-            self.report['active_enterprises'] = sum(e['status'] == 'active' for e in self.enterprises.values())
-            self.report['open_enterprises'] = sum(e['status'] != 'closed' for e in self.enterprises.values())
-        self.persist_investment_state()
-        self.meta['rng_state'] = self.rng.getstate()
-        self.validate(before)
-        if food_trace:
-            self.report['food_diagnostics'] = food_trace.finish(self)
-        if detail == 'deep':
-            self.build_causal_events()
-        elif detail in ('standard', 'none'):
-            # Стандартный отчёт хранит результаты рынка, но не тяжёлый снимок
-            # каждой книги и не дублирующий слой причинных событий.
-            self.report['market_boards'] = []
-            self.report['events'] = []
-            for order in self.report['orders']:
-                order.pop('match_observation', None)
-        if investment_mode == 'async_snapshot_batch':
-            from shadow.investment_batch import schedule_async_investment
-            schedule_async_investment(self, async_snapshot)
-        timings['report'] = time.perf_counter()-phase_started
-        timings['wall'] = time.perf_counter()-started
-        self.phase_timings = timings
+                for good in a['stock']:
+                    history = a.setdefault('stock_sales_history', {}).get(good, [])
+                    a['stock_sales_history'][good] = (history+[dict(sold=sum(
+                        trades_by_account.get((a['id'], good), ())))])[-3:]
+                hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
+                a['protected'] = min(a['balance'], hold)
+            self.settle(list(self.enterprises.values()), households)
+            self.pay_dividends(planning_sells)
+            self.update_demography()
+            self.apply_migration()
+            for a in self.accounts.values():
+                a['project_reserve'] = self.project_cash_reserve(a['id'], planning_sells)
+            if detail != 'none':
+                self.report['diagnostics'].extend(self.report['investment_decisions'])
+                self.report['diagnostics'].extend(dict(kind='owner_consumption', **copy.deepcopy(row))
+                    for row in self.report['owner_consumption'])
+            timings['production_settlement'] = time.perf_counter()-phase_started
+            phase_started = time.perf_counter()
+            if detail == 'none':
+                self.update_welfare()
+            else:
+                self.summarize(prior_cash)
+                self.report['account_flows'] = []
+                sectors = defaultdict(float)
+                incoming_by_account, outgoing_by_account = defaultdict(float), defaultdict(float)
+                for f in self.report['flows']:
+                    incoming_by_account[f['recipient']] += f['gold']
+                    outgoing_by_account[f['sender']] += f['gold']
+                for a in self.accounts.values():
+                    incoming = incoming_by_account[a['id']]
+                    outgoing = outgoing_by_account[a['id']]
+                    self.report['account_flows'].append(dict(id=a['id'], kind=a['kind'], incoming=incoming, outgoing=outgoing, net=incoming-outgoing))
+                for f in self.report['flows']:
+                    sectors[self.accounts[f['sender']]['kind'], self.accounts[f['recipient']]['kind']] += f['gold']
+                self.report['sector_flows'] = [dict(sender_kind=s, recipient_kind=r, gold=q) for (s, r), q in sorted(sectors.items())]
+                self.report['gold_after'] = self.gold()
+                self.report['balances'] = {kind: sum(a['balance'] for a in self.accounts.values() if a['kind'] == kind) for kind in sorted({a['kind'] for a in self.accounts.values()})}
+                total_gold = self.gold()
+                self.report['money_shares'] = {kind: balance/total_gold if total_gold else 0
+                    for kind, balance in self.report['balances'].items()}
+                self.report['diagnostics'].extend(dict(kind='money_share', sector=kind, balance=balance,
+                    share=self.report['money_shares'][kind]) for kind, balance in self.report['balances'].items())
+                self.report['stocks'] = self.total_stock()
+                self.report['active_enterprises'] = sum(e['status'] == 'active' for e in self.enterprises.values())
+                self.report['open_enterprises'] = sum(e['status'] != 'closed' for e in self.enterprises.values())
+            self.persist_investment_state()
+            self.meta['rng_state'] = self.rng.getstate()
+            self.validate(before)
+            if food_trace:
+                self.report['food_diagnostics'] = food_trace.finish(self)
+            if detail == 'deep':
+                self.build_causal_events()
+            elif detail in ('standard', 'none'):
+                # Стандартный отчёт хранит результаты рынка, но не тяжёлый снимок
+                # каждой книги и не дублирующий слой причинных событий.
+                self.report['market_boards'] = []
+                self.report['events'] = []
+                for order in self.report['orders']:
+                    order.pop('match_observation', None)
+            if investment_mode == 'async_snapshot_batch':
+                from shadow.investment_batch import schedule_async_investment
+                schedule_async_investment(self, async_snapshot)
+            timings['report'] = time.perf_counter()-phase_started
+            timings['wall'] = time.perf_counter()-started
+            self.phase_timings = timings
+            completed = True
+        finally:
+            # Шаг закрывается и при исключении: контейнер обязан снять флаг и
+            # сохранить сводку, иначе следующий begin_step упрётся в открытый
+            # шаг. Значения игры здесь не трогаются, отката нет.
+            if world is not None:
+                world.end_step(self, completed=completed)
         return self.report
 
     def validate(self, before=None):
