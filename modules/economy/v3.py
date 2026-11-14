@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from .support import EPS, EconomyServices
 from .native import cash_boundary as _cash
+from .native import match_boundary as _match
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import stock_boundary as _stock
@@ -2109,33 +2110,12 @@ class Economy(EconomyServices):
         options = (self.offers(buyer, buy['good'], sells, local_only=True)
             if local_only else self.offers(buyer, buy['good'], sells))
         observation = self.observe_match(buy, sells, options)
-        # Равная полная цена не даёт постоянного преимущества одному ID. В
-        # памяти держим только текущую группу ничьей, а не копию всей книги.
-        ordered = iter(options)
-        pending = next(ordered, None)
-        while pending is not None:
-            price_level = pending[0]
-            tied = [pending]
-            pending = next(ordered, None)
-            while (pending is not None and math.isclose(price_level, pending[0],
-                    rel_tol=1e-12, abs_tol=1e-12)):
-                tied.append(pending)
-                pending = next(ordered, None)
-            for price, sell, quote in self.shuffled(tied, key=lambda row: row[1]['id']):
-                if price > buy['price']+EPS:
-                    continue
-                q = min(buy['remaining'], sell['remaining'], buy['reserved']/price,
-                    self.purchase_quantity(buy, sells))
-                if q <= EPS:
-                    continue
-                # Исполнение одной уже выбранной сделки — в Cython. Выбор
-                # offers, цена, количество q и весь цикл остаются здесь.
-                _trade.commit_trade(self, buy, sell, quote, q, price, EPS,
-                    cash, store)
-                if buy['remaining'] <= EPS:
-                    break
-            if buy['remaining'] <= EPS:
-                break
+        # Порядок offers, курсор first_live, tie-break, EPS, расчёт q и
+        # остановка при полном исполнении — в Cython-цикле. Тот же цикл
+        # вызывает существующий commit_trade; внешний цикл покупателей,
+        # выбор книги и наблюдения остаются здесь.
+        _match.run_match(self, buy, options, sells, EPS, cash, store,
+            _trade.commit_trade)
         store.set_status(buy, 'filled' if buy['remaining'] <= EPS else 'partial' if buy['remaining'] < buy['quantity'] else 'unfilled')
         self.finish_match_observation(buy, sells, observation)
         if buy['remaining'] > EPS:

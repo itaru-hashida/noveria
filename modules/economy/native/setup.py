@@ -21,7 +21,11 @@ setup(
          Extension('cash_store', ['cash_store.pyx']),
          # Исполнение одной уже выбранной сделки: получает ссылки на движок и
          # его границы, собственных полей не хранит и от прочих ядер не зависит.
-         Extension('trade_kernel', ['trade_kernel.pyx'])],
+         Extension('trade_kernel', ['trade_kernel.pyx']),
+         # Внутренний цикл одного buyer order: обходит готовый OfferView и
+         # вызывает переданный commit_trade. Порядок покупателей и книга
+         # остаются в Python, поэтому ядро не зависит от прочих расширений.
+         Extension('match_kernel', ['match_kernel.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )
