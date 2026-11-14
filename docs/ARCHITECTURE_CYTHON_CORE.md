@@ -76,6 +76,29 @@ events = core.drain_events()
 5. Enterprise planning.
 6. Остальные step-фазы и затем перенос владения state из Python в core.
 
+## Фактический прогресс
+
+Уже перенесено или подготовлено:
+
+- persistent update-prices state и packing buffers;
+- stock mutation kernel;
+- lazy project market support;
+- project requests batch;
+- OfferView и OrderStore для живых orders;
+- CashStore для balance/reserved mutations;
+- Cython commit одной сделки;
+- Cython inner buyer loop и внешний match driver;
+- EconomyCore command/event facade;
+- воспроизводимое uv-окружение.
+
+Переходный статус: часть compatibility views всё ещё читает Python dict, а
+некоторые boundary-функции сверяют внешний dict с Cython state. Это допустимо на
+этапе миграции, но не является финальным ownership.
+
+Следующая граница — связать market stores с полным trade execution, затем
+переносить production/consumption и material requests. Enterprise planning и
+новые API Godot не смешивать с этим срезом.
+
 Каждый этап должен иметь:
 
 - один стабильный Cython entry point;
