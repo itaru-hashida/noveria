@@ -136,6 +136,52 @@ class OrderStorePython:
         return (self.remaining[slot] > eps
                 and self.status[slot] not in ('cancelled', 'expired'))
 
+    def iter_live(self):
+        """Живая заявка вместе с номером её слота.
+
+        Слот стабилен: дописывание в хвост номера не сдвигает, а ``remove``
+        увеличивает ``version``, и тогда потребитель берёт слоты заново.
+        """
+        self.sync()
+        return ((order, slot) for slot, order in enumerate(self.orders))
+
+    def slots(self, orders):
+        """Номера слотов для книги одним вызовом; -1, если заявки нет.
+
+        Здесь же колонки догоняют словарь: нативные ветки ``update_prices_boundary``
+        пишут ``remaining``/``status`` прямо в dict в обход границы, и без сверки
+        представление увидело бы устаревшее значение. Сверяются только поля,
+        которые читает представление; ``reserved``/``price`` обход не читает.
+
+        Промах не сканирует список: заявка получает -1 и читается через свой
+        словарь. Скан был бы квадратичным на снимках planning-книг.
+        """
+        self.sync()
+        result = []
+        total = len(self.orders)
+        for order in orders:
+            slot = self.index.get(id(order), -1)
+            if slot < 0 or slot >= total or self.orders[slot] is not order:
+                self.index.pop(id(order), None)
+                result.append(-1)
+                continue
+            for field, column in (('remaining', self.remaining),
+                                  ('status', self.status)):
+                value = order[field]
+                current = column[slot]
+                # Сравнивается и тип: ``5`` и ``5.0`` равны по значению, но
+                # встроенный sum в Python 3.12 компенсирует погрешность только
+                # с float-стартом, поэтому подмена типа сдвинула бы отчёт.
+                if current is not value and (current != value
+                                             or type(current) is not type(value)):
+                    column[slot] = value
+            result.append(slot)
+        return result
+
+    def slot(self, order):
+        """Номер слота одной заявки или -1."""
+        return self._slot(order)
+
     def columns(self):
         self.sync()
         return dict(remaining=list(self.remaining), reserved=list(self.reserved),

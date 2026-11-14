@@ -6,6 +6,13 @@
 ``status``. Представление обязано читать именно эти объекты во время обхода,
 поэтому здесь нет ни снимка, ни собственной копии заявок — только курсор.
 
+Поля ``remaining``/``reserved``/``status``/``price`` принадлежат Cython-колонкам
+``OrderStore``. Книга строит номера слотов один раз (``book['slots']``) и
+хранит их рядом с тройками: обход читает колонку по номеру и не ищет
+``id(order)`` на каждом оффере. Заявка без слота — это снимок
+(``_planning_market_snapshot`` копирует заявки), и для неё единственный
+источник значений остаётся словарь самой заявки.
+
 Поведение повторяет генератор V3 буквально:
 
   * ``iter(view)`` каждый раз создаёт новый обход, начиная с сохранённого
@@ -20,6 +27,11 @@
 Возвращается та же тройка, что лежит в книге: ``sell`` и ``quote`` — исходные
 объекты, поэтому tie-break и landed price остаются такими же, какими их
 построила ``_market_book``.
+
+Номера слотов действительны, пока раскладка колонок не сдвинулась. Признак
+сдвига — ``store.version``: ``remove`` и пересборка колонок увеличивают его, и
+тогда представление пересчитывает номера для книги заново. Дописывание в хвост
+номеров не сдвигает, поэтому версия не меняется.
 """
 
 # EPS проекта; задаётся из Python-границы, чтобы не дублировать константу.
@@ -32,15 +44,24 @@ def set_epsilon(double eps):
     _EPS = eps
 
 
-cdef inline bint _is_live(object sell):
+cdef inline bint _is_live(object sell, Py_ssize_t slot, object remaining,
+                          object status):
     """Живость оффера: остаток выше допуска и статус не снят.
 
-    Значения читаются из живой заявки, а не из снимка: этим представление
-    и отличается от копии книги.
+    При неотрицательном слоте значения читаются из колонок хранилища, иначе из
+    словаря заявки: у снимка planning-книги колонок нет, и его словарь —
+    единственный источник.
     """
-    return (sell['remaining'] > _EPS
-            and sell['status'] != 'cancelled'
-            and sell['status'] != 'expired')
+    cdef object left, state
+    if slot >= 0:
+        left = <object>remaining[slot]
+        state = <object>status[slot]
+    else:
+        left = sell['remaining']
+        state = sell['status']
+    return (left > _EPS
+            and state != 'cancelled'
+            and state != 'expired')
 
 
 cdef class _OfferIterator:
@@ -55,6 +76,10 @@ cdef class _OfferIterator:
     cdef Py_ssize_t _stop
     cdef bint _started
     cdef bint _finished
+    # Колонки и номера слотов берутся из книги один раз на обход, а не на шаг.
+    cdef object _slots
+    cdef object _remaining
+    cdef object _status
 
     def __cinit__(self, object book, object buyer_id, object province_id,
                   bint local_only):
@@ -67,9 +92,43 @@ cdef class _OfferIterator:
         self._stop = 0
         self._started = False
         self._finished = False
+        self._slots = None
+        self._remaining = None
+        self._status = None
 
     def __iter__(self):
         return self
+
+    cdef void _bind(self, object options, Py_ssize_t limit):
+        """Взять колонки книги и проверить, что номера слотов ещё верны.
+
+        Сверка стоит одно чтение ``version`` на обход. Номера пересчитываются
+        только когда раскладка действительно сдвинулась (``remove`` или
+        пересборка колонок) либо книга пришла от другого хранилища. Обычный
+        случай — номера уже посчитаны при построении книги.
+        """
+        cdef object store = self._book.get('slot_store')
+        cdef object slots
+        if store is None:
+            self._slots = None
+            self._remaining = None
+            self._status = None
+            return
+        slots = self._book.get('slots')
+        if (slots is None or len(slots) != limit
+                or self._book.get('slot_version') != store.version):
+            slots = store.slots([<object>row[1] for row in options])
+            self._book['slots'] = slots
+            self._book['slot_version'] = store.version
+        self._slots = slots
+        self._remaining = store.remaining
+        self._status = store.status
+
+    cdef Py_ssize_t _slot_at(self, Py_ssize_t index):
+        """Номер слота оффера в позиции книги; -1 для снимка без колонок."""
+        if self._slots is None:
+            return -1
+        return <Py_ssize_t>self._slots[index]
 
     cdef void _begin(self):
         """Ленивый старт прохода: скан курсора и захват границы.
@@ -82,8 +141,12 @@ cdef class _OfferIterator:
         cdef Py_ssize_t first = <Py_ssize_t>self._book['first_live']
         cdef Py_ssize_t limit = len(options)
         self._started = True
+        if first > limit:
+            first = limit
+        self._bind(options, limit)
         while first < limit:
-            if _is_live(<object>(<object>options[first])[1]):
+            if _is_live(<object>(<object>options[first])[1], self._slot_at(first),
+                        self._remaining, self._status):
                 break
             first += 1
         self._book['first_live'] = first
@@ -93,19 +156,29 @@ cdef class _OfferIterator:
 
     def __next__(self):
         cdef object options
+        cdef object slots
+        cdef object remaining
+        cdef object status
         cdef object row
         cdef object sell
+        cdef Py_ssize_t slot
         if not self._started:
             self._begin()
         if self._finished:
             raise StopIteration
         options = self._options
+        slots = self._slots
+        remaining = self._remaining
+        status = self._status
         while self._index < self._stop:
             row = <object>options[self._index]
+            slot = -1
+            if slots is not None:
+                slot = <Py_ssize_t>slots[self._index]
             self._index += 1
             sell = <object>row[1]
             if (sell['participant'] != self._buyer_id
-                    and _is_live(sell)
+                    and _is_live(sell, slot, remaining, status)
                     and (not self._local_only
                          or sell['province_id'] == self._province_id)):
                 return row
@@ -117,7 +190,8 @@ cdef class OfferView:
     """Ленивое представление единой книги без копирования её офферов.
 
     Держит только ссылку на книгу и параметры покупателя; сами офферы
-    остаются живыми объектами книги.
+    остаются живыми объектами книги. Номера слотов и колонки приходят из
+    книги, поэтому представление не ищет ``id(order)`` на каждом шаге.
     """
 
     cdef public object book

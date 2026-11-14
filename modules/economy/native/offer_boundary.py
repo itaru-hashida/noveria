@@ -4,6 +4,12 @@
 а представление лишь читает её живые объекты заявок. Поэтому копий orders нет
 ни здесь, ни в extension.
 
+Поля заявок принадлежат Cython-колонкам ``OrderStore``. Книга хранит номера
+слотов рядом с тройками (``book['slots']`` и ``book['slot_store']``), поэтому
+обход читает колонку по номеру и не ищет ``id(order)`` на каждом оффере. Заявка
+без слота — это снимок planning-книги; для неё единственный источник значений
+остаётся её словарь.
+
 Эталонная Python-реализация живёт в этом же модуле и повторяет V3 буквально:
 она нужна как образец для focused-теста и как fallback, если расширение не
 собрано. Имена ``OfferView``/``iterator`` привязываются один раз при импорте,
@@ -28,6 +34,39 @@ def configure(eps):
         _view.set_epsilon(eps)
 
 
+def _columns(book):
+    """Колонки книги: (slots, remaining, status) или None для снимка.
+
+    Номера считаются один раз — при построении книги или первом обходе. Сверка
+    с ``version`` нужна только после сдвига раскладки (``remove``/пересборка) и
+    после подмены хранилища; она стоит одно чтение поля на обход.
+    """
+    store = book.get('slot_store')
+    if store is None:
+        return None
+    options = book['options']
+    slots = book.get('slots')
+    if (slots is None or len(slots) != len(options)
+            or book.get('slot_version') != store.version):
+        slots = store.slots([row[1] for row in options])
+        book['slots'] = slots
+        book['slot_version'] = store.version
+    return slots, store.remaining, store.status
+
+
+def _is_live(sell, slot, remaining, status):
+    """Живость оффера: остаток выше допуска и статус не снят.
+
+    При неотрицательном слоте значения читаются из колонок хранилища, иначе из
+    словаря заявки: у снимка колонок нет.
+    """
+    if slot >= 0:
+        left, state = remaining[slot], status[slot]
+    else:
+        left, state = sell['remaining'], sell['status']
+    return left > _EPS and state not in ('cancelled', 'expired')
+
+
 class OfferViewPython:
     """Эталон V3: ленивое представление книги без копирования офферов."""
 
@@ -38,18 +77,26 @@ class OfferViewPython:
         self.local_only = local_only
 
     def __iter__(self):
-        options = self.book['options']
-        first = self.book['first_live']
-        while first < len(options):
+        book = self.book
+        options = book['options']
+        first = book['first_live']
+        columns = _columns(book)
+        slots, remaining, status = columns if columns is not None else (None, None, None)
+        limit = len(options)
+        if first > limit:
+            first = limit
+        while first < limit:
             sell = options[first][1]
-            if _is_live(sell):
+            slot = slots[first] if slots is not None else -1
+            if _is_live(sell, slot, remaining, status):
                 break
             first += 1
-        self.book['first_live'] = first
-        for index in range(first, len(options)):
+        book['first_live'] = first
+        for index in range(first, limit):
             price, sell, quote = options[index]
+            slot = slots[index] if slots is not None else -1
             if (sell['participant'] != self.buyer_id
-                    and _is_live(sell)
+                    and _is_live(sell, slot, remaining, status)
                     and (not self.local_only
                          or sell['province_id'] == self.province_id)):
                 yield price, sell, quote
@@ -64,12 +111,6 @@ class OfferViewPython:
             if current == index:
                 return row
         raise IndexError(index)
-
-
-def _is_live(sell):
-    """Живость оффера: остаток выше допуска и статус не снят."""
-    return (sell['remaining'] > _EPS
-            and sell['status'] not in ('cancelled', 'expired'))
 
 
 def load_offer_view():

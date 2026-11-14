@@ -29,6 +29,12 @@ Python-dict, чтобы весь остальной код продолжал ч
 ``_OfferIterator`` берёт у хранилища ссылки на ``index``/``remaining``/``status``
 один раз на обход и дальше читает колонки напрямую. Поэтому представление
 видит мутацию сразу и не платит за границу на каждом шаге.
+
+Слот заявки можно получить вместе со ссылкой: ``iter_live()`` выдаёт пары
+``(order, slot)``, а ``slots(orders)`` разрешает номера пачкой за один вызов.
+``OfferView`` получает готовый номер при построении книги и дальше читает
+колонки по нему: ``id(order)``-поиска в горячем цикле обхода нет. Слот
+действителен, пока раскладка не сдвинулась; признак сдвига — ``version``.
 """
 
 import copy
@@ -43,6 +49,19 @@ def set_epsilon(double eps):
     """Зафиксировать EPS проекта для проверки живости оффера."""
     global _EPS
     _EPS = eps
+
+
+def _pairs(object orders):
+    """Ленивые пары ``(order, slot)`` без промежуточного списка.
+
+    Модульный генератор, а не генератор-метод: так объект хранилища не держит
+    кадр обхода и не продлевает жизнь заявкам, если потребитель остановился
+    посередине.
+    """
+    cdef Py_ssize_t slot = 0
+    for order in orders:
+        yield order, slot
+        slot += 1
 
 
 cdef class OrderStore:
@@ -248,6 +267,85 @@ cdef class OrderStore:
         if slot >= 0:
             self.price[slot] = value
         order['price'] = value
+
+    # --- выдача слотов -----------------------------------------------------
+    def iter_live(self):
+        """Живая заявка вместе с её стабильным номером слота.
+
+        Пара ``(order, slot)`` — та же заявка и номер её колонок. Слот стабилен:
+        дописывание в хвост номера не сдвигает, а ``remove`` и пересборка
+        колонок увеличивают ``version``, и тогда потребитель обязан взять слоты
+        заново. Выравнивание колонок выполняется сразу, обход — ленивый.
+        """
+        self._sync()
+        return _pairs(self.orders)
+
+    cpdef list slots(self, object orders):
+        """Номера слотов для книги одним вызовом; -1, если заявки нет.
+
+        Это единственное место, где номер передаётся потребителю: разрешение
+        делается один раз на книгу, а не на оффер обхода. Внутри идёт обращение
+        к ``index`` по ``id``, но это не горячий цикл обхода: за месяц книг
+        ~600 при ~46 тысячах офферов, тогда как шагов обхода — сотни тысяч.
+
+        Здесь же колонки догоняют словарь. Нативные ветки
+        ``update_prices_boundary`` пишут ``remaining``/``status`` прямо в dict в
+        обход границы (файл вне этого изменения), и без сверки представление
+        увидело бы устаревшее значение.
+
+        Промах не запускает скан по всему списку: устаревшая запись ``index``
+        удаляется, а заявка получает -1 и читается через словарь. Скан здесь
+        был бы квадратичным на снимках planning-книг, чьи адреса переиспользуют
+        освободившиеся заявки.
+        """
+        self._sync()
+        cdef Py_ssize_t slot, total = len(self.orders), count = len(orders), i
+        cdef list result = [None]*count
+        cdef object index = self.index
+        cdef object own = self.orders
+        cdef object order, found
+        for i in range(count):
+            order = <object>orders[i]
+            found = index.get(id(order))
+            if found is not None:
+                slot = <Py_ssize_t>found
+                if slot < total and <object>own[slot] is order:
+                    self._adopt(slot, order)
+                    result[i] = found
+                    continue
+                index.pop(id(order), None)
+            result[i] = -1
+        return result
+
+    cdef int _adopt(self, Py_ssize_t slot, object order) except -1:
+        """Подтянуть колонки к словарю заявки перед построением книги.
+
+        Граница пишет колонку и сразу повторяет значение в dict, поэтому dict
+        не бывает старее колонки. Обратное возможно только после прямой записи
+        в обход границы (``update_prices_boundary`` — файл вне этого
+        изменения); здесь она и подхватывается.
+
+        Сверяются только поля, которые читает представление: остаток и статус.
+        ``reserved``/``price`` обход не читает, поэтому их сверка была бы
+        платой за оффер без пользы для выдачи.
+
+        Сравнивается и тип: ``5`` и ``5.0`` равны по значению, но встроенный
+        ``sum`` в Python 3.12 компенсирует погрешность только с float-стартом,
+        поэтому подмена типа сдвинула бы последние биты отчёта.
+        """
+        cdef object value
+        value = order['remaining']
+        if self.remaining[slot] is not value:
+            if self.remaining[slot] != value or type(self.remaining[slot]) is not type(value):
+                self.remaining[slot] = value
+        value = order['status']
+        if self.status[slot] is not value:
+            self.status[slot] = value
+        return 0
+
+    def slot(self, object order):
+        """Номер слота одной заявки или -1."""
+        return self._slot(order)
 
     # --- чтение для представления и проверок ------------------------------
     cpdef bint is_live(self, object order, double eps):

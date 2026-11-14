@@ -1823,6 +1823,15 @@ class Economy(EconomyServices):
         key = (id(sell_list), self.market_tile(buyer), good)
         entry = books.get(key)
         if entry is not None and entry['source'] is sell_list:
+            # Книга переживает замену хранилища (например, отчёт заменили), а
+            # номера слотов принадлежат конкретному OrderStore. Ссылка берётся
+            # прямо из __dict__, без property: попадание книги бывает десятки
+            # тысяч раз за месяц, и проверка через property стоила бы дороже
+            # самого чтения. При подмене номера пересчитываются.
+            if entry.get('slot_store') is not self.__dict__.get('_order_store'):
+                entry['slot_store'] = self.__dict__.get('_order_store')
+                entry['slots'] = None
+                entry['slot_version'] = None
             if record and entry['board_id'] is None:
                 self._record_market_board(entry, buyer, good)
             return entry
@@ -1850,7 +1859,10 @@ class Economy(EconomyServices):
                        for _, price, sell, quote in heapq.merge(*streams, key=lambda item: item[0])]
         entry = dict(source=sell_list, options=options,
             quotes={sell['id']: quote for _, sell, quote in options},
-            board_id=None, first_live=0)
+            board_id=None, first_live=0,
+            # Книга запоминает хранилище, из которого пришли слоты заявок:
+            # представление читает колонки по номерам, а не по id(order).
+            slot_store=self.order_store, slots=None, slot_version=None)
         books[key] = entry
         self._market_books = books
         if record:
