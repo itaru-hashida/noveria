@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from .support import EPS, EconomyServices
 from .native import offer_boundary as _offer
+from .native import order_boundary as _order
 from .native import stock_boundary as _stock
 from .food_diagnostics import FoodDiagnostics
 
@@ -78,6 +79,10 @@ class Economy(EconomyServices):
         self._market_quotes_epoch = 0
         self._trades_by_seller = defaultdict(int)
         super().reset_report()
+        # Граница заявок держит живой список report['orders']: у нового отчёта
+        # новый список, поэтому ссылку надо взять заново, иначе мутации уходили
+        # бы в заявки прошлого месяца.
+        self._order_store = _order.OrderStore(self.report['orders'])
         if self.report_detail() == 'none':
             self.report.pop('provinces', None)
             self.report.pop('prices', None)
@@ -1438,6 +1443,7 @@ class Economy(EconomyServices):
             return held
         assign = min(wanted, max(0, account['stock'].get(good, 0)-self.locked_material(account['id'], good)))
         release = max(0, assign-self.free_stock(account['id'], good))
+        store = self.order_store
         for offer in sells.get(good, []):
             if release <= EPS:
                 break
@@ -1445,7 +1451,7 @@ class Economy(EconomyServices):
                 continue
             take = min(release, offer['remaining'])
             offer['quantity'] -= take
-            offer['remaining'] -= take
+            store.set_remaining(offer, offer['remaining']-take)
             offer['backing'] -= take
             account['stock_reserved'][good] = max(0, account['stock_reserved'].get(good, 0)-take)
             release -= take
@@ -1605,6 +1611,22 @@ class Economy(EconomyServices):
             raise ValueError('Товар уже закреплён за продажей или стройкой')
         return _stock.use_stock(self, account, good, quantity)
 
+    @property
+    def order_store(self):
+        """Единая граница мутаций заявок: живой список ``report['orders']``.
+
+        Хранилище не копирует заявки: оно получает сам список и меняет поля
+        тех же словарей. Ссылка живёт месяц и перепроверяется по тождеству
+        списка — если отчёт заменили, граница пересоздаётся, иначе она писала
+        бы в список прошлого месяца. Горячие циклы берут ссылку один раз на
+        вызов, чтобы не платить property на каждую мутацию.
+        """
+        orders = self.report['orders']
+        store = self.__dict__.get('_order_store')
+        if store is None or store.orders is not orders:
+            store = self._order_store = _order.OrderStore(orders)
+        return store
+
     def order(self, participant, good, quantity, side, price, purpose):
         if not math.isfinite(quantity) or not math.isfinite(price) or price <= 0 or quantity < 0:
             raise ValueError('Некорректная заявка')
@@ -1629,7 +1651,7 @@ class Economy(EconomyServices):
             a['reserved'] = a.get('reserved', 0)+o['reserved']
         else:
             a.setdefault('stock_reserved', {})[good] = a.get('stock_reserved', {}).get(good, 0)+quantity
-        self.report['orders'].append(o)
+        self.order_store.append(o)
         if side == 'sell':
             self.mark_market_quotes_dirty(good)
         else:
@@ -1659,15 +1681,19 @@ class Economy(EconomyServices):
             return
         filled = order['status'] == 'filled'
         a = self.accounts[order['participant']]
+        # cancel_order вызывается на каждую заявку закрытия рынка: ссылка на
+        # границу берётся один раз, а не на каждое поле.
+        store = self.order_store
         if order['side'] == 'buy':
             a['reserved'] = max(0, a.get('reserved', 0)-order['reserved'])
-            order['reserved'] = 0.0
+            store.set_reserved(order, 0.0)
             self._demand_revision[order['good']] += 1
         else:
             a['stock_reserved'][order['good']] = max(0, a['stock_reserved'].get(order['good'], 0)-order['remaining'])
             self.mark_market_quotes_dirty(order['good'])
         if not filled:
-            order.update(status='cancelled', reason=reason)
+            store.set_status(order, 'cancelled')
+            order['reason'] = reason
 
     def freight_factors(self, good):
         """Вес товара и тариф перевозки — пара для расчёта доставки.
@@ -1895,12 +1921,15 @@ class Economy(EconomyServices):
         board = next(row for row in self.report['market_boards'] if row['board_id'] == board_id)
         limit = len(self.report['trades']) if trade_index is None else trade_index
         state = {row['sell_order']: dict(row) for row in board['offers']}
+        store = self.order_store
         for trade in self.report['trades'][board['created_trade_index']:limit]:
             row = state.get(trade['sell_order'])
             if row is None:
                 continue
-            row['remaining'] = max(0, row['remaining']-trade['quantity'])
-            row['status'] = 'filled' if row['remaining'] <= EPS else 'partial'
+            # Восстановленная строка — диагностическая копия оффера, но поля
+            # заявки меняются той же границей: прямой записи в обход неё нет.
+            store.set_remaining(row, max(0, row['remaining']-trade['quantity']))
+            store.set_status(row, 'filled' if row['remaining'] <= EPS else 'partial')
         return list(state.values())
 
     def reference_price(self, buyer, good, sells):
@@ -1990,9 +2019,11 @@ class Economy(EconomyServices):
         if price > buy['price']+EPS:
             extra = buy['remaining']*(price-buy['price'])
             a['reserved'] += extra
-            buy['reserved'] += extra
+            store = self.order_store
+            store.set_reserved(buy, buy['reserved']+extra)
             buy.setdefault('initial_input_limit', buy['price'])
-            buy.update(price=price, backing=buy['reserved'])
+            store.set_price(buy, price)
+            buy['backing'] = buy['reserved']
             self._demand_revision[buy['good']] += 1
 
     def purchase_quantity(self, buy, sells):
@@ -2002,6 +2033,9 @@ class Economy(EconomyServices):
     def match(self, buy, sells, local_only=False):
         if buy is None or buy['status'] in ('cancelled', 'expired', 'filled'):
             return
+        # Ссылка на границу берётся один раз на заявку: внутри цикла сделок
+        # мутаций много, и property на каждую стоил бы дороже самой записи.
+        store = self.order_store
         self.reprice_input_order(buy, sells)
         buyer = self.accounts[buy['participant']]
         if (buy.get('adaptive_household_budget') and buyer['kind'] == 'household'
@@ -2014,9 +2048,10 @@ class Economy(EconomyServices):
             if price > buy['price']+EPS:
                 extra = buy['remaining']*(price-buy['price'])
                 buyer['reserved'] += extra
-                buy['reserved'] += extra
+                store.set_reserved(buy, buy['reserved']+extra)
                 buy.setdefault('initial_limit', buy['price'])
-                buy.update(price=price, backing=buy['reserved'])
+                store.set_price(buy, price)
+                buy['backing'] = buy['reserved']
                 self._demand_revision[buy['good']] += 1
         options = (self.offers(buyer, buy['good'], sells, local_only=True)
             if local_only else self.offers(buyer, buy['good'], sells))
@@ -2050,7 +2085,7 @@ class Economy(EconomyServices):
                 if q*price > self.free_cash(buy['participant'])+release+EPS:
                     release = min(buy['reserved'], max(release, q*price))
                 buyer['reserved'] = max(0, buyer['reserved']-release)
-                buy['reserved'] = max(0, buy['reserved']-release)
+                store.set_reserved(buy, max(0, buy['reserved']-release))
                 seller['stock_reserved'][buy['good']] = max(0, seller['stock_reserved'][buy['good']]-q)
                 value = self.use_stock(sell['participant'], buy['good'], q)
                 self.add_stock(buy['participant'], buy['good'], q, q*price)
@@ -2072,15 +2107,15 @@ class Economy(EconomyServices):
                 if buy['purpose'] == 'Строительные материалы':
                     materials = buyer['project']['materials']
                     materials[buy['good']] = materials.get(buy['good'], 0)+q
-                buy['remaining'] = max(0, buy['remaining']-q)
-                sell['remaining'] = max(0, sell['remaining']-q)
+                store.set_remaining(buy, max(0, buy['remaining']-q))
+                store.set_remaining(sell, max(0, sell['remaining']-q))
                 self.report['trades'].append(dict(trade_id=trade_id, good=buy['good'], quantity=q, price=sell['price'],
                     gold=gross, seller_gold=gross-tax, tax=tax, freight=q*freight, distance=distance, path=path,
                     buyer=buy['participant'], seller=sell['participant'], buy_order=buy['id'], sell_order=sell['id'],
                     buyer_state=buy['state_id'], seller_state=sell['state_id'],
                     buyer_province=buy['province_id'], seller_province=sell['province_id'],
                     purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
-                sell['status'] = 'filled' if sell['remaining'] <= EPS else 'partial'
+                store.set_status(sell, 'filled' if sell['remaining'] <= EPS else 'partial')
                 self._demand_revision[buy['good']] += 1
                 # Прогнозу выпуска нужны только свои сделки. Раньше ключ кэша
                 # содержал len(report['trades']), то есть зависел от сделки
@@ -2091,7 +2126,7 @@ class Economy(EconomyServices):
                     break
             if buy['remaining'] <= EPS:
                 break
-        buy['status'] = 'filled' if buy['remaining'] <= EPS else 'partial' if buy['remaining'] < buy['quantity'] else 'unfilled'
+        store.set_status(buy, 'filled' if buy['remaining'] <= EPS else 'partial' if buy['remaining'] < buy['quantity'] else 'unfilled')
         self.finish_match_observation(buy, sells, observation)
         if buy['remaining'] > EPS:
             buy['reason'] = observation['reason_code']
@@ -3166,6 +3201,7 @@ class Economy(EconomyServices):
 
     def project_material_requests(self, sells, due, investors):
         """Последовательные закупки и отмены уже принятых проектов."""
+        store = self.order_store
         for a in self.shuffled(investors):
             project = a.get('project')
             if not project:
@@ -3217,7 +3253,7 @@ class Economy(EconomyServices):
                         continue
                     # С рынка снимается только закреплённая часть, свободный остаток остаётся в продаже.
                     offer['quantity'] -= take
-                    offer['remaining'] -= take
+                    store.set_remaining(offer, offer['remaining']-take)
                     offer['backing'] -= take
                     a['stock_reserved'][g] = max(0, a['stock_reserved'].get(g, 0)-take)
                     release -= take
@@ -3562,13 +3598,14 @@ class Economy(EconomyServices):
             for order in self.report['orders']]
         planning_sells = self._planning_market_snapshot(sells)
         # Снимок спроса сделан до поздних доходов; остатки заявок больше не блокируют кассу.
+        store = self.order_store
         for o in self.report['orders']:
             if o['side'] == 'buy':
                 o['reserved_at_clearing'] = o['reserved']
             execution_status, execution_reason = o['status'], o['reason']
             self.cancel_order(o, 'Окончание торгов месяца')
             if o['status'] == 'cancelled':
-                o['status'] = 'expired'
+                store.set_status(o, 'expired')
                 o['execution_status'] = execution_status
                 o['reason'] = execution_reason or 'Окончание торгов месяца'
         timings['market_tail'] = time.perf_counter()-phase_started
