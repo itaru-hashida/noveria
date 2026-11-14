@@ -2082,44 +2082,11 @@ class Economy(EconomyServices):
         return buy['remaining']
 
     def match(self, buy, sells, local_only=False):
-        if buy is None or buy['status'] in ('cancelled', 'expired', 'filled'):
-            return
-        # Ссылка на границу берётся один раз на заявку: внутри цикла сделок
-        # мутаций много, и property на каждую стоил бы дороже самой записи.
-        store = self.order_store
-        # Денежная граница тоже одна на заявку: счета сдвигаются только между
-        # ходами, поэтому внутри цикла сделок тождество словаря не меняется.
-        cash = self.cash_store
-        self.reprice_input_order(buy, sells)
-        buyer = self.accounts[buy['participant']]
-        if (buy.get('adaptive_household_budget') and buyer['kind'] == 'household'
-                and buy.get('final_consumption') and buy['remaining'] > EPS):
-            # Первая оценка корзины не является жёстким пользовательским лимитом.
-            # Пересмотр возможен лишь за счёт денег вне остальных обязательств.
-            _, ceiling, _ = self.quoted_cost(buyer, buy['good'], buy['remaining'], sells)
-            budget = buy['reserved']+self.free_cash(buy['participant'])
-            price = max(buy['price'], min(ceiling, budget/buy['remaining']))
-            if price > buy['price']+EPS:
-                extra = buy['remaining']*(price-buy['price'])
-                cash.add_reserved_cash(buy['participant'], extra)
-                store.set_reserved(buy, buy['reserved']+extra)
-                buy.setdefault('initial_limit', buy['price'])
-                store.set_price(buy, price)
-                buy['backing'] = buy['reserved']
-                self._demand_revision[buy['good']] += 1
-        options = (self.offers(buyer, buy['good'], sells, local_only=True)
-            if local_only else self.offers(buyer, buy['good'], sells))
-        observation = self.observe_match(buy, sells, options)
-        # Порядок offers, курсор first_live, tie-break, EPS, расчёт q и
-        # остановка при полном исполнении — в Cython-цикле. Тот же цикл
-        # вызывает существующий commit_trade; внешний цикл покупателей,
-        # выбор книги и наблюдения остаются здесь.
-        _match.run_match(self, buy, options, sells, EPS, cash, store,
-            _trade.commit_trade)
-        store.set_status(buy, 'filled' if buy['remaining'] <= EPS else 'partial' if buy['remaining'] < buy['quantity'] else 'unfilled')
-        self.finish_match_observation(buy, sells, observation)
-        if buy['remaining'] > EPS:
-            buy['reason'] = observation['reason_code']
+        # Один buyer order целиком (цена, книга, сделки, статус и наблюдение)
+        # выполняет native-граница: Python-тело осталось только эталоном в
+        # native/match_boundary.py, чтобы у правила не было двух копий.
+        _match.run_buyer(self, buy, sells, EPS, _trade.commit_trade,
+            _match.run_match, local_only)
 
     def observe_match(self, buy, sells, options):
         # Полный список продавцов уже записан один раз в market_boards. Здесь
@@ -3577,8 +3544,12 @@ class Economy(EconomyServices):
         # из ``basic_needs``, а не к отдельно названному хлебу.
         for buy in self.shuffled([o for o in buys if o['purpose'] == 'Базовые нужды']):
             self.match(buy, sells, local_only=True)
-        for buy in self.shuffled(buys):
-            self.match(buy, sells)
+        # Внешний цикл покупателей — в Cython. Список уже перемешан здесь,
+        # поэтому порядок и расход RNG остаются прежними; книга, наблюдения и
+        # финализация вызываются как хуки движка, а обход книги выполняет
+        # существующий внутренний цикл.
+        _match.run_buyers(self, self.shuffled(buys), sells, EPS,
+            _trade.commit_trade, _match.run_match)
         if self.HOUSEHOLD_TOP_UP_REVISION:
             self.household_top_up(households, sells)
         self.record_market()

@@ -25,7 +25,12 @@ setup(
          # Внутренний цикл одного buyer order: обходит готовый OfferView и
          # вызывает переданный commit_trade. Порядок покупателей и книга
          # остаются в Python, поэтому ядро не зависит от прочих расширений.
-         Extension('match_kernel', ['match_kernel.pyx'])],
+         Extension('match_kernel', ['match_kernel.pyx']),
+         # Внешний цикл покупателей: обходит уже перемешанный список заявок и
+         # вызывает прежние хуки движка и внутренний цикл по книге. Порядок
+         # покупателей, RNG и границы остаются за Python, поэтому ядро не
+         # зависит от прочих расширений.
+         Extension('match_driver', ['match_driver.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )
