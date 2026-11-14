@@ -6,8 +6,11 @@ import time
 from collections import defaultdict
 
 from .support import EPS, EconomyServices
+from .native import offer_boundary as _offer
 from .native import stock_boundary as _stock
 from .food_diagnostics import FoodDiagnostics
+
+_offer.configure(EPS)
 
 
 OWNER_KINDS = ('private', 'merchant', 'treasury', 'municipal')
@@ -29,42 +32,9 @@ def project_finances(capacity, available, startup, material, delivery,
     return capacity, working, investment, profit
 
 
-class OfferView:
-    """Ленивое представление единой книги без копирования её офферов."""
-
-    def __init__(self, book, buyer_id, province_id, local_only=False):
-        self.book = book
-        self.buyer_id = buyer_id
-        self.province_id = province_id
-        self.local_only = local_only
-
-    def __iter__(self):
-        options = self.book['options']
-        first = self.book['first_live']
-        while first < len(options):
-            sell = options[first][1]
-            if sell['remaining'] > EPS and sell['status'] not in ('cancelled', 'expired'):
-                break
-            first += 1
-        self.book['first_live'] = first
-        for index in range(first, len(options)):
-            price, sell, quote = options[index]
-            if (sell['participant'] != self.buyer_id
-                    and sell['remaining'] > EPS
-                    and sell['status'] not in ('cancelled', 'expired')
-                    and (not self.local_only or sell['province_id'] == self.province_id)):
-                yield price, sell, quote
-
-    def __bool__(self):
-        return next(iter(self), None) is not None
-
-    def __getitem__(self, index):
-        if index < 0:
-            raise IndexError('OfferView не поддерживает отрицательный индекс')
-        for current, row in enumerate(self):
-            if current == index:
-                return row
-        raise IndexError(index)
+# Совместимость: имя остаётся доступным в модуле, но реализация одна — та,
+# что привязана в native-границе (Cython, иначе Python-эталон).
+OfferView = _offer.OfferView
 
 
 class Economy(EconomyServices):
@@ -1916,7 +1886,9 @@ class Economy(EconomyServices):
 
     def offers(self, buyer, good, sells, local_only=False):
         book = self._market_book(buyer, good, sells)
-        return OfferView(book, buyer['id'], buyer['province_id'], local_only)
+        # Представление живых офферов строит native-модуль (иначе эталон на
+        # Python): книга и её заявки остаются теми же объектами движка.
+        return _offer.OfferView(book, buyer['id'], buyer['province_id'], local_only)
 
     def replay_market_board(self, board_id, trade_index=None):
         """Восстановить остатки книги перед указанной сделкой из snapshot+events."""
