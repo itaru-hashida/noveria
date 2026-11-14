@@ -18,7 +18,10 @@ setup(
          Extension('order_store', ['order_store.pyx']),
          # Денежные колонки счетов: хранит живой словарь accounts и не зависит
          # ни от заявок, ни от stock-ядра, ни от проектов.
-         Extension('cash_store', ['cash_store.pyx'])],
+         Extension('cash_store', ['cash_store.pyx']),
+         # Исполнение одной уже выбранной сделки: получает ссылки на движок и
+         # его границы, собственных полей не хранит и от прочих ядер не зависит.
+         Extension('trade_kernel', ['trade_kernel.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )

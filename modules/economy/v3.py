@@ -10,6 +10,7 @@ from .native import cash_boundary as _cash
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import stock_boundary as _stock
+from .native import trade_boundary as _trade
 from .food_diagnostics import FoodDiagnostics
 
 _offer.configure(EPS)
@@ -2127,55 +2128,10 @@ class Economy(EconomyServices):
                     self.purchase_quantity(buy, sells))
                 if q <= EPS:
                     continue
-                seller = self.accounts[sell['participant']]
-                freight, distance, path = quote[1:]
-                # Освобождается только резерв исполненной части, остальной остаётся защищён.
-                release = q*buy['price']
-                # Допуск цены задан на единицу. На большой партии разница может
-                # превысить денежный EPS: освобождаем обеспеченную фактическую сумму,
-                # не затрагивая резервы других заявок и не меняя обычные сделки.
-                if q*price > self.free_cash(buy['participant'])+release+EPS:
-                    release = min(buy['reserved'], max(release, q*price))
-                # Резерв счёта и резерв заявки — разные поля: первый освобождает
-                # исполненную часть, второй уменьшается на ту же сумму.
-                cash.release_reserved_cash(buy['participant'], release)
-                store.set_reserved(buy, max(0, buy['reserved']-release))
-                seller['stock_reserved'][buy['good']] = max(0, seller['stock_reserved'][buy['good']]-q)
-                value = self.use_stock(sell['participant'], buy['good'], q)
-                self.add_stock(buy['participant'], buy['good'], q, q*price)
-                gross = q*sell['price']
-                tax = gross*self.cfg['consumption_tax'] if buy.get('final_consumption', False) else 0.0
-                flow_start = len(self.report['flows'])
-                trade_id = f'{self.meta["month"]}:trade:{len(self.report["trades"])}'
-                self.transfer(buy['participant'], sell['participant'], gross-tax, 'Товар')
-                self.transfer(buy['participant'], 'treasury:'+seller['state_id'], tax, 'Налог с конечной потребительской продажи')
-                self.transfer(buy['participant'], 'carrier:'+seller['state_id'], q*freight, 'Перевозка')
-                for flow in self.report['flows'][flow_start:]:
-                    flow.update(buy_order=buy['id'], sell_order=sell['id'], good=buy['good'], quantity=q,
-                        trade_id=trade_id)
-                firm = self.enterprises.get(sell['participant'])
-                if firm:
-                    firm['revenue'] += gross
-                    firm['tax'] = firm.get('tax', 0)+tax
-                    firm['cost_of_sales'] = firm.get('cost_of_sales', 0)+value
-                if buy['purpose'] == 'Строительные материалы':
-                    materials = buyer['project']['materials']
-                    materials[buy['good']] = materials.get(buy['good'], 0)+q
-                store.set_remaining(buy, max(0, buy['remaining']-q))
-                store.set_remaining(sell, max(0, sell['remaining']-q))
-                self.report['trades'].append(dict(trade_id=trade_id, good=buy['good'], quantity=q, price=sell['price'],
-                    gold=gross, seller_gold=gross-tax, tax=tax, freight=q*freight, distance=distance, path=path,
-                    buyer=buy['participant'], seller=sell['participant'], buy_order=buy['id'], sell_order=sell['id'],
-                    buyer_state=buy['state_id'], seller_state=sell['state_id'],
-                    buyer_province=buy['province_id'], seller_province=sell['province_id'],
-                    purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
-                store.set_status(sell, 'filled' if sell['remaining'] <= EPS else 'partial')
-                self._demand_revision[buy['good']] += 1
-                # Прогнозу выпуска нужны только свои сделки. Раньше ключ кэша
-                # содержал len(report['trades']), то есть зависел от сделки
-                # любой фирмы мира, и запись сбрасывалась почти на каждом шаге.
-                self._trades_by_seller[sell['participant']] += 1
-                self.mark_market_quotes_dirty(buy['good'])
+                # Исполнение одной уже выбранной сделки — в Cython. Выбор
+                # offers, цена, количество q и весь цикл остаются здесь.
+                _trade.commit_trade(self, buy, sell, quote, q, price, EPS,
+                    cash, store)
                 if buy['remaining'] <= EPS:
                     break
             if buy['remaining'] <= EPS:
