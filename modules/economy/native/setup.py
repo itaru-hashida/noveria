@@ -35,7 +35,12 @@ setup(
          # смету, работает с живым складом счёта и вызывает существующую
          # границу заявок. Порядок проектов, отмены и деньги остаются за
          # Python, поэтому ядро не зависит от прочих расширений.
-         Extension('material_kernel', ['material_kernel.pyx'])],
+         Extension('material_kernel', ['material_kernel.pyx']),
+         # Доставка строительных материалов: считает объём и стоимость
+         # перевозки и пишет project['delivery']. Материалы, склад и резерв
+         # остаются за material_kernel, деньги и заявки — за Python, поэтому
+         # ядро не зависит от прочих расширений.
+         Extension('delivery_kernel', ['delivery_kernel.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )

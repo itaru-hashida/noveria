@@ -15,8 +15,8 @@
     по перемешанному списку инвесторов; ядро получает уже выбранный проект;
   * отмена по простою и по марже/спросу живёт целиком в v3 до этого вызова;
   * доставка и защита денег (``project['delivery']``, ``account['protected']``)
-    остаются Python-кодом этой границы: они не входят в срез, но обязаны
-    выполниться **до** строительных закупок, потому что ``free_cash`` читает
+    живут в отдельной границе ``delivery_boundary``: она обязана выполниться
+    **до** строительных закупок, потому что ``free_cash`` читает
     ``protected`` и без него ``order`` урезал бы заявку по деньгам;
   * мутации заявок (``quantity``/``remaining``/``backing``), отмена опустевшего
     оффера и выставление строительной закупки остаются хуками движка: ядро
@@ -124,30 +124,6 @@ def reserve_materials_python(owner, account, project, bill, sells, eps, store,
         missing = _PY_MAX(0, quantity-materials[good])
         place_order(owner, account, good, missing, sells)
     return None
-
-
-def request_project_materials(owner, account, sells, eps, store, distance):
-    """Смета, доставка, защита денег и резерв материалов выбранного проекта.
-
-    Порядок прежний и обязательный: смета -> доставка и ``protected`` ->
-    резерв материалов -> строительные закупки. ``protected`` выставлен до
-    закупок, иначе ``free_cash`` не учёл бы доставку и оборотный капитал.
-    Доставка и защита денег остаются Python-кодом: в этот срез они не входят.
-    """
-    project = account['project']
-    bill = construction_bill(owner.cfg['construction'],
-                             owner.cfg['minimum_capacity'], project['capacity'])
-    delivery = sum(q*owner.goods[g]['weight'] for g, q in bill.items())*distance*owner.cfg['transport_rate']
-    project['delivery'] = delivery
-    # Сначала склад инвестора, затем площадка: обе перевозки реальны и входят в оценку.
-    account['protected'] = (account.get('operating_protected', 0)
-                            +account.get('payroll_protected', 0)+project['working_cash']+delivery)
-    if account['protected']+account.get('reserved', 0) > account['balance']+eps:
-        account['protected'] = _PY_MAX(0, account['balance']-account.get('reserved', 0))
-    reserve_materials(owner, account, project, bill, sells, eps, store,
-                      free_stock_hook, detach_offer_hook, settle_release_hook,
-                      place_order_hook)
-    return bill
 
 
 def load_material_kernel():

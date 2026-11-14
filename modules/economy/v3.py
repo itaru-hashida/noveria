@@ -7,8 +7,8 @@ from collections import defaultdict
 
 from .support import EPS, EconomyServices
 from .native import cash_boundary as _cash
+from .native import delivery_boundary as _delivery
 from .native import match_boundary as _match
-from .native import material_boundary as _material
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import stock_boundary as _stock
@@ -3193,7 +3193,7 @@ class Economy(EconomyServices):
             if distance is None:
                 continue
             # Смета, доставка, защита денег и резерв материалов — в нативном срезе.
-            _material.request_project_materials(self, a, sells, EPS, store, distance)
+            _delivery.request_project_materials(self, a, sells, EPS, store, distance)
 
     def finish_projects(self):
         for a in list(self.accounts.values()):

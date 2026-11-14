@@ -269,39 +269,6 @@ def test_stock_reserved_is_the_same_dict_not_a_second_state():
     assert account['stock']['wood'] == 10
 
 
-def test_request_project_materials_keeps_delivery_and_protection_order():
-    """Доставка и ``protected`` выставлены до закупок, иначе free_cash меньше."""
-    owner = FakeOwner(free={'wood': 0, 'stone': 0},
-                      goods={'wood': dict(weight=2), 'stone': dict(weight=5)})
-    account = dict(id='acc', stock={}, stock_reserved={}, balance=1000.0,
-                   reserved=0.0, operating_protected=5, payroll_protected=7)
-    project = dict(capacity=10, materials={}, working_cash=11)
-    account['project'] = project
-    store = FakeStore()
-    bill = material_boundary.request_project_materials(
-        owner, account, {}, EPS, store, 4)
-    # Смета: wood=4, stone=2; вес 4*2+2*5=18; 18*4*0.01=0.72.
-    assert bill == {'wood': 4.0, 'stone': 2.0}
-    assert project['delivery'] == 18*4*owner.cfg['transport_rate']
-    assert account['protected'] == 5+7+11+project['delivery']
-    # Закупки идут после защиты денег: значит видят уже новое protected.
-    assert owner.journal[-1][0] == 'order'
-    assert any(row[0] == 'free_stock' for row in owner.journal)
-    # Пустой склад: материалы не закрепились, всё ушло в закупку.
-    assert project['materials'] == {'wood': 0.0, 'stone': 0.0}
-
-
-def test_request_project_materials_clamps_protection_by_balance():
-    owner = FakeOwner(free={}, goods={'wood': dict(weight=1), 'stone': dict(weight=1)})
-    account = dict(id='acc', stock={}, stock_reserved={}, balance=100.0,
-                   reserved=30.0, operating_protected=0, payroll_protected=0)
-    project = dict(capacity=10, materials={}, working_cash=90)
-    account['project'] = project
-    material_boundary.request_project_materials(owner, account, {}, EPS, FakeStore(), 1)
-    # 90 + доставка больше balance-reserved, поэтому protected урезан.
-    assert account['protected'] == _PY_MAX(0, 100.0-30.0)
-
-
 def test_construction_bill_zero_capacity():
     bill = material_boundary.construction_bill({'wood': 4, 'stone': 2}, 10, 0)
     assert bill == {'wood': 0.0, 'stone': 0.0}
@@ -343,13 +310,18 @@ def test_load_returns_none_when_extension_absent(monkeypatch):
     assert material_boundary.load_material_kernel() is None
 
 
-def test_v3_call_site_delegates_to_boundary():
-    """В ``project_material_requests`` остался один call site, без копии цикла."""
+def test_v3_call_site_delegates_to_delivery_boundary():
+    """В ``project_material_requests`` остался один call site, без копии цикла.
+
+    Доставка вынесена в ``delivery_boundary`` (она считает объём, стоимость и
+    ``protected``), поэтому v3 зовёт её, а резерв материалов остаётся за
+    ``material_boundary`` внутри этого вызова.
+    """
     source = (ROOT/'modules/economy/v3.py').read_text(encoding='utf-8')
     start = source.index('def project_material_requests')
     end = source.index('def finish_projects')
     body = source[start:end]
-    assert '_material.request_project_materials(self, a, sells, EPS, store, distance)' in body
+    assert '_delivery.request_project_materials(self, a, sells, EPS, store, distance)' in body
     assert 'stock_reserved' not in body
     assert 'self.free_stock' not in body
     assert 'self.order(' not in body
