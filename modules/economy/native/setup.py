@@ -40,7 +40,11 @@ setup(
          # перевозки и пишет project['delivery']. Материалы, склад и резерв
          # остаются за material_kernel, деньги и заявки — за Python, поэтому
          # ядро не зависит от прочих расширений.
-         Extension('delivery_kernel', ['delivery_kernel.pyx'])],
+         Extension('delivery_kernel', ['delivery_kernel.pyx']),
+         # Единый контейнер состояния: держит ссылки на существующие
+         # OrderStore/CashStore и native update state, собственных данных
+         # экономики не заводит и потому не зависит от прочих расширений.
+         Extension('world_state', ['world_state.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )

@@ -13,6 +13,7 @@ from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import stock_boundary as _stock
 from .native import trade_boundary as _trade
+from .native import world_boundary as _world
 from .food_diagnostics import FoodDiagnostics
 
 _offer.configure(EPS)
@@ -1666,6 +1667,23 @@ class Economy(EconomyServices):
         if store is None or store.accounts is not accounts:
             store = self._cash_store = _cash.CashStore(accounts)
         return store
+
+    @property
+    def world_state(self):
+        """Единый контейнер состояния: ссылки на уже существующие хранилища.
+
+        Собственного состояния здесь нет. ``WorldState`` хранит те же
+        ``OrderStore``/``CashStore``, которые отдают ``order_store`` и
+        ``cash_store``, и живой native update state, поэтому старые обращения
+        продолжают работать без изменений. Контейнер живёт между ходами и
+        перепривязывается по тождеству ``report['orders']`` и ``accounts``:
+        ``step`` пересобирает и отчёт, и счета, а значения игры контейнер не
+        трогает. Создаётся лениво, при первом обращении.
+        """
+        state = self.__dict__.get('_world_state')
+        if state is None:
+            state = self._world_state = _world.WorldState()
+        return state.sync(self)
 
     def order(self, participant, good, quantity, side, price, purpose):
         if not math.isfinite(quantity) or not math.isfinite(price) or price <= 0 or quantity < 0:
