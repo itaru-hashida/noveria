@@ -21,6 +21,7 @@ from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
 from .native import topup_boundary as _topup
 from .native import trade_boundary as _trade
+from .native import wage_boundary as _wage
 from .native import world_boundary as _world
 from .food_diagnostics import FoodDiagnostics
 
@@ -1520,65 +1521,11 @@ class Economy(EconomyServices):
 
     def advance_public_projects(self):
         """Постройки используют только работников, не нанятых предприятиями в этом месяце."""
-        labor = getattr(self, '_construction_labor', defaultdict(float))
-        for account in sorted(self.accounts.values(), key=lambda a: a['id']):
-            remaining = []
-            for project in account.get('public_projects', []):
-                ready = (all(project['materials'].get(g, 0)+EPS >= q
-                             for g, q in project['material_bill'].items())
-                    and all(project['equipment_held'].get(g, 0)+EPS >= q
-                            for g, q in project['equipment'].items()))
-                loc = project['location']
-                key = (loc['state_id'], loc['province_id'])
-                workers = 0.0
-                if ready:
-                    mode = self.cfg['construction_modes'][project['mode']]
-                    if project['mode'] == 'accelerated':
-                        workers = getattr(self, '_expedited_construction_workers', {}).get(project['id'], 0)
-                    else:
-                        workers = min(project['max_workers'], project['work_required']-project['work_done'],
-                            labor[key], self.free_cash(account['id'])/self.cfg['wage'])
-                    if workers > EPS:
-                        wages = workers*self.cfg['wage']*mode['wage_multiplier']
-                        self.distribute(account['id'], self.workforce(loc), wages, 'Заработная плата строителей')
-                        lodging = workers*mode['lodging_allowance']
-                        if lodging > EPS:
-                            self.distribute(account['id'], self.workforce(loc), lodging, 'Временное жильё строителей')
-                        if project['mode'] != 'accelerated':
-                            labor[key] -= workers
-                        for good, per_worker in mode['support_goods'].items():
-                            quantity = workers*per_worker
-                            if quantity <= EPS:
-                                continue
-                            project['support_stock'][good] -= quantity
-                            self.use_stock(account['id'], good, quantity)
-                            self.report['consumed'][good] = self.report['consumed'].get(good, 0)+quantity
-                        fraction = workers/project['work_required']
-                        for good, total_wear in project['equipment_wear'].items():
-                            worn = min(project['equipment_held'].get(good, 0), total_wear*fraction)
-                            if worn <= EPS:
-                                continue
-                            project['equipment_held'][good] -= worn
-                            self.use_stock(account['id'], good, worn)
-                            self.report['equipment_wear'][good] = self.report['equipment_wear'].get(good, 0)+worn
-                        project['work_done'] += workers
-                        project['status'] = 'building'
-                complete = project['work_done']+EPS >= project['work_required']
-                row = dict(project_id=project['id'], city_id=project['city_id'], state_id=loc['state_id'],
-                    province_id=loc['province_id'], kind=project['kind'], status='completed' if complete else project['status'],
-                    workers=workers, work_done=project['work_done'], work_required=project['work_required'],
-                    progress=min(1.0, project['work_done']/project['work_required']), ready=ready,
-                    mode=project['mode'])
-                self.report['public_projects'].append(row)
-                if workers > EPS:
-                    self.report['construction_labor'].append(dict(state_id=loc['state_id'],
-                        province_id=loc['province_id'], workers=workers, project_id=project['id']))
-                if complete:
-                    self._complete_public_project(account, project)
-                else:
-                    remaining.append(project)
-            account['public_projects'] = remaining
-        self._construction_labor = labor
+        # Числовой срез (готовность, работники, wage bill, надбавка за жильё)
+        # вынесен в wage_boundary: она держит Python-эталон и fallback без
+        # собранного .pyd. Выплаты идут прежним distribute, а склад, износ,
+        # отчёт, завершение стройки и порядок счетов остаются за Python-хуками.
+        _wage.advance_public_projects(self)
 
     def _complete_public_project(self, account, project):
         asset_value = 0.0
