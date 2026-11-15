@@ -17,6 +17,7 @@ from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import production_boundary as _production
 from .native import stock_boundary as _stock
+from .native import topup_boundary as _topup
 from .native import trade_boundary as _trade
 from .native import world_boundary as _world
 from .food_diagnostics import FoodDiagnostics
@@ -2660,22 +2661,11 @@ class Economy(EconomyServices):
                 o['reserved_before_top_up'] = o['reserved']
                 self.cancel_order(o, 'Пересмотр остатка потребительского бюджета')
                 o['superseded_by_top_up'] = True
-        candidates = [a for a in households if self.free_cash(a['id']) > EPS
-            and any(self.free_stock(a['id'], g) + EPS < self.population(a)*rate
-                for g, rate in self.cfg['basic_needs'].items())]
-        for a in self.shuffled(candidates):
-            for good in self.shuffled(self.cfg['basic_needs'], key=lambda g: g):
-                needed = self.population(a)*self.cfg['basic_needs'][good]
-                for price, sell, _ in self.offers(a, good, sells):
-                    missing = max(0, needed-self.free_stock(a['id'], good))
-                    if missing <= EPS or self.free_cash(a['id']) <= EPS:
-                        break
-                    quantity = min(missing, sell['remaining'], self.free_cash(a['id'])/price)
-                    buy = self.order(a['id'], good, quantity, 'buy', price, 'Базовые нужды')
-                    if buy:
-                        buy['household_top_up'] = True
-                        self.match(buy, sells)
-                        self.cancel_order(buy, 'Окончание допокупки')
+        # Числовой цикл допокупки вынесен в topup_boundary: отбор кандидатов,
+        # обход товаров и книги офферов, расчёт missing/quantity. Перемешивание
+        # (RNG), заявки, сделки, отчёт и dirty flags остаются Python-хуками
+        # границы; порядок обхода и int/float-семантика прежние.
+        _topup.top_up(self, households, sells, EPS)
         # Новая книга остаточного спроса обеспечена оставшейся кассой.
         # Это не повторное наблюдение начального бюджета исследовательскими классами.
         first = len(self.report['orders'])

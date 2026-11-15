@@ -70,6 +70,11 @@ setup(
          # need, отчёт и порядок обхода остаются за Python, поэтому ядро не
          # зависит от прочих расширений.
          Extension('consumption_kernel', ['consumption_kernel.pyx']),
+         # Числовой цикл household_top_up: отбор кандидатов, обход товаров и
+         # книги офферов, расчёт missing/quantity. RNG, заявки, сделки, отчёт
+         # и dirty-хуки остаются за Python, поэтому ядро не зависит от прочих
+         # расширений и не заводит второго cash/stock ledger.
+         Extension('topup_kernel', ['topup_kernel.pyx']),
          # Единый контейнер состояния: держит ссылки на существующие
          # OrderStore/CashStore и native update state, собственных данных
          # экономики не заводит и потому не зависит от прочих расширений.
