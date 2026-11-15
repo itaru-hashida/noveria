@@ -65,6 +65,11 @@ setup(
          # предприятий, склад и side effects остаются за Python, поэтому ядро
          # не зависит от прочих расширений.
          Extension('production_kernel', ['production_kernel.pyx']),
+         # Числовой цикл consumption домохозяйств: обходит готовый список
+         # домохозяйств и их needs, считает min(needed, free_stock). Склад,
+         # need, отчёт и порядок обхода остаются за Python, поэтому ядро не
+         # зависит от прочих расширений.
+         Extension('consumption_kernel', ['consumption_kernel.pyx']),
          # Единый контейнер состояния: держит ссылки на существующие
          # OrderStore/CashStore и native update state, собственных данных
          # экономики не заводит и потому не зависит от прочих расширений.

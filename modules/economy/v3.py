@@ -8,6 +8,7 @@ from collections import defaultdict
 from .support import EPS, EconomyServices
 from .native import cancel_boundary as _cancel
 from .native import cash_boundary as _cash
+from .native import consumption_boundary as _consumption
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
 from .native import match_boundary as _match
@@ -3510,12 +3511,12 @@ class Economy(EconomyServices):
             self.advance_public_projects()
             self.finish_projects()
             self.consume_owner_purchases()
-            for a in households:
-                for good, need in a.get('needs', {}).items():
-                    consumed = min(need['needed'], self.free_stock(a['id'], good))
-                    self.use_stock(a['id'], good, consumed)
-                    need.update(consumed=consumed, deficit=need['needed']-consumed)
-                    self.report['consumed'][good] = self.report['consumed'].get(good, 0)+consumed
+            # Числовой цикл потребления домохозяйств вынесен в
+            # consumption_boundary: она держит эталонную Python-ветку и
+            # fallback без собранного .pyd. Порядок домохозяйств, порядок
+            # товаров, списание через существующую stock boundary и все
+            # side effects (need, report) остаются за Python-хуками границы.
+            _consumption.consume_households(self, households)
             # История продаж собирается одним проходом по книгам и сделкам. Раньше
             # для каждой фирмы заново перебирались все заявки месяца, а для каждого
             # слота склада — все сделки: 1,7 млн итераций за ход при 230 фирмах.
