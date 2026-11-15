@@ -80,6 +80,11 @@ setup(
          # заявок и customer_quotes остаются за Python-хуком, поэтому ядро не
          # зависит от прочих расширений.
          Extension('net_price_kernel', ['net_price_kernel.pyx']),
+         # Рыночная книга: достижимые офферы, landed price, потоки площадок и
+         # точная сортировка по (landed_price, sell_id). Маршруты, заявки,
+         # представление и отчёт остаются за Python-хуками, поэтому ядро не
+         # зависит от прочих расширений и не заводит второго order ledger.
+         Extension('market_book_kernel', ['market_book_kernel.pyx']),
          # Числовой цикл household_top_up: отбор кандидатов, обход товаров и
          # книги офферов, расчёт missing/quantity. RNG, заявки, сделки, отчёт
          # и dirty-хуки остаются за Python, поэтому ядро не зависит от прочих

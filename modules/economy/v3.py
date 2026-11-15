@@ -1,6 +1,5 @@
 """Экономика V3: обеспеченные заявки, реальные расходы и один выпуск за месяц."""
 import copy
-import heapq
 import math
 import time
 from collections import defaultdict
@@ -13,6 +12,7 @@ from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
 from .native import dividend_boundary as _dividend
 from .native import match_boundary as _match
+from .native import market_book_boundary as _market_book_native
 from .native import material_finalize_boundary as _material_finalize
 from .native import net_price_boundary as _net_price
 from .native import offer_boundary as _offer
@@ -1679,26 +1679,15 @@ class Economy(EconomyServices):
         return pair
 
     def landed(self, seller_tile, buyer_tile, good, price):
-        """Полная цена товара по неизменной в течение месяца сети."""
-        cache = getattr(self, '_landed_cache', {})
-        # Ключ из трёх полей: вес и тариф вошли в посчитанную доставку и меняются
-        # только вместе с контентом, то есть с перезагрузкой движка.
-        key = (seller_tile, buyer_tile, good)
-        quote = cache.get(key)
-        if quote is None:
-            distance, path = self.path(seller_tile, buyer_tile)
-            if distance is None:
-                cache[key] = False
-                self._landed_cache = cache
-                return None
-            weight, rate = self.freight_factors(good)
-            quote = (distance*weight*rate, distance, path)
-            cache[key] = quote
-            self._landed_cache = cache
-        if quote is False:
-            return None
-        freight, distance, path = quote
-        return price+freight, freight, distance, path
+        """Полная цена товара по неизменной в течение месяца сети.
+
+        Расчёт вынесен в market_book_boundary: она держит Cython-ядро и
+        буквальный Python-эталон как fallback. Кэш остаётся кэшем движка
+        (``_landed_cache``), ключ и hit/miss-семантика прежние, второго кэша
+        нет. Функция ничего не мутирует, кроме собственного кэша.
+        """
+        return _market_book_native.landed(self, seller_tile, buyer_tile, good,
+                                          price)
 
     def _customer_orders(self, orders, good):
         """Индекс заявок покупателей по товару для одной фазы рынка."""
@@ -1783,12 +1772,18 @@ class Economy(EconomyServices):
         Цена доставки зависит от назначения, поэтому книга общая не для всего
         товара, а для пары (товар, торговая площадка покупателя). Сами заявки
         остаются живыми объектами: сделки меняют только remaining/status.
+
+        Построение книги (фильтр достижимых офферов, landed price, потоки
+        площадок и точная сортировка по ``(landed_price, sell_id)``) вынесено
+        в market_book_boundary. Кэш книги остаётся кэшем движка, а хуками
+        остаются ``market_tile``/``route_component``/``_market_source_groups``,
+        ``_record_market_board`` и инвалидация.
         """
         books = getattr(self, '_market_books', {})
         sell_list = sells.get(good, [])
         key = (id(sell_list), self.market_tile(buyer), good)
         entry = books.get(key)
-        if entry is not None and entry['source'] is sell_list:
+        if _market_book_native.market_book_is_fresh(entry, sell_list, self):
             # Книга переживает замену хранилища (например, отчёт заменили), а
             # номера слотов принадлежат конкретному OrderStore. Ссылка берётся
             # прямо из __dict__, без property: попадание книги бывает десятки
@@ -1803,29 +1798,18 @@ class Economy(EconomyServices):
             return entry
 
         buyer_tile = self.market_tile(buyer)
-        if len(sell_list) < 1000:
-            options = []
-            for sell in self._orders_in_route_component(sell_list, buyer_tile):
-                quote = self.landed(sell['tile_id'], buyer_tile, good, sell['price'])
-                if quote:
-                    options.append((quote[0], sell, quote))
-            options.sort(key=lambda item: (item[0], item[1]['id']))
-        else:
-            streams = []
-            for source_tile, source_sells in self._market_source_groups(sell_list, buyer_tile):
-                freight = self.landed(source_tile, buyer_tile, good, 0)
-                if freight is None:
-                    continue
-                stream = []
-                for sell in source_sells:
-                    quote = (sell['price']+freight[1], freight[1], freight[2], freight[3])
-                    stream.append(((quote[0], sell['id']), quote[0], sell, quote))
-                streams.append(stream)
-            options = [(price, sell, quote)
-                       for _, price, sell, quote in heapq.merge(*streams, key=lambda item: item[0])]
+        # Один явный native call site: ядро собирает options, а фильтрация
+        # достижимости, потоки площадок и расчёт landed остаются хуками
+        # движка (метод передаётся привязанным, чтобы наследники сохраняли
+        # собственное переопределение landed).
+        options = _market_book_native.build_options(self, sell_list, buyer_tile,
+                                                    good, self.landed)
         entry = dict(source=sell_list, options=options,
             quotes={sell['id']: quote for _, sell, quote in options},
             board_id=None, first_live=0,
+            # Книга запоминает эпоху котировок: смена эпохи означает, что
+            # книгу пересобрали в обход invalidate_market_books.
+            quote_epoch=self.__dict__.get('_market_quotes_epoch', 0),
             # Книга запоминает хранилище, из которого пришли слоты заявок:
             # представление читает колонки по номерам, а не по id(order).
             slot_store=self.order_store, slots=None, slot_version=None)
