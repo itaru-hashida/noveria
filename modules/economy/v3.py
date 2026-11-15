@@ -11,6 +11,7 @@ from .native import cash_boundary as _cash
 from .native import consumption_boundary as _consumption
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
+from .native import dividend_boundary as _dividend
 from .native import match_boundary as _match
 from .native import material_finalize_boundary as _material_finalize
 from .native import offer_boundary as _offer
@@ -1315,42 +1316,9 @@ class Economy(EconomyServices):
         return max(0, a['balance']-a.get('reserved', 0)-hold)
 
     def pay_dividends(self, sells):
-        # Получатели дивидендов — домохозяйства государства фирмы. Раньше они
-        # каждый раз собирались полным перебором счетов: 240 фирм × 462 счёта.
-        # Порядок обхода счетов тот же, поэтому список получателей, а значит и
-        # порядок начисления, совпадает с прежним.
-        households_by_state = {}
-        for a in self.accounts.values():
-            if a['kind'] == 'household':
-                households_by_state.setdefault(a['state_id'], []).append(a)
-        for e in self.enterprises.values():
-            if e.get('dividend_month') == self.meta['month']:
-                continue
-            e.update(dividends=0.0, dividend_month=self.meta['month'])
-            if e['status'] == 'closed' or self.accounts[e['owner_id']]['kind'] not in OWNER_KINDS:
-                continue
-            recipients = households_by_state.get(e['state_id'], []) if self.PROFIT_DISTRIBUTION_REVISION else []
-            if self.PROFIT_DISTRIBUTION_REVISION and not sum(self.population(a) for a in recipients):
-                continue
-            working = self.working_cash_reserve(e, sells)
-            project = self.project_cash_reserve(e['id'], sells)
-            available = self.cash_after_commitments(e['id'], project, working)
-            share = self.cfg['business_income_share'] if self.PROFIT_DISTRIBUTION_REVISION else self.cfg['dividend_profit_share']
-            limit = share*max(0, e['profit'])
-            amount = min(limit, available)
-            if self.PROFIT_DISTRIBUTION_REVISION:
-                self.distribute(e['id'], recipients, amount, 'Доход населения от бизнеса')
-            else:
-                self.transfer(e['id'], e['owner_id'], amount, 'Дивиденды')
-            self.accounts[e['id']].update(working_reserve=working, project_reserve=project)
-            e.update(dividends=amount, working_reserve=working, project_reserve=project,
-                dividend_available_cash=available)
-            row = dict(enterprise=e['id'], owner=e['owner_id'],
-                owner_kind=self.accounts[e['owner_id']]['kind'], profit=e['profit'], dividends=amount,
-                profit_limit=limit, available_cash=available, working_reserve=working, project_reserve=project)
-            row['recipient_kind'] = 'household' if self.PROFIT_DISTRIBUTION_REVISION else self.accounts[e['owner_id']]['kind']
-            self.report['dividends'].append(row)
-            self.report['diagnostics'].append(dict(kind='dividend', **row))
+        # Числовой срез (резерв, доступная касса, предел, доли) считает ядро;
+        # выплаты, отчёт, события и RNG остаются здесь, в прежнем transfer.
+        _dividend.pay_dividends(self, sells)
 
     def owner_requests(self, sells):
         owners = [a for a in self.accounts.values() if a['kind'] in ('private', 'merchant')]
