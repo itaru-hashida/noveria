@@ -55,6 +55,11 @@ setup(
          # Обход сметы, склад, резерв и деньги остаются за Python, поэтому
          # ядро не зависит от прочих расширений.
          Extension('construction_buy_kernel', ['construction_buy_kernel.pyx']),
+         # Финализация material request: затронутые товары и готовые
+         # journal-строки по уже посчитанной смете. Порядок проектов, отчёт и
+         # dirty-хуки остаются за Python, поэтому ядро не зависит от прочих
+         # расширений.
+         Extension('material_finalize_kernel', ['material_finalize_kernel.pyx']),
          # Единый контейнер состояния: держит ссылки на существующие
          # OrderStore/CashStore и native update state, собственных данных
          # экономики не заводит и потому не зависит от прочих расширений.

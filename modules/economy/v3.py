@@ -11,6 +11,7 @@ from .native import cash_boundary as _cash
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
 from .native import match_boundary as _match
+from .native import material_finalize_boundary as _material_finalize
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import stock_boundary as _stock
@@ -3201,7 +3202,11 @@ class Economy(EconomyServices):
             # Строительные закупки на недостающий материал этот же срез берёт из
             # нативного construction_buy_kernel: граница подставляет свой хук при
             # импорте, поэтому тела закупки в Python больше нет.
-            _delivery.request_project_materials(self, a, sells, EPS, store, distance)
+            bill = _delivery.request_project_materials(self, a, sells, EPS, store, distance)
+            # Финализация material request: затронутые товары и готовые journal-
+            # строки считает ядро, отчёт пополняет хук. Повторных пометок
+            # котировок и ревизий нет: их уже сделали release- и cancel-срезы.
+            _material_finalize.apply_material_request(self, a, project, bill, EPS)
 
     def finish_projects(self):
         for a in list(self.accounts.values()):
