@@ -19,6 +19,7 @@ from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import owner_consumption_boundary as _owner_consumption
 from .native import production_boundary as _production
+from .native import production_outlook_boundary as _production_outlook
 from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
 from .native import topup_boundary as _topup
@@ -2367,68 +2368,12 @@ class Economy(EconomyServices):
         return (epoch, tuple(versions.get(good, 0) for good in goods) if versions else ())
 
     def production_outlook(self, e, sells=None):
-        sells = sells or defaultdict(list)
-        cache = getattr(self, '_production_outlook_cache', {})
-        cacheable = self.enterprises.get(e.get('id')) is e
-        cache_key = None
-        if cacheable:
-            history = tuple((row.get('sold', 0), row.get('output', 0),
-                             bool(row.get('input_limited'))) for row in e.get('sales_history', [])[-3:])
-            cache_key = (id(sells), e['id'], e['tile_id'], e['good'], e['price'],
-                e.get('production_price'), e['capacity'], e.get('planned_output', 0),
-                self.accounts[e['id']]['stock'].get(e['good'], 0), history,
-                self._demand_revision[e['good']], self._outlook_quote_versions(e),
-                self._trades_by_seller[e['id']])
-            cached = cache.get(cache_key)
-            if cached is not None:
-                return cached
-        e = dict(e)
-        cost = self.unit_cost(e, sells)
-        # Рентабельную текущую цену (включая B2B без налога) повышать не требуется.
-        base_net = self.net_price(e)
-        price = e['price'] if base_net+EPS >= cost else e.get('production_price', e['price'])
-        quote = dict(e, price=price)
-        observations = e.get('sales_history', [])[-3:]
-        own = sum(h['sold'] for h in observations)/len(observations) if observations else e['sales_forecast']
-        demand = self.reachable_demand(quote, sells)
-        sold_now = sum(t['quantity'] for t in self.report['trades'] if t['seller'] == e['id'] and t['good'] == e['good'])
-        forecast = max(own, sold_now+demand)
-        stock = self.accounts[e['id']]['stock'].get(e['good'], 0)
-        # Начальный склад сначала участвует в торгах этого месяца; новый выпуск
-        # продаётся в следующем. Восполняем прогнозируемый остаток после торгов.
-        # Спрос уже посчитан выше по цене quote; если цена не менялась, это тот
-        # же расчёт, и второй раз его делать незачем.
-        expected_sales = (self.expected_stock_sales(e, sells,
-            demand if price == e['price'] else None)
-            if self.STOCK_PLANNING_REVISION else 0.0)
-        projected_stock = max(0, stock-expected_sales)
-        e.update(sales_forecast=forecast, reachable_demand=demand,
-            expected_unit_cost=cost, expected_price=(base_net if price == e['price']
-                else self.net_price(quote)), planned_price=price)
-        target = max(0, min(e['capacity'], forecast-projected_stock))
-        previous = e.get('planned_output', 0)
-        # При обычном падении спроса мощность сокращается постепенно. Если склад
-        # переполнен, быстрый спад разрешён, чтобы не накапливать лишний товар.
-        # Исторические исследовательские варианты сохраняют прежнюю формулу.
-        if (self.STOCK_PLANNING_REVISION >= 2 and target < previous-EPS
-                and not (stock > forecast*self.cfg['output_overstock_factor'])):
-            target = previous - self.cfg['output_decline_rate']*(previous-target)
-            target = max(0, min(e['capacity'], target))
-        fixed_unit = self.enterprise_overhead(e)/target if target > EPS else 0.0
-        e.update(expected_fixed_cost=self.enterprise_overhead(e), expected_fixed_unit=fixed_unit,
-                 expected_margin=e['expected_price']-e['expected_unit_cost']-fixed_unit)
-        e['production_limit'] = 'Готовые запасы' if projected_stock >= forecast and forecast > EPS else 'Нет обеспеченного спроса' if forecast <= EPS else 'План'
-        if e['expected_margin'] < -EPS:
-            target, e['production_limit'] = 0, 'Отрицательная ожидаемая маржа'
-        e['planned_output'] = target
-        e['input_target_output'] = target
-        result = {k: e[k] for k in ('sales_forecast', 'reachable_demand', 'expected_unit_cost',
-            'expected_price', 'expected_margin', 'production_limit', 'planned_output', 'input_target_output',
-            'planned_price', 'expected_fixed_cost', 'expected_fixed_unit')}
-        if cache_key is not None:
-            cache[cache_key] = result
-            self._production_outlook_cache = cache
-        return result
+        # Числовая часть прогноза вынесена в production_outlook_boundary: она
+        # же держит эталонную Python-ветку и fallback без собранного .pyd.
+        # Книга заявок, unit_cost, net_price, reachable_demand,
+        # expected_stock_sales, оброк, отчёт и кэш прогноза остаются
+        # Python-хуками, порядок обхода и RNG не тронуты.
+        return _production_outlook.production_outlook(self, e, sells)
 
     def plan(self, e, history=None, sells=None):
         e.update(self.production_outlook(e, sells))

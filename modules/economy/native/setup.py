@@ -80,6 +80,13 @@ setup(
          # заявок и customer_quotes остаются за Python-хуком, поэтому ядро не
          # зависит от прочих расширений.
          Extension('net_price_kernel', ['net_price_kernel.pyx']),
+         # Числовой срез прогноза выпуска: средние продажи, прогноз спроса,
+         # остаток склада, постепенное сокращение мощности, fixed_unit, маржа,
+         # причина предела и итоговый выпуск. unit_cost, net_price,
+         # reachable_demand, expected_stock_sales, оброк и кэш прогноза
+         # остаются за Python-хуками, поэтому ядро не зависит от прочих
+         # расширений и не заводит второго order/cash ledger.
+         Extension('production_outlook_kernel', ['production_outlook_kernel.pyx']),
          # Рыночная книга: достижимые офферы, landed price, потоки площадок и
          # точная сортировка по (landed_price, sell_id). Маршруты, заявки,
          # представление и отчёт остаются за Python-хуками, поэтому ядро не
