@@ -8,6 +8,7 @@ from collections import defaultdict
 from .support import EPS, EconomyServices
 from .native import cancel_boundary as _cancel
 from .native import cash_boundary as _cash
+from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
 from .native import match_boundary as _match
 from .native import offer_boundary as _offer
@@ -3197,6 +3198,9 @@ class Economy(EconomyServices):
             if distance is None:
                 continue
             # Смета, доставка, защита денег и резерв материалов — в нативном срезе.
+            # Строительные закупки на недостающий материал этот же срез берёт из
+            # нативного construction_buy_kernel: граница подставляет свой хук при
+            # импорте, поэтому тела закупки в Python больше нет.
             _delivery.request_project_materials(self, a, sells, EPS, store, distance)
 
     def finish_projects(self):
