@@ -16,6 +16,7 @@ from .native import match_boundary as _match
 from .native import material_finalize_boundary as _material_finalize
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
+from .native import owner_consumption_boundary as _owner_consumption
 from .native import production_boundary as _production
 from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
@@ -1345,27 +1346,11 @@ class Economy(EconomyServices):
                     row['orders'].append(order['id'])
 
     def consume_owner_purchases(self):
-        for row in self.report['owner_consumption']:
-            a = self.accounts[row['owner']]
-            for order in self.report['orders']:
-                if order['id'] not in row['orders']:
-                    continue
-                filled = order['quantity']-order['remaining']
-                quantity = max(0, filled-order.get('consumed_quantity', 0))
-                if quantity > EPS:
-                    self.use_stock(a['id'], order['good'], quantity)
-                    order['consumed_quantity'] = filled
-                    good = order['good']
-                    row['consumed'][good] = row['consumed'].get(good, 0)+quantity
-                    self.report['owner_consumed'][good] = self.report['owner_consumed'].get(good, 0)+quantity
-                    self.report['consumed'][good] = self.report['consumed'].get(good, 0)+quantity
-            trades = [t for t in self.report['trades'] if t['buy_order'] in row['orders']]
-            row.update(spent=sum(t['gold']+t['freight'] for t in trades),
-                tax=sum(t['tax'] for t in trades), freight=sum(t['freight'] for t in trades),
-                unfilled={o['good']: o['remaining'] for o in self.report['orders'] if o['id'] in row['orders']})
-            row['unused_budget'] = max(0, row['budget']-row['spent'])
-            a.update(owner_consumption_spent=row['spent'], owner_consumed=copy.deepcopy(row['consumed']),
-                owner_consumption_tax=row['tax'], owner_consumption_freight=row['freight'])
+        # Числовой срез вынесен в owner_consumption_boundary: она же держит
+        # эталонную Python-ветку и fallback без собранного .pyd. Порядок строк
+        # и заявок, склад через существующую stock boundary и все side effects
+        # остаются за Python-хуками границы.
+        _owner_consumption.consume_owner_purchases(self, EPS)
 
     def transfer(self, sender, recipient, amount, reason):
         """Перевод — единственная точка изменения ``balance``.

@@ -70,6 +70,11 @@ setup(
          # need, отчёт и порядок обхода остаются за Python, поэтому ядро не
          # зависит от прочих расширений.
          Extension('consumption_kernel', ['consumption_kernel.pyx']),
+         # Числовой срез owner consumption: обход строк отчёта и книги заявок,
+         # отметка consumed_quantity, три накопления и итоги строки. Склад
+         # остаётся за Python-хуком через существующую stock boundary, поэтому
+         # ядро не зависит от прочих расширений и не заводит второго ledger.
+         Extension('owner_consumption_kernel', ['owner_consumption_kernel.pyx']),
          # Числовой цикл household_top_up: отбор кандидатов, обход товаров и
          # книги офферов, расчёт missing/quantity. RNG, заявки, сделки, отчёт
          # и dirty-хуки остаются за Python, поэтому ядро не зависит от прочих
