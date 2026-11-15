@@ -16,6 +16,7 @@ from .native import material_finalize_boundary as _material_finalize
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import production_boundary as _production
+from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
 from .native import topup_boundary as _topup
 from .native import trade_boundary as _trade
@@ -3605,42 +3606,12 @@ class Economy(EconomyServices):
 
     def validate(self, before=None):
         super().validate(before)
-        for entity in self.entities.values():
-            if entity['kind'] != 'SocialGroup' or 'population' not in entity['properties']:
-                continue
-            population = entity['properties']['population']
-            if isinstance(population, bool) or not isinstance(population, int) or population < 0:
-                raise ValueError('Нарушена численность социальной группы')
-        demography = self.report.get('demography', [])
-        migration = self.report.get('migration', [])
-        moved_out = sum(row.get('migration_out', 0) for row in demography)
-        moved_in = sum(row.get('migration_in', 0) for row in demography)
-        moved = sum(row.get('people', 0) for row in migration)
-        if abs(moved_out-moved) > EPS or abs(moved_in-moved) > EPS:
-            raise ValueError('Нарушен баланс переселения')
-        for row in demography:
-            actual = row['population_after']-row['population_before']
-            expected = (row['births']-row['deaths']+row.get('rounding_adjustment', 0)
-                        +row.get('migration_in', 0)-row.get('migration_out', 0))
-            if abs(actual-expected) > EPS:
-                raise ValueError('Изменение численности не объяснено')
-        for row in migration:
-            if (row['people'] <= 0 or self.owners[row['source_province']] != row['state_id']
-                    or self.owners[row['destination_province']] != row['state_id']):
-                raise ValueError('Недопустимое переселение')
-        self.report['invariants'].update(population=True, migration=True)
-        for a in self.accounts.values():
-            if any(not math.isfinite(a.get(k, 0)) or a.get(k, 0) < -EPS for k in ('reserved', 'protected')) or a.get('reserved', 0)+a.get('protected', 0) > a['balance']+EPS:
-                raise ValueError('Нарушен резерв средств')
-            public_locks = set()
-            for project in a.get('public_projects', []):
-                public_locks |= (project.get('materials', {}).keys()
-                    | project.get('equipment_held', {}).keys()
-                    | project.get('support_stock', {}).keys())
-            for g in a.get('stock_reserved', {}).keys() | a.get('project', {}).get('materials', {}).keys() | public_locks:
-                q = a.get('stock_reserved', {}).get(g, 0)
-                if q < -EPS or q+self.locked_material(a['id'], g) > a['stock'].get(g, 0)+EPS:
-                    raise ValueError('Нарушен резерв товаров')
+        # Read-only цикл проверок населения и счетов вынесен в
+        # settlement_boundary: она держит Python-эталон и fallback без
+        # собранного .pyd. Ядро ничего не мутирует — только возвращает код
+        # первой неудачи, а точный текст ValueError и отметки
+        # report['invariants'] остаются за Python-хуками границы.
+        _settlement.validate(self, EPS)
 
 
 def initialize(service):
