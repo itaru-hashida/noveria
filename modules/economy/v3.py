@@ -14,6 +14,7 @@ from .native import delivery_boundary as _delivery
 from .native import dividend_boundary as _dividend
 from .native import match_boundary as _match
 from .native import material_finalize_boundary as _material_finalize
+from .native import net_price_boundary as _net_price
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import owner_consumption_boundary as _owner_consumption
@@ -2268,20 +2269,10 @@ class Economy(EconomyServices):
         return prices
 
     def net_price(self, e):
-        # Налог оценивается по доступным заявкам; при их отсутствии — осторожно.
-        consumer = e['good'] in (self.cfg['basic_needs'] | self.cfg['extra_needs'])
-        quantity, final_quantity = 0.0, 0.0
-        for order, limit in self.customer_quotes(e):
-            if limit+EPS < e['price']:
-                continue
-            landed = e['price']+(order['price']-limit)
-            volume = min(order['remaining'], order['reserved']/max(landed, EPS))
-            quantity += volume
-            if order.get('final_consumption'):
-                final_quantity += volume
-        share = (final_quantity/quantity
-            if quantity > EPS else float(consumer))
-        return e['price']*(1-self.cfg['consumption_tax']*share)
+        # Числовой цикл вынесен в net_price_boundary: она же держит эталонную
+        # Python-ветку и fallback без собранного .pyd. Котировки покупателей
+        # по-прежнему строит Python-хук границы, порядок пар и RNG не тронуты.
+        return _net_price.net_price(self, e)
 
     def prepare_recovery_quotes(self):
         """Одна оценка воспроизводства снизу вверх, без будущих сделок и эмиссии."""

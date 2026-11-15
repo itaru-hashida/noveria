@@ -75,6 +75,11 @@ setup(
          # остаётся за Python-хуком через существующую stock boundary, поэтому
          # ядро не зависит от прочих расширений и не заводит второго ledger.
          Extension('owner_consumption_kernel', ['owner_consumption_kernel.pyx']),
+         # Числовой цикл net_price: обход готового списка котировок покупателей,
+         # сравнение с ценой, расчёт landed/volume, накопления и share. Книга
+         # заявок и customer_quotes остаются за Python-хуком, поэтому ядро не
+         # зависит от прочих расширений.
+         Extension('net_price_kernel', ['net_price_kernel.pyx']),
          # Числовой цикл household_top_up: отбор кандидатов, обход товаров и
          # книги офферов, расчёт missing/quantity. RNG, заявки, сделки, отчёт
          # и dirty-хуки остаются за Python, поэтому ядро не зависит от прочих
