@@ -14,6 +14,7 @@ from .native import match_boundary as _match
 from .native import material_finalize_boundary as _material_finalize
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
+from .native import production_boundary as _production
 from .native import stock_boundary as _stock
 from .native import trade_boundary as _trade
 from .native import world_boundary as _world
@@ -3240,72 +3241,11 @@ class Economy(EconomyServices):
             self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='expanded' if p['expansion'] else 'built', enterprise=e['id']))
 
     def produce(self, existing, sells):
-        observe = self.report_detail() == 'deep'
-        labor, resources = defaultdict(float), defaultdict(float)
-        for a in self.accounts.values():
-            if a['kind'] == 'household':
-                labor[a['state_id'], a['province_id']] += self.population(a)*self.cfg['labor_share']
-        for key, reserved in getattr(self, '_expedited_construction_reservations', {}).items():
-            labor[key] = max(0, labor[key]-reserved)
-        for t in self.tiles.values():
-            for resource in t['resources']:
-                resources[t['province_id'], resource] += self.cfg['extraction_per_tile']
-        if observe:
-            self.report['labor_available'] = [dict(state_id=s, province_id=p, workers=q) for (s, p), q in labor.items()]
-        for e in self.shuffled(existing):
-            if e['status'] == 'closed' or e.get('suspended') or e['available_from'] > self.meta['month']:
-                continue
-            plan = e.get('production_plan', {})
-            planned = plan['output'] if plan.get('month') == self.meta['month'] else 0.0
-            e['planned_output'] = planned
-            recipe, a = self.goods[e['good']], self.accounts[e['id']]
-            # Закупочные резервы уже сняты, проектный капитал остаётся защищён.
-            project_hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
-            a['protected'] = project_hold
-            constraints = {'План': planned, 'Мощность': e['capacity'], 'Труд': labor[e['state_id'], e['province_id']]/recipe['labor'],
-                'Деньги на зарплату': self.free_cash(e['id'])/(recipe['labor']*self.cfg['wage'])}
-            if recipe['resource']:
-                constraints['Природный ресурс'] = resources[e['province_id'], recipe['resource']]
-            for g, ratio in recipe['inputs'].items():
-                constraints['Сырьё: '+g] = self.free_stock(e['id'], g)/ratio
-            for g, ratio in recipe.get('equipment', {}).items():
-                constraints['Оборудование: '+g] = self.free_stock(e['id'], g)/ratio
-            if observe:
-                e['production_observation'] = dict(month=self.meta['month'], constraints=dict(constraints),
-                    stocks_before=dict(a['stock']), free_cash_before=self.free_cash(e['id']),
-                    procurement_plan=copy.deepcopy(plan) if plan.get('month') == self.meta['month'] else None,
-                    expected_margin=e['expected_margin'], expected_unit_cost=e['expected_unit_cost'],
-                    expected_price=e['expected_price'])
-            reason = min(constraints, key=constraints.get)
-            q = max(0, constraints[reason])
-            e['input_limited'] = any(k.startswith('Сырьё') and v+EPS < planned for k, v in constraints.items())
-            if planned > EPS:
-                e['production_limit'] = reason
-            e['reason'] = e['production_limit']
-            if q <= EPS:
-                e['status'] = 'idle'
-                continue
-            workers = q*recipe['labor']
-            labor[e['state_id'], e['province_id']] -= workers
-            if recipe['resource']:
-                resources[e['province_id'], recipe['resource']] -= q
-            wages = workers*self.cfg['wage']
-            self.distribute(e['id'], self.workforce(e), wages, 'Заработная плата')
-            cost = wages
-            for g, ratio in recipe['inputs'].items():
-                cost += self.use_stock(e['id'], g, q*ratio)
-                self.report['inputs_used'][g] = self.report['inputs_used'].get(g, 0)+q*ratio
-            for g, quantity in self.equipment_wear(recipe, q).items():
-                cost += self.use_stock(e['id'], g, quantity)
-                self.report['equipment_wear'][g] = self.report['equipment_wear'].get(g, 0)+quantity
-                e['equipment_wear'][g] = e['equipment_wear'].get(g, 0)+quantity
-            # Цена нового выпуска заменяет цену распродажи только у пустого склада.
-            if a['stock'].get(e['good'], 0) <= EPS:
-                e['price'] = plan.get('sale_price', e['price'])
-            self.add_stock(e['id'], e['good'], q, cost)
-            e.update(status='active', workers=workers, output=q, production_cost=cost, unit_cost=cost/q, wages=wages)
-            self.report['production'][e['good']] = self.report['production'].get(e['good'], 0)+q
-        self._construction_labor = labor
+        # Числовой цикл production вынесен в production_boundary: она же держит
+        # эталонную Python-ветку и fallback без собранного .pyd. Порядок
+        # предприятий (shuffled), RNG, склад через существующую stock boundary и
+        # все side effects остаются за Python-хуками границы.
+        _production.produce(self, existing)
 
     def return_capital(self, e):
         a = self.accounts[e['id']]

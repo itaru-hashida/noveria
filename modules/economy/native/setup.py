@@ -60,6 +60,11 @@ setup(
          # dirty-хуки остаются за Python, поэтому ядро не зависит от прочих
          # расширений.
          Extension('material_finalize_kernel', ['material_finalize_kernel.pyx']),
+         # Числовой цикл production: обходит уже перемешанный список
+         # предприятий, считает ограничения, выпуск и стоимость. RNG, порядок
+         # предприятий, склад и side effects остаются за Python, поэтому ядро
+         # не зависит от прочих расширений.
+         Extension('production_kernel', ['production_kernel.pyx']),
          # Единый контейнер состояния: держит ссылки на существующие
          # OrderStore/CashStore и native update state, собственных данных
          # экономики не заводит и потому не зависит от прочих расширений.
