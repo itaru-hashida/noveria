@@ -165,6 +165,140 @@ def test_no_duplicates_when_python_path_had_none():
     assert len(result['revisions']) == len(result['goods'])
 
 
+@pytest.mark.parametrize('quote_versions', [
+    None, {}, {'wood': 0}, {'wood': 1}, {'stone': 2, 'wood': 1},
+    {'wood': 5, 'stone': 0, 'clay': 7},
+])
+def test_dirty_goods_match_python_reference(quote_versions):
+    """Dirty goods совпадают с эталоном: значения, порядок и отсутствие лишних."""
+    reference = run(finalize.finalize_material_request_python,
+                    make_case(quote_versions=quote_versions))
+    native = run(finalize.finalize_material_request,
+                 make_case(quote_versions=quote_versions))
+    assert native['dirty_goods'] == reference['dirty_goods']
+    assert type(native['dirty_goods']) is list
+    # Товар попадает в dirty только при уже выросшей версии котировки.
+    assert native['dirty_goods'] == [
+        good for good in reference['goods']
+        if (quote_versions or {}).get(good, 0) > 0]
+
+
+def test_repeated_call_appends_once_per_call():
+    """Повторный вызов не дублирует строки внутри вызова и не копит состояние."""
+    case = make_case(materials={'wood': 1.0})
+    owner = case['owner']
+    first = finalize.apply_material_request(
+        owner, case['account'], case['project'], case['bill'], EPS)
+    second = finalize.apply_material_request(
+        owner, case['account'], case['project'], case['bill'], EPS)
+    assert first['rows'] == second['rows']
+    assert [row['good'] for row in owner.report['material_requests']] == \
+        ['wood', 'stone', 'wood', 'stone']
+    assert len(owner.report['material_requests']) == 2*len(case['bill'])
+    for row in owner.report['material_requests']:
+        assert len([key for key in row if key == 'good']) == 1
+    # Ни ревизии, ни пометки котировок второй вызов не двигают.
+    assert not [row for row in owner.journal if row[0] in ('order', 'dirty')]
+
+
+def test_repeated_batch_call_is_stateless():
+    """Пакетная финализация не накапливает состояние: результат повторяем."""
+    records = [
+        (dict(id='a'), dict(materials={'wood': 1.0}, delivery=0.5), {'wood': 4.0}, 0.5, None),
+        (dict(id='b'), dict(materials={}, delivery=0.25), {'stone': 2.0}, 0.25, None),
+    ]
+    first = finalize.finalize_material_requests(records, EPS, {'wood': 1}, {'wood': 1})
+    second = finalize.finalize_material_requests(records, EPS, {'wood': 1}, {'wood': 1})
+    assert first == second
+    assert len(second['rows']) == 2
+    assert second['dirty_goods'] == ['wood']
+
+
+def test_empty_records_list():
+    """Пустой список проектов: пустые списки и целые нули, без падений."""
+    reference = finalize.finalize_material_requests_python([], EPS)
+    native = finalize.finalize_material_requests([], EPS)
+    assert native == reference
+    assert native['projects'] == []
+    assert native['rows'] == []
+    assert native['goods'] == []
+    assert native['dirty_goods'] == []
+    for field in ('requested_total', 'delivered_total', 'reserved_total',
+                  'missing_total'):
+        assert native[field] == 0
+        assert type(native[field]) is int
+
+
+def test_missing_optional_fields():
+    """Отсутствующие необязательные поля дают те же None/0, что и у эталона."""
+    owner = FakeOwner()
+    account = dict(stock={}, stock_reserved={})
+    # Ни project_id, ни last_progress, ни created, ни delivery у проекта нет.
+    project = dict(capacity=10, materials={})
+    bill = {'wood': 4.0}
+    reference = finalize.finalize_material_request_python(
+        account, project, bill, project.get('delivery', 0), EPS, None, None, None)
+    native = finalize.finalize_material_request(
+        account, project, bill, project.get('delivery', 0), EPS, None, None, None)
+    assert_same(reference, native)
+    assert native['project_id'] is None
+    assert native['rows'][0]['project_id'] is None
+    assert native['rows'][0]['revision'] == 0
+    assert native['rows'][0]['progress'] == dict(
+        quantity=0, last_progress=None, created=None)
+    assert type(native['rows'][0]['progress']['quantity']) is int
+    assert finalize.apply_material_request(owner, account, project, bill, EPS)
+
+
+def test_single_material_bill():
+    """Смета из одного материала: одна строка и один dirty-товар."""
+    case = make_case(materials={'wood': 1.0}, quote_versions={'wood': 2})
+    case['bill'] = {'wood': 4.0}
+    reference = run(finalize.finalize_material_request_python, case)
+    native_case = make_case(materials={'wood': 1.0}, quote_versions={'wood': 2})
+    native_case['bill'] = {'wood': 4.0}
+    native = run(finalize.finalize_material_request, native_case)
+    assert_same(reference, native)
+    assert native['goods'] == ['wood']
+    assert native['dirty_goods'] == ['wood']
+    assert [row['good'] for row in native['rows']] == ['wood']
+    assert native['requested_total'] == 4.0
+    assert native['delivered_total'] == 1.0
+    assert native['missing_total'] == 3.0
+
+
+def test_several_materials_keep_bill_order():
+    """Несколько материалов: строки, dirty и ревизии идут в порядке сметы."""
+    bill = {'stone': 2.0, 'wood': 4.0, 'clay': 1.0}
+    materials = {'wood': 1.0, 'clay': 1.0}
+    revisions = {'clay': 5, 'wood': 3}
+    quotes = {'clay': 2, 'wood': 1}
+    reference_case = make_case(materials=dict(materials),
+                               quote_versions=dict(quotes),
+                               revisions=dict(revisions))
+    native_case = make_case(materials=dict(materials),
+                            quote_versions=dict(quotes),
+                            revisions=dict(revisions))
+    reference = finalize.finalize_material_request_python(
+        reference_case['account'], reference_case['project'], bill,
+        reference_case['project']['delivery'], EPS, None,
+        reference_case['owner']._demand_revision,
+        reference_case['owner']._market_quote_versions)
+    native = finalize.finalize_material_request(
+        native_case['account'], native_case['project'], bill,
+        native_case['project']['delivery'], EPS, None,
+        native_case['owner']._demand_revision,
+        native_case['owner']._market_quote_versions)
+    assert_same(reference, native)
+    assert native['goods'] == ['stone', 'wood', 'clay']
+    assert [row['good'] for row in native['rows']] == ['stone', 'wood', 'clay']
+    assert native['dirty_goods'] == ['wood', 'clay']
+    assert native['revisions'] == [dict(good='stone', revision=0),
+                                   dict(good='wood', revision=3),
+                                   dict(good='clay', revision=5)]
+    assert native['delivered_total'] == 0+1.0+1.0
+
+
 def test_revisions_updated_exactly_once():
     """Ядро не двигает ревизии: значение читается, а не инкрементируется."""
     case = make_case(revisions={'wood': 7, 'stone': 2})
@@ -441,11 +575,17 @@ def run_engine(seed, months=3, implementation=None):
         finalize.finalize_material_request = implementation
         finalize.apply_material_request = apply_reference
     rows = []
+    dirty_calls = []
+    revision_calls = []
     original_apply = finalize.apply_material_request
 
     def counted_apply(owner, account, project, bill, eps, reason=None):
         result = original_apply(owner, account, project, bill, eps, reason)
         rows.extend(dict(row) for row in result['rows'])
+        # Записи dirty и ревизий собираются отдельно: по ним видно, что путь
+        # финализации не только вызывался, но и реально дошёл до этих полей.
+        dirty_calls.append(list(result['dirty_goods']))
+        revision_calls.append([dict(row) for row in result['revisions']])
         return result
 
     finalize.apply_material_request = counted_apply
@@ -464,7 +604,9 @@ def run_engine(seed, months=3, implementation=None):
                 return dict(engine=engine,
                             digest=engine_digest(engine, rows),
                             rng=digest(engine.rng.getstate()),
-                            rows=rows, report_rows=report_rows)
+                            rows=rows, report_rows=report_rows,
+                            dirty_calls=dirty_calls,
+                            revision_calls=revision_calls)
             finally:
                 db.close()
     finally:
@@ -544,3 +686,69 @@ def test_exact_revisions_not_doubled(fixture, request):
         dict(getattr(reference_engine, '_demand_revision', {}) or {})
     assert dict(getattr(native_engine, '_market_quote_versions', {}) or {}) == \
         dict(getattr(reference_engine, '_market_quote_versions', {}) or {})
+
+
+@pytest.mark.parametrize('fixture', ['exact_17', 'exact_73129'])
+def test_exact_dirty_and_revisions_match(fixture, request):
+    """Dirty goods и ревизии реального прогона совпадают построчно и по порядку."""
+    native, reference = request.getfixturevalue(fixture)
+    assert native['dirty_calls'] == reference['dirty_calls']
+    assert native['revision_calls'] == reference['revision_calls']
+    assert any(native['dirty_calls']), 'dirty goods ни разу не заполнились'
+    assert any(native['revision_calls']), 'ревизии ни разу не заполнились'
+    for call in native['dirty_calls']:
+        assert type(call) is list
+    for call in native['revision_calls']:
+        for row in call:
+            assert list(row) == ['good', 'revision']
+            assert type(row['revision']) is int
+
+
+def forced_case(implementation):
+    """Принудительный случай: dirty, ревизии и diagnostics заведомо непусты.
+
+    Сценарий собран руками, а не движком, поэтому он выполняется и без мира:
+    смета из трёх материалов, вырастающие версии котировок, заполненные
+    ревизии и ненулевая доставка. Так видно, что путь финализации реально
+    дошёл до dirty goods, diagnostics и report-строк, а не вернул пустоту.
+    """
+    owner = FakeOwner(detail='standard', revisions={'wood': 4, 'stone': 2, 'clay': 0},
+                      quote_versions={'wood': 3, 'stone': 1, 'clay': 0})
+    account = dict(id='forced', stock={}, stock_reserved={}, balance=250.0)
+    project = dict(capacity=7, materials={'wood': 1.5, 'stone': 0.25, 'clay': 2},
+                   delivery=1.25, created=11, last_progress=12, project_id='forced-1')
+    account['project'] = project
+    bill = {'wood': 2.8, 'stone': 1.4, 'clay': 0.7}
+    reference = implementation(account, project, bill, project['delivery'], EPS,
+                               None, owner._demand_revision,
+                               owner._market_quote_versions)
+    finalize.apply_rows_hook(owner, reference)
+    return reference, owner
+
+
+def test_forced_case_exercises_dirty_and_diagnostics():
+    """Принудительный случай: значения, типы и порядок совпадают с эталоном."""
+    reference, reference_owner = forced_case(finalize.finalize_material_request_python)
+    native, native_owner = forced_case(finalize.finalize_material_request)
+    assert_same(reference, native)
+    assert native['goods'] == ['wood', 'stone', 'clay']
+    assert native['dirty_goods'] == ['wood', 'stone']
+    assert [row['good'] for row in native['rows']] == ['wood', 'stone', 'clay']
+    assert native['rows'][0]['revision'] == 4
+    assert native['rows'][2]['revision'] == 0
+    assert native['rows'][0]['missing'] == 2.8-1.5
+    assert native['requested_total'] == 2.8+1.4+0.7
+    assert native['delivered_total'] == 1.5+0.25+2
+    assert [row['good'] for row in native_owner.report['material_requests']] == \
+        [row['good'] for row in reference_owner.report['material_requests']]
+    assert native_owner.report['material_requests'] == \
+        reference_owner.report['material_requests']
+    assert native_owner._demand_revision == reference_owner._demand_revision
+    assert native_owner._market_quote_versions == reference_owner._market_quote_versions
+
+
+def test_forced_case_report_detail_hook_order():
+    """Хук отчёта в принудительном случае вызывается ровно один раз и после ядра."""
+    _, owner = forced_case(finalize.finalize_material_request)
+    assert [row[0] for row in owner.journal].count('report_detail') == 1
+    assert len(owner.report['material_requests']) == 3
