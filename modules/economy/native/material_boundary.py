@@ -40,6 +40,8 @@ focused-теста на побитовое совпадение и как fallba
 import builtins
 import importlib
 
+from . import release_boundary
+
 # Встроенные max/min сохраняют тип аргумента: ``max(0, x)`` оставляет целый 0
 # целым, как в прежнем Python-коде, и int-остаток не превращается в float.
 _PY_MAX = builtins.max
@@ -48,8 +50,9 @@ _PY_MIN = builtins.min
 # Назначение строительной закупки. Строка повторяет прежний литерал: по ней
 # ``project_cash_reserve`` и ``trade_kernel`` узнают материалы стройки.
 MATERIAL_PURPOSE = 'Строительные материалы'
-# Причина отмены опустевшего оффера: тот же текст, что и прежде.
-MATERIAL_RELEASE_REASON = 'Материалы закреплены за собственной стройкой'
+# Причина отмены опустевшего оффера: тот же текст, что и прежде. Константа
+# приходит из границы release, чтобы текст причины не дублировался.
+MATERIAL_RELEASE_REASON = release_boundary.RELEASE_REASON
 
 
 def construction_bill_python(construction, minimum_capacity, capacity):
@@ -66,18 +69,20 @@ def free_stock_hook(owner, account_id, good):
 def detach_offer_hook(owner, store, offer, take):
     """Снять закреплённую часть собственного sell-оффера с рынка.
 
-    Порядок полей прежний: количество, остаток через границу заявок, базис.
+    Тело перенесено в ``release_boundary``/``release_kernel``: здесь остаётся
+    только привязка имени, чтобы прежний call site резерва не менялся и
+    второй записи полей оффера не появилось.
     """
-    offer['quantity'] = offer['quantity']-take
-    store.set_remaining(offer, offer['remaining']-take)
-    offer['backing'] = offer['backing']-take
+    return release_boundary.detach_offer(owner, store, offer, take)
 
 
 def settle_release_hook(owner, offer, good, eps):
-    """Пометить котировки грязными и отменить опустевший оффер."""
-    owner.mark_market_quotes_dirty(good)
-    if offer['remaining'] <= eps:
-        owner.cancel_order(offer, MATERIAL_RELEASE_REASON)
+    """Пометить котировки грязными и отменить опустевший оффер.
+
+    Тело перенесено в ``release_boundary``/``release_kernel``: причина отмены и
+    порядок ``dirty`` -> ``cancel`` остаются прежними.
+    """
+    return release_boundary.settle_release(owner, offer, good, eps)
 
 
 def place_order_hook(owner, account, good, missing, sells):
