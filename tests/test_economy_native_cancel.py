@@ -422,8 +422,10 @@ def test_v3_call_site_delegates_to_cancel_boundary():
     assert 'cancel_order' not in body
     assert 'mark_market_quotes_dirty' not in body
     assert 'stock_reserved' not in body
-    # Отмена по марже/спросу осталась на месте и не тронута.
-    assert 'Отрицательная маржа или устойчивое отсутствие спроса' in body
+    # Отмена по марже/спросу вынесена в свой call site и свою границу.
+    assert '_cancel.cancel_margin_demand_project(self, a, sells, due, EPS)' in body
+    assert 'Отрицательная маржа или устойчивое отсутствие спроса' not in body
+    assert cancel_boundary.MARGIN_DEMAND_REASON == 'Отрицательная маржа или устойчивое отсутствие спроса'
 
 
 # ---------------------------------------------------------------------------

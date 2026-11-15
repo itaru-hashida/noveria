@@ -3188,20 +3188,11 @@ class Economy(EconomyServices):
             # Снятие проекта, protected и отчёт остаются хуком в границе.
             if _cancel.cancel_stalled_project(self, a, EPS):
                 continue
-            good = project['good']
-            loc = project['location']
-            e = dict(id=a['id'], good=good, price=project['expected_price'], **loc)
-            margin = (self.net_price(e)-self.unit_cost(e, sells)
-                -self.goods[good]['labor']*self.cfg['wage']*self.cfg.get('enterprise_overhead_rate', 0))
-            # Отмена требует наблюдаемой отрицательной маржи, отсутствие одного материала не отменяет проект.
-            signal = self.market_signal(self.meta.get('market_history', []), a['state_id'], loc['province_id'], good)
-            absent = (len(self.meta.get('market_history', [])) >= 3 and self.meta['month']-project['created'] >= 3
-                and signal['volume'] <= EPS and signal['unmet'] <= EPS and self.reachable_demand(e, sells) <= EPS)
-            if due and (margin < -EPS or absent):
-                del a['project']
-                a['protected'] = a.get('operating_protected', 0)+a.get('payroll_protected', 0)
-                self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='cancelled', reason='Отрицательная маржа или устойчивое отсутствие спроса'))
+            # Порог маржи/спроса, условие отмены и её причина — в нативном
+            # срезе. Снятие проекта, protected и отчёт остаются тем же хуком.
+            if _cancel.cancel_margin_demand_project(self, a, sells, due, EPS):
                 continue
+            loc = project['location']
             distance, _ = self.path(self.market_tile(a), loc['tile_id'])
             if distance is None:
                 continue
