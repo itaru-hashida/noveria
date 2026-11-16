@@ -212,6 +212,40 @@ def test_input_requests_matches_reference_including_types():
             native_plan[key] == reference_plan[key], key
 
 
+def test_input_requests_counts_equipment_needs():
+    """Ветка оборудования: required=ratio*target, износ и заявка «Оборудование»."""
+    engine = build_engine()
+    clear(engine)
+    bakery = firm(engine)
+    engine.goods[bakery['good']]['equipment'] = {'tools': 0.5}
+    engine.add_stock('private:s', 'tools', 5, 5)
+    engine.accounts[bakery['id']]['balance'] = 10**7
+    engine.input_requests(bakery, {})
+    plan = bakery['production_plan']
+    assert plan['equipment_required'] == {'tools': 0.5*plan['output']}
+    assert plan['equipment_wear'] == {'tools': 0.5*plan['output']
+                                      * engine.goods['tools'].get('durable', {})
+                                      .get('wear_rate', 0)}
+    purposes = [o['purpose'] for o in engine.report['orders']]
+    assert purposes[-1] == 'Оборудование'
+    assert purposes[:-1] == ['Сырьё']*len(plan['input_ratios'])
+
+
+def test_input_requests_equipment_branch_matches_reference():
+    engine = build_engine()
+    clear(engine)
+    bakery = firm(engine)
+    engine.goods[bakery['good']]['equipment'] = {'tools': 0.5}
+    engine.add_stock('private:s', 'tools', 5, 5)
+    engine.accounts[bakery['id']]['balance'] = 10**7
+    reference = copy.deepcopy(engine)
+    engine.input_requests(bakery, {})
+    reference_bakery = next(e for e in reference.enterprises.values()
+                            if e['good'] == 'bread')
+    boundary.input_requests_python(reference, reference_bakery, {})
+    assert state(engine) == state(reference)
+
+
 # --- 2. plan_enterprises -----------------------------------------------------
 
 def test_plan_enterprises_plans_deepest_goods_first():
