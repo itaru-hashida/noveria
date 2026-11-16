@@ -1075,8 +1075,14 @@ class Economy(EconomyServices):
             for good, quantity in support.items():
                 if good not in self.goods or not math.isfinite(quantity) or quantity < 0:
                     raise ValueError('Некорректное содержание строителей: '+str(mode)+':'+str(good))
+        # Инициализация резерва тоже идёт через CashStore: ``step`` вызывает
+        # ``activate_rules`` уже в native-режиме, и прямая запись в dict стала
+        # бы вторым писателем поля. Условие прежнее — только отсутствующий ключ,
+        # поэтому существующее значение не перезаписывается.
+        cash = self.cash_store
         for a in self.accounts.values():
-            a.setdefault('reserved', 0.0)
+            if 'reserved' not in a:
+                cash.set_reserved_cash(a['id'], 0.0)
             a.setdefault('protected', 0.0)
             a.setdefault('stock_reserved', {})
         for e in self.enterprises.values():
@@ -3194,9 +3200,15 @@ class Economy(EconomyServices):
         self.report['opening_balances'] = {a['id']: a['balance'] for a in self.accounts.values()}
         self.report['gold_before'] = self.gold()
         prior_cash = {a['id']: a['balance'] for a in self.accounts.values() if a['kind'] == 'household'}
+        # Месячный сброс резерва идёт через CashStore: это обычный, а не
+        # recovery-путь, поэтому прямая запись в dict обошла бы владельца поля.
+        # Ссылка на границу берётся один раз на цикл, как в прочих горячих
+        # циклах. Остальные ключи — не денежные поля, их по-прежнему пишет dict.
+        cash = self.cash_store
         for a in self.accounts.values():
             hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
-            a.update(reserved=0.0, protected=min(a['balance'], hold), payroll_protected=0.0,
+            cash.set_reserved_cash(a['id'], 0.0)
+            a.update(protected=min(a['balance'], hold), payroll_protected=0.0,
                 operating_protected=0.0, stock_reserved={})
         existing = list(self.enterprises.values())
         for e in existing:
