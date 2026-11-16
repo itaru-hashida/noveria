@@ -3224,12 +3224,11 @@ class Economy(EconomyServices):
         if native_mode == 'cython':
             self.stock_store.sync()
         existing = list(self.enterprises.values())
-        for e in existing:
-            e.pop('production_observation', None)
-            e.update(revenue=0, tax=0, expenses=0, profit=0, output=0, workers=0, wages=0, cost_of_sales=0,
-                production_cost=0, input_limited=False, fixed_cost_due=0, fixed_cost_paid=0,
-                dividends=0.0, working_reserve=0.0, project_reserve=0.0,
-                equipment_wear={})
+        # Месячный numeric-сброс полей предприятий — в enterprise_reset_boundary:
+        # ядро получает готовый список existing и пишет те же поля в том же
+        # порядке ключей; RNG, report и порядок итерации остаются здесь.
+        from .native.enterprise_reset_boundary import reset_enterprises
+        reset_enterprises(existing)
         # Lifecycle единого WorldState. Контейнер не считает экономику: он
         # лишь привязывается к уже существующим хранилищам на время native-
         # фаз. В Python mode шаг не открывается и WorldState не создаётся:

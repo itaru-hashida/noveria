@@ -109,6 +109,11 @@ setup(
          # Python, поэтому ядро не зависит от прочих расширений и не заводит
          # второго cash ledger.
          Extension('dividend_kernel', ['dividend_kernel.pyx']),
+         # Месячный numeric-сброс предприятий: pop production_observation и
+         # update полей в прежнем порядке ключей. Список, RNG и отчёт остаются
+         # за Python, поэтому ядро не зависит от прочих расширений и не
+         # заводит второго ledger.
+         Extension('enterprise_reset_kernel', ['enterprise_reset_kernel.pyx']),
          # Зарплатный срез публичных строек: готовность, число работников,
          # wage bill и надбавка за жильё. Выплаты идут прежним distribute,
          # склад, износ, отчёт, завершение стройки и порядок счетов остаются за
