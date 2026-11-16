@@ -1,0 +1,330 @@
+{
+ "17:deep:cython": [
+  {
+   "event_order": "1ba2b6a3f90eef5ecb3c4e56ced51fd3b04d57d836682facf680b18775923633",
+   "events": 2231,
+   "flows": 2495,
+   "month": 1,
+   "orders": 1778,
+   "report": "c5c13b435649685cbb101270737e76c06ee23da6d9d7142f69496e8601472b27",
+   "rng": "27faddba45de04cfc862fa928089a2623cbfc1a0a9134cc8bbdc5bd3f14c053d",
+   "state": "7fc18793e85c8f9b1dbb65ba1509e93597ff7f9d1444a02b25d9fc6fc64a2adb",
+   "trade_order": "614e5ef79bc26456838baab875d3467b5d6d67c85fa7ec64d30fe6cc388c1c62",
+   "trade_pairs": "3a027f36d38401784b1d78216f7a6d6449efa540badc7e37b1d722ae5c22cb38",
+   "trades": 715
+  },
+  {
+   "event_order": "fcf8ebdc4e00342d03292e903f701b2be4b193df724bd3d843216c6710a05ac0",
+   "events": 2198,
+   "flows": 4263,
+   "month": 2,
+   "orders": 1812,
+   "report": "a27e3dfef1c63448fa86b0d1d9d3f421575cd8b47bfe646b9a0ba0aa79e5358e",
+   "rng": "6762622231de9e3aa7f5baba2a5042010a7acb8df096ddfbb2061595395615f9",
+   "state": "5305910de33531a171719823fda339dbc524d6d605afa53d45fdc8cbea2c1f6c",
+   "trade_order": "589cbb5d5b322a256b975ef9071ee93125c676656244bd7db38dda1b61fd0dc4",
+   "trade_pairs": "9bab5ba180ff52dd3d03985225efd24b513add1754b1d0018a35df4a0097034d",
+   "trades": 810
+  },
+  {
+   "event_order": "7ba5108a5292e5a09c35799bd9a6550c2c464df09d891f427f01cb595ed03395",
+   "events": 2136,
+   "flows": 5781,
+   "month": 3,
+   "orders": 1660,
+   "report": "36eaee5cde341d55c1a4bcdd77ca7462409189ecfcfee4281a8dd2a979b84b65",
+   "rng": "382b2b0219d08cffccf9b8a101e35d092cf5773359f641cdb9ee101052de1377",
+   "state": "cfd8cd0ea6d53b41a25f4a26cf8b06c494324becdcbc7d499c00f22c342954f3",
+   "trade_order": "f8ee843158377dce88bb97c650e8550286cb960d0ec5990177bb3399d582e4cd",
+   "trade_pairs": "8f264c65f7ea0d37491b65622482b8019b4e52e6bdca5033c3f6373f45217a17",
+   "trades": 835
+  }
+ ],
+ "17:deep:off": [
+  {
+   "event_order": "1ba2b6a3f90eef5ecb3c4e56ced51fd3b04d57d836682facf680b18775923633",
+   "events": 2231,
+   "flows": 2495,
+   "month": 1,
+   "orders": 1778,
+   "report": "f90dff756a7580c17c91b005769f124be0fe3800f6e50f686c2eddbe9ebcf11c",
+   "rng": "27faddba45de04cfc862fa928089a2623cbfc1a0a9134cc8bbdc5bd3f14c053d",
+   "state": "53cfb2aa74293446ce0d53c39e88ae1f70a4f9b8130286fb27b78910f90f850c",
+   "trade_order": "614e5ef79bc26456838baab875d3467b5d6d67c85fa7ec64d30fe6cc388c1c62",
+   "trade_pairs": "3a027f36d38401784b1d78216f7a6d6449efa540badc7e37b1d722ae5c22cb38",
+   "trades": 715
+  },
+  {
+   "event_order": "fcf8ebdc4e00342d03292e903f701b2be4b193df724bd3d843216c6710a05ac0",
+   "events": 2198,
+   "flows": 4263,
+   "month": 2,
+   "orders": 1812,
+   "report": "c9b80046e934a24b2478d55dfe90c20d20a1941404b6b31379820d938fd396e5",
+   "rng": "6762622231de9e3aa7f5baba2a5042010a7acb8df096ddfbb2061595395615f9",
+   "state": "eed51993003c16d4011e7bf1fba47a310f42e6705ed598b568114c62523dcb24",
+   "trade_order": "589cbb5d5b322a256b975ef9071ee93125c676656244bd7db38dda1b61fd0dc4",
+   "trade_pairs": "9bab5ba180ff52dd3d03985225efd24b513add1754b1d0018a35df4a0097034d",
+   "trades": 810
+  },
+  {
+   "event_order": "7ba5108a5292e5a09c35799bd9a6550c2c464df09d891f427f01cb595ed03395",
+   "events": 2136,
+   "flows": 5781,
+   "month": 3,
+   "orders": 1660,
+   "report": "823fc57838227838eb73c68fea32308b8cf121c1456ed546f9eb820dc982f166",
+   "rng": "382b2b0219d08cffccf9b8a101e35d092cf5773359f641cdb9ee101052de1377",
+   "state": "fbb43ed01bd2b13ed057e5a0927735c6a65897031f0f5a83bd5bd830ba82a58f",
+   "trade_order": "f8ee843158377dce88bb97c650e8550286cb960d0ec5990177bb3399d582e4cd",
+   "trade_pairs": "8f264c65f7ea0d37491b65622482b8019b4e52e6bdca5033c3f6373f45217a17",
+   "trades": 835
+  }
+ ],
+ "17:standard:cython": [
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 2495,
+   "month": 1,
+   "orders": 1778,
+   "report": "22553e1190a7c73bf739722fabf88a34840d3759cfe3d4568e5c76a80dc9afbd",
+   "rng": "27faddba45de04cfc862fa928089a2623cbfc1a0a9134cc8bbdc5bd3f14c053d",
+   "state": "73cd91b107493d65a1779e570684e95e0e92a8c04764ffdbcb5bd49b4339abd1",
+   "trade_order": "614e5ef79bc26456838baab875d3467b5d6d67c85fa7ec64d30fe6cc388c1c62",
+   "trade_pairs": "3a027f36d38401784b1d78216f7a6d6449efa540badc7e37b1d722ae5c22cb38",
+   "trades": 715
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 4263,
+   "month": 2,
+   "orders": 1812,
+   "report": "871e3ede15d214a003a6f2960b889cba5cd73dad0e50c48554ca83e8108849fb",
+   "rng": "6762622231de9e3aa7f5baba2a5042010a7acb8df096ddfbb2061595395615f9",
+   "state": "246ea9b2647aed4f1b6956b23f4f3663a93263784388350f6f619d99907ac715",
+   "trade_order": "589cbb5d5b322a256b975ef9071ee93125c676656244bd7db38dda1b61fd0dc4",
+   "trade_pairs": "9bab5ba180ff52dd3d03985225efd24b513add1754b1d0018a35df4a0097034d",
+   "trades": 810
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 5781,
+   "month": 3,
+   "orders": 1660,
+   "report": "3dcce1b2fc905dde60a1100ca14bc5238113ff7aec8370d4ae702176dc75ad71",
+   "rng": "382b2b0219d08cffccf9b8a101e35d092cf5773359f641cdb9ee101052de1377",
+   "state": "d3663725efed88c79721aa6d4fe36a922ee4e299020c3c95de10691bb25ff719",
+   "trade_order": "f8ee843158377dce88bb97c650e8550286cb960d0ec5990177bb3399d582e4cd",
+   "trade_pairs": "8f264c65f7ea0d37491b65622482b8019b4e52e6bdca5033c3f6373f45217a17",
+   "trades": 835
+  }
+ ],
+ "17:standard:off": [
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 2495,
+   "month": 1,
+   "orders": 1778,
+   "report": "453eee66ce953d2acbcc445e2e0f65b03ae4154226ebda168e6e77d07d10f005",
+   "rng": "27faddba45de04cfc862fa928089a2623cbfc1a0a9134cc8bbdc5bd3f14c053d",
+   "state": "1b9077fd876bcbe164665569162f58fcd9052f122f919a635743f5a51a4cfbaf",
+   "trade_order": "614e5ef79bc26456838baab875d3467b5d6d67c85fa7ec64d30fe6cc388c1c62",
+   "trade_pairs": "3a027f36d38401784b1d78216f7a6d6449efa540badc7e37b1d722ae5c22cb38",
+   "trades": 715
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 4263,
+   "month": 2,
+   "orders": 1812,
+   "report": "e0aa02e84970a17aa53fa13a79c23ea7ab01fc202a79b0a73ae3dec49223a2d5",
+   "rng": "6762622231de9e3aa7f5baba2a5042010a7acb8df096ddfbb2061595395615f9",
+   "state": "2a306096c66cff07ff8cece62e8e6d5d9596a46b61843a9a790c6859bc1a5b1f",
+   "trade_order": "589cbb5d5b322a256b975ef9071ee93125c676656244bd7db38dda1b61fd0dc4",
+   "trade_pairs": "9bab5ba180ff52dd3d03985225efd24b513add1754b1d0018a35df4a0097034d",
+   "trades": 810
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 5781,
+   "month": 3,
+   "orders": 1660,
+   "report": "89e82f08689800986581fa2ad62fee18faa04c5a5195f1cf59439740efeb2a55",
+   "rng": "382b2b0219d08cffccf9b8a101e35d092cf5773359f641cdb9ee101052de1377",
+   "state": "75147de458fd212e93b592bad0cf504106abf85c5692965029ea9ecb4e1d60b9",
+   "trade_order": "f8ee843158377dce88bb97c650e8550286cb960d0ec5990177bb3399d582e4cd",
+   "trade_pairs": "8f264c65f7ea0d37491b65622482b8019b4e52e6bdca5033c3f6373f45217a17",
+   "trades": 835
+  }
+ ],
+ "73129:deep:cython": [
+  {
+   "event_order": "dc6628ad03c450b71e53bce5a457fc3b7d226b2bcad04c44a5c92fb8c2e73703",
+   "events": 2210,
+   "flows": 2671,
+   "month": 1,
+   "orders": 1722,
+   "report": "618e810e4dee2a4002dd91dcd1e8828582a6ba007ac660e7ecd9aa74cfc27f07",
+   "rng": "dff18cf6396d1177e4feb0efa4a7c0c96e00a07667a159e75b909b6fa5bd8c49",
+   "state": "4e858237935410e13f6a78b65a09a8707fcc1d491e6a321a4bd2a26597906b4b",
+   "trade_order": "a23f26635c747f3121a50b282b432c26233a4ff6b03e24069bcdac878e3e0e32",
+   "trade_pairs": "d004fe390302e0d759b6ffeb71ffd1626112443fd8244327225924e025c70f09",
+   "trades": 777
+  },
+  {
+   "event_order": "ac1843c58ef2afc7c37823cad25c894547cbf8d233725bcb34faf2324c1b806e",
+   "events": 2267,
+   "flows": 4342,
+   "month": 2,
+   "orders": 1831,
+   "report": "6aae4c775f544b545fb02604186e6ddbe44ec77d3d65553a4c3b12d8b64c1d10",
+   "rng": "b97fb4ac40fd8f327e7aef9dd4d68823319231a60334c035c386d48007f8bc5a",
+   "state": "223ba273f93e63e3ad5b928558684e8cfa7f0cea89edf58bf893d0da684f4c52",
+   "trade_order": "762fcb1756e1bbd77dcb292eadd7eabf2052e203036ebd5fade7b83b3a1a4d57",
+   "trade_pairs": "3f2b7a901d5f4c9d86b8ca97dde5eb8d970fef0a54abe36c311b5185cd884ab8",
+   "trades": 818
+  },
+  {
+   "event_order": "5646b72af358c50d7683f83b349a2d8349925477564667f8574a0dde56c789ea",
+   "events": 2002,
+   "flows": 6024,
+   "month": 3,
+   "orders": 1583,
+   "report": "8ddbdfdbe06b4e85bf20f3176da9c776012038838bba632763cc7a64a485f64f",
+   "rng": "e9038abab22c8500b3ca957eb670c7eb82d85d373c135221c947df09c282e32b",
+   "state": "216b6d92415cbec8a3d87e22a526f8164bace4f8a982ff312d2449e93f2fcc70",
+   "trade_order": "375584b7818e723760d3514b158c8df14ab46c85ada0ce985611da096abfa8de",
+   "trade_pairs": "56b55e451fb82b599cfb65ef765d35c9aa87a2e1391a38d0a04be5ca0e9e2ab6",
+   "trades": 853
+  }
+ ],
+ "73129:deep:off": [
+  {
+   "event_order": "dc6628ad03c450b71e53bce5a457fc3b7d226b2bcad04c44a5c92fb8c2e73703",
+   "events": 2210,
+   "flows": 2671,
+   "month": 1,
+   "orders": 1722,
+   "report": "3121baf5c28e18bd63a1b1b18bef4f84c15e7105ff0d0123abb17e439fca4549",
+   "rng": "dff18cf6396d1177e4feb0efa4a7c0c96e00a07667a159e75b909b6fa5bd8c49",
+   "state": "9c955ecfb034caf666d9a35996908c9c8f7dad311bf19c799cc5499ccfdf2750",
+   "trade_order": "a23f26635c747f3121a50b282b432c26233a4ff6b03e24069bcdac878e3e0e32",
+   "trade_pairs": "d004fe390302e0d759b6ffeb71ffd1626112443fd8244327225924e025c70f09",
+   "trades": 777
+  },
+  {
+   "event_order": "ac1843c58ef2afc7c37823cad25c894547cbf8d233725bcb34faf2324c1b806e",
+   "events": 2267,
+   "flows": 4342,
+   "month": 2,
+   "orders": 1831,
+   "report": "419ecb21a23ef8255ea3cb332e8b4fb175717fa50b55f2e162e003266665cfbf",
+   "rng": "b97fb4ac40fd8f327e7aef9dd4d68823319231a60334c035c386d48007f8bc5a",
+   "state": "375bdf557fb843655bd71af2645572841236d677b97020ae89ffd1981c262ccf",
+   "trade_order": "762fcb1756e1bbd77dcb292eadd7eabf2052e203036ebd5fade7b83b3a1a4d57",
+   "trade_pairs": "3f2b7a901d5f4c9d86b8ca97dde5eb8d970fef0a54abe36c311b5185cd884ab8",
+   "trades": 818
+  },
+  {
+   "event_order": "5646b72af358c50d7683f83b349a2d8349925477564667f8574a0dde56c789ea",
+   "events": 2002,
+   "flows": 6024,
+   "month": 3,
+   "orders": 1583,
+   "report": "141683ce869e00abc33606c6bd1b12d95a01ce133280c94612a6d7f2d4ac12d4",
+   "rng": "e9038abab22c8500b3ca957eb670c7eb82d85d373c135221c947df09c282e32b",
+   "state": "86ff938bf42af25b3011c7476c3a43f2afd1e9aad6cafee041ddde82b4fc010b",
+   "trade_order": "375584b7818e723760d3514b158c8df14ab46c85ada0ce985611da096abfa8de",
+   "trade_pairs": "56b55e451fb82b599cfb65ef765d35c9aa87a2e1391a38d0a04be5ca0e9e2ab6",
+   "trades": 853
+  }
+ ],
+ "73129:standard:cython": [
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 2671,
+   "month": 1,
+   "orders": 1722,
+   "report": "9839e3098e69db052bc863298bf4cc5d37a4c61957528d41a3baab8dcf0a95bc",
+   "rng": "dff18cf6396d1177e4feb0efa4a7c0c96e00a07667a159e75b909b6fa5bd8c49",
+   "state": "2dd6f442253f792b41ba8c6a962409d597df1f09f31074ab3e88aeafe96da78d",
+   "trade_order": "a23f26635c747f3121a50b282b432c26233a4ff6b03e24069bcdac878e3e0e32",
+   "trade_pairs": "d004fe390302e0d759b6ffeb71ffd1626112443fd8244327225924e025c70f09",
+   "trades": 777
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 4342,
+   "month": 2,
+   "orders": 1831,
+   "report": "3ce140e3436e2f76c0b6adae053ff7101e1493e7d20d71b46762c538d773727f",
+   "rng": "b97fb4ac40fd8f327e7aef9dd4d68823319231a60334c035c386d48007f8bc5a",
+   "state": "146f6c6ddc6592a16e35dbe91d4931a12d16c824c8f2019ecd4106e8e3813471",
+   "trade_order": "762fcb1756e1bbd77dcb292eadd7eabf2052e203036ebd5fade7b83b3a1a4d57",
+   "trade_pairs": "3f2b7a901d5f4c9d86b8ca97dde5eb8d970fef0a54abe36c311b5185cd884ab8",
+   "trades": 818
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 6024,
+   "month": 3,
+   "orders": 1583,
+   "report": "e85f7b437cee3da3cca3b5da5b26782b6d28a3addc976088e544d5fa6f403400",
+   "rng": "e9038abab22c8500b3ca957eb670c7eb82d85d373c135221c947df09c282e32b",
+   "state": "f17f412cf85bc74efacff16652778a68d676f74f877b1d3d74aec96a3e903f37",
+   "trade_order": "375584b7818e723760d3514b158c8df14ab46c85ada0ce985611da096abfa8de",
+   "trade_pairs": "56b55e451fb82b599cfb65ef765d35c9aa87a2e1391a38d0a04be5ca0e9e2ab6",
+   "trades": 853
+  }
+ ],
+ "73129:standard:off": [
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 2671,
+   "month": 1,
+   "orders": 1722,
+   "report": "b54216f1adfd1db6b5e3ad0fc9b244550531431ba851f1c496e4b0c07a0d0a0d",
+   "rng": "dff18cf6396d1177e4feb0efa4a7c0c96e00a07667a159e75b909b6fa5bd8c49",
+   "state": "e855477e4e526da4b30d9c4762e82eaec157ccd9050ad14e122e07bec65d51c6",
+   "trade_order": "a23f26635c747f3121a50b282b432c26233a4ff6b03e24069bcdac878e3e0e32",
+   "trade_pairs": "d004fe390302e0d759b6ffeb71ffd1626112443fd8244327225924e025c70f09",
+   "trades": 777
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 4342,
+   "month": 2,
+   "orders": 1831,
+   "report": "07d3785d6daaa2afe552ce3e15bdc642cde5d6afe46ada8c0d2ae6729ccd2549",
+   "rng": "b97fb4ac40fd8f327e7aef9dd4d68823319231a60334c035c386d48007f8bc5a",
+   "state": "c16ee57a58853502a95e43a1f803c1b6f1c34aa895fcfaf7349622251c45a1df",
+   "trade_order": "762fcb1756e1bbd77dcb292eadd7eabf2052e203036ebd5fade7b83b3a1a4d57",
+   "trade_pairs": "3f2b7a901d5f4c9d86b8ca97dde5eb8d970fef0a54abe36c311b5185cd884ab8",
+   "trades": 818
+  },
+  {
+   "event_order": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "events": 0,
+   "flows": 6024,
+   "month": 3,
+   "orders": 1583,
+   "report": "32ea25765f5057144b8c0b976e323b23e3ef34948615b5f15df7b61cd0e545bc",
+   "rng": "e9038abab22c8500b3ca957eb670c7eb82d85d373c135221c947df09c282e32b",
+   "state": "8ce21e59a909a48c3ddefe641cb07b5e8d029edbbeb240934800fda4a3339203",
+   "trade_order": "375584b7818e723760d3514b158c8df14ab46c85ada0ce985611da096abfa8de",
+   "trade_pairs": "56b55e451fb82b599cfb65ef765d35c9aa87a2e1391a38d0a04be5ca0e9e2ab6",
+   "trades": 853
+  }
+ ]
+}

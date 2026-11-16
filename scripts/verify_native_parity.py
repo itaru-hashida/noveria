@@ -1,18 +1,38 @@
 """Финальная матрица пакета: seed × месяцы × detail × Python/native.
 
-Прогоняет реальный мир и сравнивает state/report/RNG digest, число и порядок
-событий и сделок между Python-веткой (``native_mode='off'``) и native
-(``native_mode='cython'``) для двух seed'ов, трёх месяцев, standard и deep.
+Прогоняет реальный мир и записывает state/report/RNG digest, число и порядок
+событий и сделок для Python-ветки (``native_mode='off'``) и native
+(``native_mode='cython'``): два seed'а, три месяца, standard и deep.
 
 Режимы:
-    python scripts/verify_native_parity.py            — напечатать матрицу;
-    python scripts/verify_native_parity.py --save X   — сохранить дайджесты;
-    python scripts/verify_native_parity.py --compare X — сверить с сохранёнными.
+    python scripts/verify_native_parity.py                  — матрица в консоль;
+    python scripts/verify_native_parity.py --save X         — сохранить снимок;
+    python scripts/verify_native_parity.py --compare X      — сверить со снимком;
+    python scripts/verify_native_parity.py --compare-baseline
+                                                            — сверить с baseline.
 
-``--compare`` и есть проверка переноса: обе ветки обязаны совпасть с эталонным
-снимком побитово. Расхождение native и Python внутри одной ревизии — отдельное
-свойство базовой линии 5887c10, а не следствие переноса, поэтому сравнивать
-надо снимки одной и той же ревизии между собой.
+Эталонная матрица лежит в ``tests/fixtures/native_parity_baseline_5887c10.json``
+и снята на ревизии ``5887c10`` до переноса блоков 1–3. ``--compare-baseline`` —
+это и есть проверка переноса: обе ветки обязаны совпасть с ней побитово.
+
+Процедура воспроизведения baseline (ровно то, чем он был получен):
+
+    git worktree add -f <каталог> 5887c10
+    cd <каталог>/modules/economy/native
+    python setup.py build_ext --inplace
+    cd <каталог>
+    python scripts/verify_native_parity.py --save <снимок>.json
+    git worktree remove <каталог> --force
+
+Скрипт должен быть в этом worktree тем же (``git show 5887c10`` его не
+содержит — он добавлен позже), поэтому файл копируется туда из текущей ветки.
+Причина отдельного снимка: расхождение native и Python внутри одной ревизии —
+свойство базовой линии, а не следствие переноса, поэтому сравнивать надо
+снимки одной и той же ревизии.
+
+Проверено на практике: процедура даёт файл байт-в-байт, его SHA-256 —
+``8fef6f6a2dd1a880e7c7e25cea770044256b2631a2112f32b6a80957397126b6``.
+Этот же хеш закреплён в ``tests/test_native_parity_baseline.py``.
 """
 import hashlib
 import json
@@ -29,6 +49,7 @@ from audit.profile_run import workdir  # noqa: E402
 SEEDS = (17, 73129)
 MONTHS = 3
 DETAILS = ('standard', 'deep')
+BASELINE = ROOT/'tests/fixtures/native_parity_baseline_5887c10.json'
 
 
 def digest(obj):
@@ -94,6 +115,9 @@ def main(argv):
     compare = False
     if '--save' in argv:
         path = argv[argv.index('--save')+1]
+    elif '--compare-baseline' in argv:
+        path = BASELINE
+        compare = True
     elif '--compare' in argv:
         path = argv[argv.index('--compare')+1]
         compare = True
