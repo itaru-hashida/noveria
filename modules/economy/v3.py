@@ -23,6 +23,7 @@ from .native import order_boundary as _order
 from .native import owner_consumption_boundary as _owner_consumption
 from .native import production_boundary as _production
 from .native import production_outlook_boundary as _production_outlook
+from .native import quote_boundary as _quote
 from .native import report_history_boundary as _report_history
 from .native import project_completion_boundary as _project_completion
 from .native import settlement_boundary as _settlement
@@ -1902,98 +1903,26 @@ class Economy(EconomyServices):
         return list(state.values())
 
     def reference_price(self, buyer, good, sells):
-        source = sells.get(good, [])
-        key = (id(source), buyer['id'], self.market_tile(buyer), good,
-            getattr(self, '_market_quote_version', 0))
-        cache = getattr(self, '_reference_price_cache', {}) if self.QUOTE_CACHE else {}
-        entry = cache.get(key)
-        if entry is not None and entry[0] is source:
-            return entry[1]
-        offers = self.offers(buyer, good, sells)
-        if offers:
-            result = offers[0][0]
-        else:
-            signal = self.market_signal(self.meta.get('market_history', []), buyer['state_id'], self.market_province(buyer), good)
-            result = signal['landed_price'] or self.goods[good]['price']
-        if self.QUOTE_CACHE:
-            cache[key] = (source, result)
-            self._reference_price_cache = cache
-        return result
+        # Числовой срез (книга, ориентир рынка, кэш котировок) вынесен в
+        # quote_boundary: она же держит эталонную Python-ветку и fallback без
+        # собранного .pyd. Книга, landed и market_signal остаются хуками.
+        return _quote.reference_price(self, buyer, good, sells)
 
     def quoted_cost(self, buyer, good, quantity, sells):
-        source = sells.get(good, [])
-        key = (id(source), buyer['id'], self.market_tile(buyer), good, quantity,
-            getattr(self, '_market_quote_version', 0))
-        cache = getattr(self, '_quoted_cost_cache', {}) if self.QUOTE_CACHE else {}
-        entry = cache.get(key)
-        if entry is not None and entry[0] is source:
-            return entry[1]
-        left, value, ceiling = quantity, 0.0, 0.0
-        for price, sell, _ in self.offers(buyer, good, sells):
-            q = min(left, sell['remaining'])
-            value += q*price
-            ceiling = max(ceiling, price)
-            left -= q
-            if left <= EPS:
-                break
-        if left > EPS:
-            reference = self.reference_price(buyer, good, sells)
-            # Ориентир следующего выпуска не является предложением товара.
-            quotes = [quote[0] for firm, price in getattr(self, '_recovery_quotes', {}).get(good, [])
-                if firm['id'] != buyer['id']
-                and (quote := self.landed(firm['tile_id'], self.market_tile(buyer), good, price))]
-            if quotes:
-                reference = max(reference, min(quotes))
-            value += left*reference
-            ceiling = max(ceiling, reference)
-        result = value, max(ceiling, EPS), left <= EPS
-        if self.QUOTE_CACHE:
-            cache[key] = (source, result)
-            self._quoted_cost_cache = cache
-        return result
+        # Книга, ориентир восстановления и кэш котировок — в quote_boundary;
+        # порядок обхода книги, int/float-типы и ранний выход сохранены.
+        return _quote.quoted_cost(self, buyer, good, quantity, sells)
 
     def input_bid_ceiling(self, buy):
         """Предельная цена автоматической закупки при зафиксированной марже."""
-        firm = self.enterprises.get(buy['participant'])
-        if (not firm or firm['status'] == 'closed' or firm.get('suspended')
-                or not buy.get('adaptive_input_budget') or buy['side'] != 'buy'
-                or buy['purpose'] != 'Сырьё' or buy.get('final_consumption')):
-            return None
-        plan = firm.get('production_plan', {})
-        inputs = plan.get('input_ratios', {})
-        prices = plan.get('input_prices', {})
-        if (plan.get('month') != self.meta['month'] or plan.get('output', 0) <= EPS
-                or buy['id'] not in plan.get('input_orders', [])
-                or inputs.get(buy['good'], 0) <= EPS
-                or not inputs.keys() <= prices.keys()
-                or 'expected_net_price' not in plan or 'wage_unit' not in plan):
-            return None
-        other_cost = plan['wage_unit']+plan.get('fixed_unit', 0)
-        for good, quantity in inputs.items():
-            if good == buy['good']:
-                continue
-            committed = [o['price'] for o in self.report['orders']
-                if o['id'] in plan['input_orders'] and o['good'] == good]
-            other_cost += quantity*max([prices[good]]+committed)
-        return max(0, (plan['expected_net_price']-other_cost)/inputs[buy['good']])
+        # Проверки плана и отбор заявок по входам — в quote_boundary: ядро
+        # считает только сложение и деление, чтение состояния остаётся здесь.
+        return _quote.input_bid_ceiling(self, buy)
 
     def reprice_input_order(self, buy, sells):
-        ceiling = self.input_bid_ceiling(buy)
-        if ceiling is None or buy['remaining'] <= EPS:
-            return
-        a = self.accounts[buy['participant']]
-        _, quote, _ = self.quoted_cost(a, buy['good'], buy['remaining'], sells)
-        budget = buy['reserved']+self.free_cash(a['id'])
-        price = min(quote, ceiling, budget/buy['remaining'])
-        if price > buy['price']+EPS:
-            extra = buy['remaining']*(price-buy['price'])
-            self.cash_store.add_reserved_cash(buy['participant'], extra)
-            store = self.order_store
-            store.set_reserved(buy, buy['reserved']+extra)
-            buy.setdefault('initial_input_limit', buy['price'])
-            store.set_price(buy, price)
-            buy['backing'] = buy['reserved']
-            self._demand_revision[buy['good']] += 1
+        # Число (цена и доплата) считает ядро; резерв кассы, поля заявки и
+        # ревизия спроса остаются здесь, в прежних stores.
+        _quote.reprice_input_order(self, buy, sells)
 
     def purchase_quantity(self, buy, sells):
         """Обычный рынок не ограничивает количество сверх самой заявки."""
@@ -2230,34 +2159,15 @@ class Economy(EconomyServices):
         return demand
 
     def unit_cost(self, e, sells):
-        source_key = id(sells)
-        key = (source_key, e['id'], e['tile_id'], e['good'],
-            getattr(self, '_market_quote_version', 0))
-        cache = getattr(self, '_unit_cost_cache', {})
-        cached = cache.get(key)
-        if cached is not None:
-            return cached
-        recipe = self.goods[e['good']]
-        raw = sum(ratio*self.reference_price(e, good, sells) for good, ratio in recipe['inputs'].items())
-        wear = sum(quantity*self.reference_price(e, good, sells)
-                   for good, quantity in self.equipment_wear(recipe, 1).items())
-        result = recipe['labor']*self.cfg['wage']+raw+wear
-        cache[key] = result
-        self._unit_cost_cache = cache
-        return result
+        # Компенсированные суммы raw/wear и кэш себестоимости — в
+        # quote_boundary: reference_price остаётся хуком, порядок рецепта тот же.
+        return _quote.unit_cost(self, e, sells)
 
     def volume_input_prices(self, e, quantity, sells):
         """Средние доставленные цены входов для объёма производственного плана."""
-        prices = {}
-        account = self.accounts[e['id']]
-        for good, ratio in self.goods[e['good']]['inputs'].items():
-            missing = max(0, quantity*ratio-self.free_stock(e['id'], good))
-            if missing > EPS:
-                value, _, _ = self.quoted_cost(account, good, missing, sells)
-                prices[good] = value/missing
-            else:
-                prices[good] = self.reference_price(e, good, sells)
-        return prices
+        # Порядок рецепта и выбор quoted_cost/reference_price — в
+        # quote_boundary; склад и книга остаются хуками движка.
+        return _quote.volume_input_prices(self, e, quantity, sells)
 
     def net_price(self, e):
         # Числовой цикл вынесен в net_price_boundary: она же держит эталонную
