@@ -120,6 +120,16 @@ setup(
          # Python, поэтому ядро не зависит от прочих расширений и не заводит
          # второго cash ledger.
          Extension('wage_kernel', ['wage_kernel.pyx']),
+         # Settlement-цикл предприятий: оброк, expenses, profit и месяцы
+         # убыточности по готовому списку. Переводы, закрытие и возврат
+         # капитала остаются за Python-хуками, поэтому ядро не заводит
+         # второго cash ledger.
+         Extension('enterprise_settlement_kernel', ['enterprise_settlement_kernel.pyx']),
+         # Завершение и урезание проектов: проверка сметы/кассы, asset,
+         # capacity/asset_value и числовое состояние урезанного проекта.
+         # Снятие проекта, переводы, склад и создание предприятия остаются
+         # за Python-хуками, поэтому ядро не заводит вторых ledger'ов.
+         Extension('project_completion_kernel', ['project_completion_kernel.pyx']),
          # Единый контейнер состояния: держит ссылки на существующие
          # OrderStore/CashStore и native update state, собственных данных
          # экономики не заводит и потому не зависит от прочих расширений.

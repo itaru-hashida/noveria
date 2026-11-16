@@ -10,6 +10,7 @@ from .native import cash_boundary as _cash
 from .native import consumption_boundary as _consumption
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
+from .native import enterprise_settlement_boundary as _enterprise_settlement
 from .native import enterprise_state_boundary as _enterprise_state
 from .native import dividend_boundary as _dividend
 from .native import match_boundary as _match
@@ -21,6 +22,7 @@ from .native import order_boundary as _order
 from .native import owner_consumption_boundary as _owner_consumption
 from .native import production_boundary as _production
 from .native import production_outlook_boundary as _production_outlook
+from .native import project_completion_boundary as _project_completion
 from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
 from .native import stock_store_boundary as _stock_store
@@ -716,22 +718,12 @@ class Economy(EconomyServices):
 
     def limit_project_capacity(self, project, capacity):
         """Уменьшить ещё не начатый проект без изменения его экономики на единицу."""
-        previous = project['capacity']
-        if capacity+EPS >= previous:
-            return False
-        previous_working = project['working_cash']
-        construction = max(0, project['expected_investment']-previous_working)
-        working = 0 if project['expansion'] else max(self.cfg['startup_cash'],
-            capacity*project['expected_unit_cost'])
-        # Это диагностическая исходная величина; нормализация убирает шум
-        # порядка сложения в индексированных и прямых расчётах.
-        project.update(requested_capacity=round(previous, 12), capacity=capacity,
-            working_cash=working,
-            expected_profit=project['expected_profit']*capacity/previous,
-            expected_investment=construction*capacity/previous+working,
-            chain_requirements=self.recipe_requirements(project['good'], capacity),
-            capacity_limit='Устойчивый поток входов')
-        return True
+        # Числовой срез (requested_capacity, capacity, working_cash,
+        # expected_profit, expected_investment) считает project_completion_
+        # boundary: она же держит Python-эталон и fallback без собранного
+        # .pyd. chain_requirements считает прежний хук движка, текстовая
+        # причина остаётся в границе.
+        return _project_completion.limit_project_capacity(self, project, capacity)
 
     def investment_candidate_capacity_limits(self, candidates, flow_balances=None):
         """Теневой общий лимит кандидатов по существующей цепочке выпуска."""
@@ -3038,35 +3030,13 @@ class Economy(EconomyServices):
             _material_finalize.apply_material_request(self, a, project, bill, EPS)
 
     def finish_projects(self):
-        for a in list(self.accounts.values()):
-            p = a.get('project')
-            if not p:
-                continue
-            bill = self.construction_bill(p['capacity'])
-            need_cash = p['working_cash']+p.get('delivery', 0)
-            if any(p['materials'].get(g, 0)+EPS < q for g, q in bill.items()) or self.free_cash(a['id'])+a.get('protected', 0)+EPS < need_cash:
-                self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='pending', **copy.deepcopy(p)))
-                continue
-            a.pop('project')
-            a['protected'] = 0
-            self.transfer(a['id'], 'carrier:'+a['state_id'], p.get('delivery', 0), 'Доставка строительных материалов на площадку')
-            asset = p.get('delivery', 0)
-            for g, q in bill.items():
-                asset += self.use_stock(a['id'], g, q)
-                self.report['construction_used'][g] = self.report['construction_used'].get(g, 0)+q
-            if p['expansion']:
-                e = self.enterprises[a['id']]
-                e['capacity'] += p['capacity']
-                e['asset_value'] += asset
-                self.mark_investment_dirty(e['good'])
-                self.report['lifecycle'].append(dict(enterprise=e['id'], action='expanded', good=e['good'], capacity_added=p['capacity'], reason='Оплаченное выгодное расширение'))
-            else:
-                loc = p['location']
-                key = (a['id'], loc['province_id'], loc['tile_id'], p['capacity'])
-                self.construction_receipts[key] = dict(working_cash=p['working_cash'], materials=bill, asset_value=asset)
-                e = self.open_enterprise(p['good'], loc, a['id'], p['capacity'], sales_estimate=p['capacity'])
-                e['price'] = p['expected_price']
-            self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='expanded' if p['expansion'] else 'built', enterprise=e['id']))
+        # Числовой срез завершения проектов (проверка сметы и кассы, asset,
+        # запись capacity/asset_value при расширении) вынесен в
+        # project_completion_boundary: она же держит Python-эталон и fallback
+        # без собранного .pyd. Порядок счетов (list(values())), переводы через
+        # прежний transfer, склад через существующую stock boundary, создание
+        # предприятия и отчёты остаются за Python-хуками границы.
+        _project_completion.finish_projects(self)
 
     def produce(self, existing, sells):
         # Числовой цикл production вынесен в production_boundary: она же держит
@@ -3091,23 +3061,13 @@ class Economy(EconomyServices):
         self.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'], action='closed', reason=e['reason']))
 
     def settle(self, enterprises, households):
-        for e in enterprises:
-            due = self.enterprise_overhead(e) if e['status'] != 'closed' else 0.0
-            paid = min(due, self.free_cash(e['id']))
-            if paid > EPS:
-                self.transfer(e['id'], 'treasury:'+e['state_id'], paid, 'Оброк за землю и мастерскую')
-            e.update(fixed_cost_due=due, fixed_cost_paid=paid)
-            e['expenses'] = e['cost_of_sales']+due
-            e['profit'] = e['revenue']-e['tax']-e['expenses']
-            e['loss_months'] = e['loss_months']+1 if e['profit'] < -EPS else 0
-            e['profitable_months'] = e['profitable_months']+1 if e['profit'] > EPS else 0
-            if e['status'] == 'closed':
-                self.return_capital(e)
-                continue
-            unviable = e['loss_months'] > 0 and e['available_from'] <= self.meta['month']
-            e['unviable_months'] = e.get('unviable_months', 0)+1 if unviable else 0
-            if e['unviable_months'] >= self.cfg['loss_months_to_close']:
-                self.close_enterprise(e)
+        # Числовой срез settlement (оброк, expenses, profit, месяцы убыточности)
+        # вынесен в enterprise_settlement_boundary: она же держит Python-эталон
+        # и fallback без собранного .pyd. Список enterprises готов, перевод
+        # оброка идёт прежним transfer, закрытие и возврат капитала остаются
+        # Python-хуками границы. Второй цикл (carrier/treasury) — ниже, без
+        # изменений.
+        _enterprise_settlement.settle(self, enterprises)
         for a in self.shuffled(self.accounts.values()):
             rate = {'carrier': self.cfg['carrier_distribution'], 'treasury': self.cfg['public_spending']}.get(a['kind'], 0)
             if rate:
