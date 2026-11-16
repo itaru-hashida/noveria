@@ -1,4 +1,5 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
+from .stock_store_boundary import get_stock_store
 """Резерв строительных материалов: смета, склад инвестора и stock_reserved.
 
 Ядро — только вертикальный срез ``project_material_requests``: расчёт сметы,
@@ -83,7 +84,7 @@ def reserve_materials(object owner, object account, object project, object bill,
     """
     cdef dict materials = project['materials']
     cdef dict stock = account['stock']
-    cdef dict reserved = account['stock_reserved']
+    cdef object stock_store = get_stock_store(owner)
     cdef object account_id = account['id']
     cdef object good
     cdef object quantity
@@ -114,7 +115,7 @@ def reserve_materials(object owner, object account, object project, object bill,
             # С рынка снимается только закреплённая часть, свободный остаток
             # остаётся в продаже: поля оффера меняет Python-хук.
             detach_offer(owner, store, offer, take)
-            reserved[good] = _PY_MAX(0, reserved.get(good, 0)-take)
+            stock_store.release_reserved(account_id, good, take)
             release = release-take
             settle_release(owner, offer, good, eps)
         # Пересчёт по свободному остатку после освобождения собственных офферов.

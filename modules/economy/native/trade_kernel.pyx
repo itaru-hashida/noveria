@@ -1,4 +1,5 @@
 # cython: language_level=3
+from .stock_store_boundary import get_stock_store
 """Исполнение одной уже выбранной сделки: заявки, деньги, отчёт.
 
 Ядро не выбирает buyer/seller и не считает ``q``: это делает Python-цикл
@@ -61,8 +62,7 @@ def commit_trade(object owner, object buy, object sell, object quote,
     # исполненную часть, второй уменьшается на ту же сумму.
     cash.release_reserved_cash(buyer_id, release)
     store.set_reserved(buy, _PY_MAX(0, buy['reserved']-release))
-    stock_reserved = seller['stock_reserved']
-    stock_reserved[good] = _PY_MAX(0, stock_reserved[good]-quantity)
+    get_stock_store(owner).release_reserved(seller_id, good, quantity)
     value = use_stock(seller_id, good, quantity)
     add_stock(buyer_id, good, quantity, quantity*price)
     gross = quantity*sell['price']

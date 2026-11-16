@@ -22,6 +22,7 @@ from .native import production_boundary as _production
 from .native import production_outlook_boundary as _production_outlook
 from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
+from .native import stock_store_boundary as _stock_store
 from .native import topup_boundary as _topup
 from .native import trade_boundary as _trade
 from .native import wage_boundary as _wage
@@ -896,6 +897,14 @@ class Economy(EconomyServices):
         # без повторного чтения словаря на каждой операции.
         return _stock.add_stock(self, account, good, quantity, value)
 
+    @property
+    def stock_store(self):
+        accounts = self.accounts
+        store = self.__dict__.get('_stock_store')
+        if store is None or store.accounts is not accounts:
+            store = self._stock_store = _stock_store.StockStore(accounts)
+        return store
+
     def _update_physical_stock_total(self, good, before, after):
         """Обновить ленивый индекс физических запасов, если он уже построен."""
         totals = getattr(self, '_physical_stock_totals', None)
@@ -1213,7 +1222,7 @@ class Economy(EconomyServices):
                 continue
             moved_value = source['values'].get(good, 0)*share
             before = source['stock'].get(good, 0)
-            source['stock'][good] = max(0, quantity-moved_quantity)
+            self.stock_store.set_stock(source['id'], good, max(0, quantity-moved_quantity))
             self._update_physical_stock_total(good, before, source['stock'][good])
             source['values'][good] = max(0, source['values'].get(good, 0)-moved_value)
             stock[good] = moved_quantity
@@ -1447,7 +1456,7 @@ class Economy(EconomyServices):
             offer['quantity'] -= take
             store.set_remaining(offer, offer['remaining']-take)
             offer['backing'] -= take
-            account['stock_reserved'][good] = max(0, account['stock_reserved'].get(good, 0)-take)
+            self.stock_store.release_reserved(account['id'], good, take)
             release -= take
             self.mark_market_quotes_dirty(good)
             if offer['remaining'] <= EPS:
@@ -1623,7 +1632,7 @@ class Economy(EconomyServices):
         if side == 'buy':
             self.cash_store.add_reserved_cash(participant, o['reserved'])
         else:
-            a.setdefault('stock_reserved', {})[good] = a.get('stock_reserved', {}).get(good, 0)+quantity
+            self.stock_store.add_reserved(participant, good, quantity)
         self.order_store.append(o)
         if side == 'sell':
             self.mark_market_quotes_dirty(good)
@@ -1662,7 +1671,7 @@ class Economy(EconomyServices):
             store.set_reserved(order, 0.0)
             self._demand_revision[order['good']] += 1
         else:
-            a['stock_reserved'][order['good']] = max(0, a['stock_reserved'].get(order['good'], 0)-order['remaining'])
+            self.stock_store.release_reserved(order['participant'], order['good'], order['remaining'])
             self.mark_market_quotes_dirty(order['good'])
         if not filled:
             store.set_status(order, 'cancelled')
@@ -3209,7 +3218,10 @@ class Economy(EconomyServices):
             hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
             cash.set_reserved_cash(a['id'], 0.0)
             a.update(protected=min(a['balance'], hold), payroll_protected=0.0,
-                operating_protected=0.0, stock_reserved={})
+                operating_protected=0.0)
+            a['stock_reserved'] = {}
+        if native_mode == 'cython':
+            self.stock_store.sync()
         existing = list(self.enterprises.values())
         for e in existing:
             e.pop('production_observation', None)

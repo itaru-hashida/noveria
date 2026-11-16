@@ -1,4 +1,5 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
+from .stock_store_boundary import get_stock_store
 """Stock mutation kernel: add_stock/use_stock над словарным складом счёта.
 
 Ядро сознательно работает с ``object``-значениями, а не с ``double``.
@@ -45,13 +46,12 @@ cdef inline object _track(dict totals, object good, object before, object after)
 
 
 def add_stock(owner, account, good, quantity, value=0):
-    """V3 add_stock: остаток и стоимость растут аддитивно, тип не меняется."""
+    """V3 add_stock через единый StockStore."""
     cdef dict account_data = owner.accounts[account]
-    cdef dict stock = account_data['stock']
     cdef dict values = account_data['values']
-    cdef object before = stock.get(good, 0)
-    cdef object after = before+quantity
-    stock[good] = after
+    cdef object stock_store = get_stock_store(owner)
+    cdef object before = stock_store.get_stock(account, good)
+    cdef object after = stock_store.add_stock(account, good, quantity)
     values[good] = values.get(good, 0)+value
     _track(owner.__dict__.get('_physical_stock_totals'), good, before, after)
 
@@ -59,9 +59,9 @@ def add_stock(owner, account, good, quantity, value=0):
 def use_stock(owner, account, good, quantity):
     """V3 use_stock: списание по средней стоимости и возврат этой стоимости."""
     cdef dict account_data = owner.accounts[account]
-    cdef dict stock = account_data['stock']
     cdef dict values = account_data['values']
-    cdef object available = stock.get(good, 0)
+    cdef object stock_store = get_stock_store(owner)
+    cdef object available = stock_store.get_stock(account, good)
     cdef object value
     cdef object after
     if quantity < -_EPS or quantity > available+_EPS:
@@ -70,7 +70,7 @@ def use_stock(owner, account, good, quantity):
     quantity = min(quantity, available)
     value = values.get(good, 0)*quantity/available if available > 0 else 0
     after = max(0, available-quantity)
-    stock[good] = after
+    stock_store.set_stock(account, good, after)
     # Перечитывание values.get(good, 0) — как в V3, а не переиспользование
     # ранее прочитанного значения: порядок операций должен совпадать.
     values[good] = max(0, values.get(good, 0)-value)

@@ -17,6 +17,7 @@ Native-ядро читает словари счёта по владельцу, 
 границы; они же служат образцом для focused-теста на побитовое совпадение.
 """
 import importlib
+from .stock_store_boundary import get_stock_store
 
 # Допуск остатка. Переопределяется configure() из support.py, чтобы не
 # дублировать константу проекта и не платить за передачу EPS на каждом вызове.
@@ -34,8 +35,9 @@ def configure(eps):
 def add_stock_python(owner, account, good, quantity, value=0):
     """Эталон V3 add_stock (EconomyServices.add_stock) с трекингом индекса."""
     account_data = owner.accounts[account]
-    before = account_data['stock'].get(good, 0)
-    account_data['stock'][good] = before+quantity
+    store = get_stock_store(owner)
+    before = store.get_stock(account, good)
+    store.set_stock(account, good, before+quantity)
     account_data['values'][good] = account_data['values'].get(good, 0)+value
     _update_physical_stock_total(owner, good, before, account_data['stock'][good])
 
@@ -43,15 +45,17 @@ def add_stock_python(owner, account, good, quantity, value=0):
 def use_stock_python(owner, account, good, quantity):
     """Эталон V3 use_stock: проверка остатка, средняя стоимость, списание."""
     account_data = owner.accounts[account]
-    available = account_data['stock'].get(good, 0)
+    store = get_stock_store(owner)
+    available = store.get_stock(account, good)
     held = account_data['values'].get(good, 0)
     if quantity < -_EPS or quantity > available+_EPS:
         raise ValueError('Двойное расходование товара')
     quantity = min(quantity, available)
     value = held*quantity/available if available > 0 else 0
-    account_data['stock'][good] = max(0, available-quantity)
+    after = max(0, available-quantity)
+    store.set_stock(account, good, after)
     account_data['values'][good] = max(0, held-value)
-    _update_physical_stock_total(owner, good, available, account_data['stock'][good])
+    _update_physical_stock_total(owner, good, available, after)
     return value
 
 

@@ -899,8 +899,7 @@ def apply_sell_orders(engine, data, meta):
                 reason='', expires=meta['month'], final_consumption=False,
                 state_id=state_id, province_id=province_id, tile_id=tile_id,
                 reserved=0, backing=quantity)
-            a.setdefault('stock_reserved', {})[good] = \
-                a.get('stock_reserved', {}).get(good, 0)+quantity
+            engine.stock_store.add_reserved(a['id'], good, quantity)
             store.append(order)
             engine.mark_market_quotes_dirty(good)
             sells[good].append(order)
@@ -1074,8 +1073,7 @@ def apply_recovery(engine, data, meta, sells):
                 order_id = f'{meta["month"]}-{int(data["sell_order_index"][sell_index])}'
                 order = next(o for o in engine.report['orders'] if o['id'] == order_id)
                 good = order['good']
-                firm['stock_reserved'][good] = max(0, firm['stock_reserved'].get(good, 0)
-                                                   -order['remaining'])
+                engine.stock_store.release_reserved(firm['id'], good, order['remaining'])
                 order.update(status='cancelled', reason='Сырьё возвращено в производство')
                 engine.mark_market_quotes_dirty(good)
                 journal.append(('recovery_cancel', i, order_id))
@@ -1113,8 +1111,7 @@ def apply_public_projects(engine, data, meta, sells):
             order['quantity'] -= take
             order['remaining'] -= take
             order['backing'] -= take
-            account['stock_reserved'][good] = max(0,
-                account['stock_reserved'].get(good, 0)-take)
+            engine.stock_store.release_reserved(account['id'], good, take)
             engine.mark_market_quotes_dirty(good)
             if order['remaining'] <= EPS:
                 engine.cancel_order(order, 'Материалы закреплены за городской стройкой')

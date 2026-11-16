@@ -39,6 +39,7 @@ focused-теста на побитовое совпадение и как fallba
 
 import builtins
 import importlib
+from .stock_store_boundary import get_stock_store
 
 from . import release_boundary
 
@@ -104,7 +105,7 @@ def reserve_materials_python(owner, account, project, bill, sells, eps, store,
     """
     materials = project['materials']
     stock = account['stock']
-    reserved = account['stock_reserved']
+    stock_store = get_stock_store(owner)
     account_id = account['id']
     for good, quantity in bill.items():
         held = materials.get(good, 0)
@@ -120,7 +121,7 @@ def reserve_materials_python(owner, account, project, bill, sells, eps, store,
             # С рынка снимается только закреплённая часть, свободный остаток
             # остаётся в продаже.
             detach_offer(owner, store, offer, take)
-            reserved[good] = _PY_MAX(0, reserved.get(good, 0)-take)
+            stock_store.release_reserved(account['id'], good, take)
             release = release-take
             settle_release(owner, offer, good, eps)
         # Пересчёт по свободному остатку после освобождения собственных офферов.

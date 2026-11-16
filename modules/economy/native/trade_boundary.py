@@ -15,6 +15,7 @@ focused-теста на побитовое совпадение и как fallba
 
 import builtins
 import importlib
+from .stock_store_boundary import get_stock_store
 
 # Встроенные max/min: на границе ``max(0, x)`` они сохраняют тип аргумента,
 # поэтому целый 0 остаётся целым, как в прежнем Python-коде.
@@ -39,7 +40,7 @@ def commit_trade_python(owner, buy, sell, quote, quantity, price, eps, cash, sto
         release = _PY_MIN(buy['reserved'], _PY_MAX(release, quantity*price))
     cash.release_reserved_cash(buyer_id, release)
     store.set_reserved(buy, _PY_MAX(0, buy['reserved']-release))
-    seller['stock_reserved'][good] = _PY_MAX(0, seller['stock_reserved'][good]-quantity)
+    get_stock_store(owner).release_reserved(seller_id, good, quantity)
     value = owner.use_stock(seller_id, good, quantity)
     owner.add_stock(buyer_id, good, quantity, quantity*price)
     gross = quantity*sell['price']

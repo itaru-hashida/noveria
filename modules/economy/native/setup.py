@@ -10,6 +10,7 @@ setup(
          # Отдельное расширение: stock-операции не должны тянуть serial_step
          # и обязаны собираться независимо от него.
          Extension('stock_kernel', ['stock_kernel.pyx']),
+         Extension('stock_store', ['stock_store.pyx']),
          # Представление офферов тоже отдельное: оно читает книгу движка и не
          # зависит ни от stock-ядра, ни от участка update_prices.
          Extension('offer_view', ['offer_view.pyx']),
