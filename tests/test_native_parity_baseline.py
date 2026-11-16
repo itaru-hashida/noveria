@@ -24,9 +24,11 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import verify_native_parity as parity  # noqa: E402
 
 BASELINE = ROOT/'tests/fixtures/native_parity_baseline_5887c10.json'
-# SHA-256 самого файла матрицы: воспроизведение по процедуре из docstring
-# verify_native_parity.py даёт байт-в-байт этот же файл.
-BASELINE_SHA256 = '8fef6f6a2dd1a880e7c7e25cea770044256b2631a2112f32b6a80957397126b6'
+# SHA-256 канонического JSON (sort_keys, без пробелов, UTF-8). Хеш байтов
+# файла здесь не годится: Git отдаёт LF, а рабочая копия на Windows может быть
+# CRLF, поэтому байтовый хеш зависел бы от платформы и настроек checkout.
+BASELINE_CANONICAL_SHA256 = \
+    '24d5950a631f5ace4d2c5d310033dee6c99ea4dad7ef5032b88cfc2f054e0a25'
 SEEDS = (17, 73129)
 DETAILS = ('standard', 'deep')
 MODES = ('off', 'cython')
@@ -38,10 +40,17 @@ def load_baseline():
     return json.loads(BASELINE.read_text(encoding='utf-8'))
 
 
-def test_baseline_file_hash_matches_documented_reproduction():
-    """Файл не подменён: его SHA-256 совпадает с задокументированным."""
+def canonical_hash(data):
+    """Хеш содержимого матрицы, независимый от переводов строк и отступов."""
+    text = json.dumps(data, sort_keys=True, ensure_ascii=False,
+                      separators=(',', ':'))
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def test_baseline_content_hash_matches_documented_reproduction():
+    """Содержимое не подменено: канонический хеш совпадает с задокументированным."""
     assert BASELINE.exists(), 'эталонная матрица обязана лежать в репозитории'
-    assert hashlib.sha256(BASELINE.read_bytes()).hexdigest() == BASELINE_SHA256
+    assert canonical_hash(load_baseline()) == BASELINE_CANONICAL_SHA256
 
 
 def test_baseline_is_committed_with_full_matrix():
