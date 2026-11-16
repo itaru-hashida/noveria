@@ -130,6 +130,14 @@ setup(
          # Снятие проекта, переводы, склад и создание предприятия остаются
          # за Python-хуками, поэтому ядро не заводит вторых ledger'ов.
          Extension('project_completion_kernel', ['project_completion_kernel.pyx']),
+         # Report/history writers: строки sales_history и stock_sales_history
+         # и числовые агрегаты отчёта месяца. Живые report и dict-ы движка,
+         # вторых ledger'ов нет; форматирование report остаётся Python.
+         Extension('report_history_kernel', ['report_history_kernel.pyx']),
+         # Diagnostics counters: агрегация сделок для компактного event trace
+         # (trade.executed): counters и суммы по прежнему ключу и порядку.
+         # События создаёт прежний log_event, тексты остаются Python.
+         Extension('diagnostics_kernel', ['diagnostics_kernel.pyx']),
          # Единый контейнер состояния: держит ссылки на существующие
          # OrderStore/CashStore и native update state, собственных данных
          # экономики не заводит и потому не зависит от прочих расширений.

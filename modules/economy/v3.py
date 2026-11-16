@@ -10,6 +10,7 @@ from .native import cash_boundary as _cash
 from .native import consumption_boundary as _consumption
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
+from .native import diagnostics_boundary as _diagnostics
 from .native import enterprise_settlement_boundary as _enterprise_settlement
 from .native import enterprise_state_boundary as _enterprise_state
 from .native import dividend_boundary as _dividend
@@ -22,6 +23,7 @@ from .native import order_boundary as _order
 from .native import owner_consumption_boundary as _owner_consumption
 from .native import production_boundary as _production
 from .native import production_outlook_boundary as _production_outlook
+from .native import report_history_boundary as _report_history
 from .native import project_completion_boundary as _project_completion
 from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
@@ -234,25 +236,21 @@ class Economy(EconomyServices):
                 sustainable_capacity=limit['sustainable_capacity'],
                 reduction=limit['reduction'], allocation_order=limit['allocation_order'])
 
-        trade_groups = defaultdict(lambda: dict(count=0, quantity=0.0, gold=0.0, freight=0.0))
-        for trade in self.report.get('trades', []):
-            key = (trade.get('buyer'), trade.get('seller'), trade.get('good'),
-                   trade.get('buyer_province'), trade.get('seller_province'), trade.get('purpose'))
-            group = trade_groups[key]
-            group['count'] += 1
-            group['quantity'] += trade.get('quantity', 0)
-            group['gold'] += trade.get('gold', 0)
-            group['freight'] += trade.get('freight', 0)
-        for (buyer, seller, good, buyer_region, seller_region, purpose), group in trade_groups.items():
+        # Числовые counters группировки сделок (count, quantity, gold, freight)
+        # считает diagnostics_boundary: она же держит Python-эталон и fallback
+        # без собранного .pyd. Порядок групп — прежний (первое появление ключа),
+        # поэтому порядок и количество trade.executed событий не меняются;
+        # сами события по-прежнему создаёт log_event.
+        for (buyer, seller, good, buyer_region, seller_region, purpose), count, quantity, gold, freight in _diagnostics.aggregate_trade_groups(self.report.get('trades', [])):
             self.log_event('trade.executed', entity_id=f'{buyer}:{seller}:{good}',
                 region_id=buyer_region, good=good, source='match',
-                quantity=group['quantity'], trades_count=group['count'], seller=seller,
+                quantity=quantity, trades_count=count, seller=seller,
                 buyer=buyer, seller_region=seller_region,
-                price=group['gold']/group['quantity'] if group['quantity'] else None,
-                freight=group['freight'],
-                landed_price=(group['gold']+group['freight'])/group['quantity']
-                    if group['quantity'] else None,
-                gold=group['gold'], purpose=purpose)
+                price=gold/quantity if quantity else None,
+                freight=freight,
+                landed_price=(gold+freight)/quantity
+                    if quantity else None,
+                gold=gold, purpose=purpose)
 
         for order in self.report.get('orders', []):
             if order.get('side') != 'buy' or order.get('remaining', 0) <= EPS:
@@ -3318,26 +3316,12 @@ class Economy(EconomyServices):
             # Слагаемые по-прежнему складываются встроенным sum: в Python 3.12 он
             # суммирует float с компенсацией погрешности, и простое накопление в
             # словаре дало бы расхождение в последнем знаке, а оно меняет траекторию.
-            offers_by_firm = {}
-            for o in self.report['orders']:
-                if o['side'] != 'sell':
-                    continue
-                offers_by_firm.setdefault((o['participant'], o['good']), []).append(o)
-            for e in self.enterprises.values():
-                offers = offers_by_firm.get((e['id'], e['good']), ())
-                e['sales_history'] = (e.get('sales_history', [])+[dict(month=self.meta['month'],
-                    sold=sum(o['quantity']-o['remaining'] for o in offers),
-                    offered=sum(o['quantity'] for o in offers), output=e['output'],
-                    input_limited=e.get('input_limited', False),
-                    additional_demand=e.get('reachable_demand', 0) > EPS)])[-3:]
-            trades_by_account = {}
-            for t in self.report['trades']:
-                trades_by_account.setdefault((t['seller'], t['good']), []).append(t['quantity'])
+            # Числовые writers истории вынесены в report_history_boundary: она же
+            # держит Python-эталон и fallback без собранного .pyd. Порядок заявок,
+            # порядок предприятий и счетов и живой report остаются прежними.
+            _report_history.update_sales_history(self, EPS)
+            _report_history.update_stock_sales_history(self)
             for a in self.accounts.values():
-                for good in a['stock']:
-                    history = a.setdefault('stock_sales_history', {}).get(good, [])
-                    a['stock_sales_history'][good] = (history+[dict(sold=sum(
-                        trades_by_account.get((a['id'], good), ())))])[-3:]
                 hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
                 a['protected'] = min(a['balance'], hold)
             self.settle(list(self.enterprises.values()), households)
@@ -3356,29 +3340,14 @@ class Economy(EconomyServices):
                 self.update_welfare()
             else:
                 self.summarize(prior_cash)
-                self.report['account_flows'] = []
-                sectors = defaultdict(float)
-                incoming_by_account, outgoing_by_account = defaultdict(float), defaultdict(float)
-                for f in self.report['flows']:
-                    incoming_by_account[f['recipient']] += f['gold']
-                    outgoing_by_account[f['sender']] += f['gold']
-                for a in self.accounts.values():
-                    incoming = incoming_by_account[a['id']]
-                    outgoing = outgoing_by_account[a['id']]
-                    self.report['account_flows'].append(dict(id=a['id'], kind=a['kind'], incoming=incoming, outgoing=outgoing, net=incoming-outgoing))
-                for f in self.report['flows']:
-                    sectors[self.accounts[f['sender']]['kind'], self.accounts[f['recipient']]['kind']] += f['gold']
-                self.report['sector_flows'] = [dict(sender_kind=s, recipient_kind=r, gold=q) for (s, r), q in sorted(sectors.items())]
-                self.report['gold_after'] = self.gold()
-                self.report['balances'] = {kind: sum(a['balance'] for a in self.accounts.values() if a['kind'] == kind) for kind in sorted({a['kind'] for a in self.accounts.values()})}
-                total_gold = self.gold()
-                self.report['money_shares'] = {kind: balance/total_gold if total_gold else 0
-                    for kind, balance in self.report['balances'].items()}
+                # Числовые агрегаты отчёта (account_flows, sector_flows, balances,
+                # money_shares, stocks, active/open) считает report_history_
+                # boundary: она же держит Python-эталон и fallback без .pyd.
+                # money_share-строки diagnostics — форматирование отчёта,
+                # остаются здесь, из возвращённых чисел.
+                balances, money_shares = _report_history.build_report_aggregates(self, self.report)
                 self.report['diagnostics'].extend(dict(kind='money_share', sector=kind, balance=balance,
-                    share=self.report['money_shares'][kind]) for kind, balance in self.report['balances'].items())
-                self.report['stocks'] = self.total_stock()
-                self.report['active_enterprises'] = sum(e['status'] == 'active' for e in self.enterprises.values())
-                self.report['open_enterprises'] = sum(e['status'] != 'closed' for e in self.enterprises.values())
+                    share=money_shares[kind]) for kind, balance in balances.items())
             self.persist_investment_state()
             self.meta['rng_state'] = self.rng.getstate()
             self.validate(before)
