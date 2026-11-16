@@ -116,17 +116,24 @@ def test_project_reserve_subtracts_paid_construction_orders():
     assert after < before
 
 
-def test_project_reserve_uses_delivery_fallback_without_route():
+def test_project_reserve_uses_delivery_fallback_without_route(monkeypatch):
+    """Без маршрута резерв берёт прежнюю ``delivery`` проекта.
+
+    ``path`` подменяется, а не зовётся на несвязанном узле: кэш маршрутов
+    процесса (``ROUTE_TREE_CACHE``) общий и ключуется только набором тайлов,
+    поэтому запись в него здесь испортила бы прогоны соседних тестов.
+    """
     engine = build_engine()
     clear(engine)
     account = engine.accounts['private:s']
     account['project'] = project(engine, capacity=engine.cfg['minimum_capacity'],
                                  delivery=7.5)
-    account['project']['location']['tile_id'] = 'nowhere'
-    engine.graph.add_node('nowhere') if False else None
-    assert engine.path('t', 'nowhere')[0] is None
-    assert engine.project_cash_reserve('private:s', {}) == pytest.approx(
-        boundary.project_cash_reserve_python(engine, 'private:s', {}))
+    monkeypatch.setattr(engine, 'path', lambda start, end: (None, []))
+    reserve = engine.project_cash_reserve('private:s', {})
+    reference = boundary.project_cash_reserve_python(engine, 'private:s', {})
+    assert reserve == pytest.approx(reference)
+    # Недостача материалов считается и без маршрута: смета непустая.
+    assert engine.construction_bill(account['project']['capacity'])
 
 
 def test_project_reserve_matches_reference_types():
