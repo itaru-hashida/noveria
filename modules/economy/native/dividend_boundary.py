@@ -38,12 +38,22 @@ class DividendHooks:
         return self.engine.PROFIT_DISTRIBUTION_REVISION
 
     def owner_kinds(self):
-        # OWNER_KINDS — константа модуля v3, а не поле движка. Берём её из уже
-        # загруженного модуля класса: v3 импортирует эту границу на старте,
-        # поэтому обычный импорт здесь дал бы цикл.
+        # OWNER_KINDS — константа экономического модуля, а не поле движка.
+        # Взять её из модуля класса недостаточно: подкласс (лабораторный
+        # сценарий, тестовый LegacyOwnerEconomy) живёт в своём модуле и этой
+        # константы не содержит. Поэтому ищем по MRO и, если её нет ни у одного
+        # класса, падаем обратно на модуль v3, который импортирован всегда.
         if self._owner_kinds is None:
-            module = sys.modules[type(self.engine).__module__]
-            self._owner_kinds = module.OWNER_KINDS
+            kinds = None
+            for cls in type(self.engine).__mro__:
+                module = sys.modules.get(cls.__module__)
+                kinds = getattr(module, 'OWNER_KINDS', None)
+                if kinds is not None:
+                    break
+            if kinds is None:
+                from .. import v3
+                kinds = v3.OWNER_KINDS
+            self._owner_kinds = kinds
         return self._owner_kinds
 
     def accounts(self):
