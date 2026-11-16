@@ -1093,7 +1093,7 @@ class Economy(EconomyServices):
             if 'reserved' not in a:
                 cash.set_reserved_cash(a['id'], 0.0)
             a.setdefault('protected', 0.0)
-            a.setdefault('stock_reserved', {})
+            self.stock_store.ensure_reserved(a['id'])
         for e in self.enterprises.values():
             e.setdefault('available_from', e['opened']+1 if e['opened'] else 0)
             e.setdefault('sales_history', [])
@@ -3219,7 +3219,7 @@ class Economy(EconomyServices):
             cash.set_reserved_cash(a['id'], 0.0)
             a.update(protected=min(a['balance'], hold), payroll_protected=0.0,
                 operating_protected=0.0)
-            a['stock_reserved'] = {}
+            self.stock_store.reset_reserved(a['id'])
         if native_mode == 'cython':
             self.stock_store.sync()
         existing = list(self.enterprises.values())

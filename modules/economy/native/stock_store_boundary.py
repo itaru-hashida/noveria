@@ -43,6 +43,17 @@ class StockStorePython:
     def release_reserved(self, aid, good, quantity):
         return self.set_reserved(aid, good, max(0, self.get_reserved(aid, good)-quantity))
 
+    def reset_reserved(self, aid):
+        self._account(aid)
+        self.accounts[aid]['stock_reserved'] = self.reserved[aid] = {}
+        return self.reserved[aid]
+
+    def ensure_reserved(self, aid):
+        self._account(aid)
+        if 'stock_reserved' not in self.accounts[aid]:
+            self.accounts[aid]['stock_reserved'] = self.reserved[aid] = {}
+        return self.reserved[aid]
+
     def sync(self):
         self.stock = {aid: a['stock'] for aid, a in self.accounts.items()}
         self.reserved = {aid: a.get('stock_reserved', {}) for aid, a in self.accounts.items()}
