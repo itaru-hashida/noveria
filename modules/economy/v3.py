@@ -10,6 +10,7 @@ from .native import cash_boundary as _cash
 from .native import consumption_boundary as _consumption
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
+from .native import enterprise_state_boundary as _enterprise_state
 from .native import dividend_boundary as _dividend
 from .native import match_boundary as _match
 from .native import market_book_boundary as _market_book_native
@@ -2391,7 +2392,7 @@ class Economy(EconomyServices):
         return _production_outlook.production_outlook(self, e, sells)
 
     def plan(self, e, history=None, sells=None):
-        e.update(self.production_outlook(e, sells))
+        _enterprise_state.apply_outlook(e, self.production_outlook(e, sells))
         return e['planned_output']
 
     def update_prices(self):
