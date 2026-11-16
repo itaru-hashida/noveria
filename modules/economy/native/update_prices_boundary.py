@@ -947,7 +947,7 @@ def apply_households(engine, data, meta, households, sells):
             budget_price=float(data['household_budget_price'][index]),
             unfunded_need=bool(data['household_unfunded'][index]),
             adaptive_household_budget=True)
-        a['reserved'] = a.get('reserved', 0)+reserved
+        engine.cash_store.add_reserved_cash(a['id'], reserved)
         store.append(order)
         engine._demand_revision[good] += 1
         journal.append(('create_household_order', int(data['household_execution_seq'][index]),
@@ -990,7 +990,7 @@ def apply_owners(engine, data, meta, sells):
                 purpose='Личное потребление собственника', status='active', reason='',
                 expires=meta['month'], final_consumption=True, state_id=state_id,
                 province_id=province_id, tile_id=tile_id, reserved=reserved, backing=reserved)
-            a['reserved'] = a.get('reserved', 0)+reserved
+            engine.cash_store.add_reserved_cash(a['id'], reserved)
             store.append(order)
             engine._demand_revision[good] += 1
             row['orders'].append(order['id'])
@@ -1061,8 +1061,7 @@ def apply_recovery(engine, data, meta, sells):
         owner = accounts[int(data['enterprise_owner'][index])]
         amount = float(data['recovery_transfer'][i])
         if amount > 0:
-            owner['balance'] -= amount
-            firm['balance'] += amount
+            engine.cash_store.move_balance(owner['id'], firm['id'], amount)
             engine.report['flows'].append(dict(sender=owner['id'], recipient=firm['id'],
                 gold=amount, reason='Восстановление оборотного капитала'))
             journal.append(('recovery_transfer', i, owner['id'], firm['id'], amount))
@@ -1074,7 +1073,8 @@ def apply_recovery(engine, data, meta, sells):
                 order = next(o for o in engine.report['orders'] if o['id'] == order_id)
                 good = order['good']
                 engine.stock_store.release_reserved(firm['id'], good, order['remaining'])
-                order.update(status='cancelled', reason='Сырьё возвращено в производство')
+                engine.order_store.set_status(order, 'cancelled')
+                order['reason'] = 'Сырьё возвращено в производство'
                 engine.mark_market_quotes_dirty(good)
                 journal.append(('recovery_cancel', i, order_id))
             engine.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'],
@@ -1109,7 +1109,7 @@ def apply_public_projects(engine, data, meta, sells):
             order = next(o for o in engine.report['orders'] if o['id'] == order_id)
             take = float(data['public_release_quantity'][release_index])
             order['quantity'] -= take
-            order['remaining'] -= take
+            engine.order_store.set_remaining(order, order['remaining']-take)
             order['backing'] -= take
             engine.stock_store.release_reserved(account['id'], good, take)
             engine.mark_market_quotes_dirty(good)
@@ -1128,8 +1128,8 @@ def apply_public_projects(engine, data, meta, sells):
             purpose=purposes[purpose], status='active', reason='', expires=meta['month'],
             final_consumption=False, state_id=state_id, province_id=province_id,
             tile_id=tile_id, reserved=reserved, backing=reserved, project_id=project['id'])
-        account['reserved'] = account.get('reserved', 0)+reserved
-        engine.report['orders'].append(order)
+        engine.cash_store.add_reserved_cash(account['id'], reserved)
+        engine.order_store.append(order)
         engine._demand_revision[good] += 1
         journal.append(('create_public_project_order', request, order['id'], quantity,
                         price, reserved))

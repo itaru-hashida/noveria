@@ -285,3 +285,63 @@ def test_public_project_stock_claims_releases_orders_and_cash_cap_match_v3():
     assert all(o['quantity']*o['price'] <= 1.0 for o in orders)
     assert sells == native.native_public_projects['sells']
     assert reference._demand_revision == native._demand_revision
+
+
+@pytest.mark.parametrize('scenario', ['recovery', 'public'])
+def test_native_apply_keeps_owned_columns_current(monkeypatch, scenario):
+    """Apply не должен полагаться на последующее принятие прямых dict-записей."""
+    from modules.economy.native import update_prices_boundary as boundary
+
+    native = engine()
+    native.step()
+    if scenario == 'recovery':
+        native.cfg['owner_consumption_rate'] = 0.0
+        for identity in ('firm-00010', 'firm-00011'):
+            enterprise = native.enterprises[identity]
+            enterprise.update(status='closed', closed=True)
+            account = native.accounts[identity]
+            account.update(balance=0.0, reserved=0.0, protected=0.0,
+                           operating_protected=0.0)
+            account['stock'][enterprise['good']] = 0.0
+            account['stock']['wood'] = 2.0
+        native.accounts['merchant:s']['balance'] = 3.0
+    else:
+        native.goods['tools']['durable'] = {'wear_rate': 0.1}
+        native.cfg['institutions']['test_school'] = dict(
+            name='Школа', materials={'wood': 20.0}, equipment={'tools': 6.0},
+            equipment_wear={}, work_required=10.0, max_workers=5.0)
+        native.start_public_project('c', 'test_school')
+        account = native.accounts['municipal:c']
+        account['stock'].update(wood=10.0, tools=4.0, bread=10.0)
+        account.update(balance=1.0, reserved=0.0, protected=0.0)
+        native.enterprises['firm-00007']['suspended'] = True
+    native.meta['initial_gold'] = native.gold()
+    # Изменения fixture импортируются до apply; внутри проверок sync запрещён.
+    native.__dict__.pop('_cash_store', None)
+    native.__dict__.pop('_order_store', None)
+    checked = []
+
+    def observe(name, apply):
+        def wrapped(engine, *args, **kwargs):
+            cash = engine.cash_store
+            orders = engine.order_store
+            orders.sync()
+            result = apply(engine, *args, **kwargs)
+            assert cash.balances == [engine.accounts[key]['balance'] for key in cash.keys]
+            assert cash.reserved == [engine.accounts[key].get('reserved', 0) for key in cash.keys]
+            assert orders.remaining == [row['remaining'] for row in orders.orders]
+            assert orders.reserved == [row.get('reserved', 0) for row in orders.orders]
+            assert orders.status == [row['status'] for row in orders.orders]
+            assert orders.price == [row.get('price', 0) for row in orders.orders]
+            checked.append(name)
+            return result
+        return wrapped
+
+    phases = ('apply_households', 'apply_owners', 'apply_recovery', 'apply_public_projects')
+    for name in phases:
+        monkeypatch.setattr(boundary, name, observe(name, getattr(boundary, name)))
+    boundary.run_native_public_projects(native)
+    assert checked == list(phases)
+    journal = native.native_public_projects['journal']
+    expected = 'recovery_transfer' if scenario == 'recovery' else 'public_stock_release'
+    assert any(row[0] == expected for row in journal)
