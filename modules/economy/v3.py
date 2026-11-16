@@ -18,6 +18,7 @@ from .native import dividend_boundary as _dividend
 from .native import match_boundary as _match
 from .native import market_book_boundary as _market_book_native
 from .native import material_finalize_boundary as _material_finalize
+from .native import money_boundary as _money
 from .native import net_price_boundary as _net_price
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
@@ -38,6 +39,7 @@ from .native import world_boundary as _world
 from .food_diagnostics import FoodDiagnostics
 
 _offer.configure(EPS)
+_money.configure(EPS)
 
 
 OWNER_KINDS = ('private', 'merchant', 'treasury', 'municipal')
@@ -1291,42 +1293,21 @@ class Economy(EconomyServices):
         return self.tiles.get(self.market_tile(account), {}).get('province_id', account['province_id'])
 
     def project_cash_reserve(self, account, sells):
-        a = self.accounts[account]
-        project = a.get('project')
-        if not project:
-            return 0.0
-        distance, _ = self.path(self.market_tile(a), project['location']['tile_id'])
-        bill = self.construction_bill(project['capacity'])
-        delivery = (sum(q*self.goods[g]['weight'] for g, q in bill.items())
-            * distance*self.cfg['transport_rate']) if distance is not None else project.get('delivery', 0)
-        needed = project['working_cash']+delivery
-        for good, quantity in bill.items():
-            # Купленные материалы и обеспеченные заявки не требуют повторного резерва денег.
-            ordered = sum(o['remaining'] for o in self.report['orders']
-                if o['participant'] == account and o['side'] == 'buy'
-                and o['purpose'] == 'Строительные материалы' and o['good'] == good
-                and o['status'] not in ('cancelled', 'expired') and o['reserved'] > EPS)
-            missing = max(0, quantity-a['stock'].get(good, 0)-ordered)
-            needed += missing*self.quoted_cost(a, good, missing, sells)[1]
-        return needed
+        # Смета, доставка, учёт купленного и недостача по котировке — в
+        # money_boundary: она же держит эталонную Python-ветку и fallback без
+        # собранного .pyd. Маршрут, смета и quoted_cost остаются хуками.
+        return _money.project_cash_reserve(self, account, sells)
 
     def working_cash_reserve(self, e, sells):
-        recipe = self.goods[e['good']]
-        quantity = e['capacity']*self.cfg['working_reserve_months']
-        needed = quantity*recipe['labor']*self.cfg['wage']
-        for good, ratio in recipe['inputs'].items():
-            missing = max(0, quantity*ratio-self.free_stock(e['id'], good))
-            needed += missing*self.quoted_cost(self.accounts[e['id']], good, missing, sells)[1]
-        for good, required in self.equipment_requirements(recipe, quantity).items():
-            missing = max(0, required-self.free_stock(e['id'], good))
-            needed += missing*self.quoted_cost(self.accounts[e['id']], good, missing, sells)[1]
-        return needed
+        # Числовой срез уже живёт в dividend_kernel: граница переиспользует
+        # его с теми же хуками, второй копии расчёта нет.
+        return _money.working_cash_reserve(self, e, sells)
 
     def cash_after_commitments(self, account, project_reserve, working_reserve=0):
-        a = self.accounts[account]
-        # protected уже содержит часть обязательств; повторно её не вычитаем.
-        hold = max(a.get('protected', 0), project_reserve+working_reserve)
-        return max(0, a['balance']-a.get('reserved', 0)-hold)
+        # Числовая часть (два max в прежнем порядке) — в dividend_kernel;
+        # граница лишь читает balance/reserved/protected через те же хуки.
+        return _money.cash_after_commitments(self, account, project_reserve,
+                                             working_reserve)
 
     def pay_dividends(self, sells):
         # Числовой срез (резерв, доступная касса, предел, доли) считает ядро;
@@ -1488,32 +1469,10 @@ class Economy(EconomyServices):
 
     def reserve_expedited_construction_labor(self):
         """До производства забронировать дорогие бригады, вытесняющие обычный труд."""
-        reservations, workers_by_project = defaultdict(float), {}
-        for account in sorted(self.accounts.values(), key=lambda a: a['id']):
-            for project in account.get('public_projects', []):
-                if project['mode'] != 'accelerated':
-                    continue
-                ready = (all(project['materials'].get(g, 0)+EPS >= q
-                             for g, q in project['material_bill'].items())
-                    and all(project['equipment_held'].get(g, 0)+EPS >= q
-                            for g, q in project['equipment'].items()))
-                if not ready:
-                    continue
-                mode = self.cfg['construction_modes']['accelerated']
-                loc = project['location']
-                key = (loc['state_id'], loc['province_id'])
-                available = sum(self.population(a)*self.cfg['labor_share'] for a in self.accounts.values()
-                    if a['kind'] == 'household' and (a['state_id'], a['province_id']) == key)-reservations[key]
-                support_limit = min((project['support_stock'].get(g, 0)/per_worker
-                    for g, per_worker in mode['support_goods'].items() if per_worker > EPS), default=float('inf'))
-                cost_per_worker = self.cfg['wage']*mode['wage_multiplier']+mode['lodging_allowance']
-                workers = min(project['max_workers'], project['work_required']-project['work_done'],
-                    max(0, available), support_limit, self.free_cash(account['id'])/cost_per_worker)
-                if workers > EPS:
-                    reservations[key] += workers
-                    workers_by_project[project['id']] = workers
-        self._expedited_construction_reservations = reservations
-        self._expedited_construction_workers = workers_by_project
+        # Труд провинции, готовность, предел поддержки и минимум пяти аргументов
+        # считает money_boundary: она же держит эталонную Python-ветку и
+        # fallback без собранного .pyd. Порядок счетов и RNG остаются здесь.
+        _money.reserve_expedited_construction_labor(self)
 
     def advance_public_projects(self):
         """Постройки используют только работников, не нанятых предприятиями в этом месяце."""
@@ -2825,15 +2784,12 @@ class Economy(EconomyServices):
         # вынесен в enterprise_settlement_boundary: она же держит Python-эталон
         # и fallback без собранного .pyd. Список enterprises готов, перевод
         # оброка идёт прежним transfer, закрытие и возврат капитала остаются
-        # Python-хуками границы. Второй цикл (carrier/treasury) — ниже, без
-        # изменений.
+        # Python-хуками границы.
         _enterprise_settlement.settle(self, enterprises)
-        for a in self.shuffled(self.accounts.values()):
-            rate = {'carrier': self.cfg['carrier_distribution'], 'treasury': self.cfg['public_spending']}.get(a['kind'], 0)
-            if rate:
-                recipients = [h for h in households if h['state_id'] == a['state_id']]
-                self.distribute(a['id'], recipients, min(a['balance']*rate, self.free_cash(a['id'])),
-                    'Оплата общественных услуг' if a['kind'] == 'treasury' else 'Оплата транспортных услуг населению')
+        # Второй цикл (распределение доходов carrier/treasury) считает
+        # money_boundary: ставка, получатели, сумма и причина — в ядре;
+        # перемешивание счетов (RNG) и переводы остаются здесь.
+        _money.settle(self, enterprises, households)
 
     def record_market(self):
         rows = defaultdict(lambda: dict(volume=0, trade_gold=0, freight=0, requested=0, unmet_solvent=0, limit_value=0, reserved_unmet=0))

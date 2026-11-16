@@ -10,11 +10,13 @@ from pathlib import Path
 import networkx as nx
 
 from modules.geography import topology
+from modules.economy.native import money_boundary as _money
 from modules.economy.native import stock_boundary as _stock
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / 'content/economy.json'
 EPS = 1e-7
 _stock.configure(EPS)
+_money.configure(EPS)
 PLANNING_DEFAULTS = dict(price_step=0.05, minimum_price=1e-6, maximum_price=1e9, initial_sales_fraction=0.5)
 # Дороги обычно не меняются между месяцами, а WorldService заново загружает
 # Economy. Кэш процесса переживает такую загрузку, но разделён отпечатком карты.
@@ -278,11 +280,10 @@ class EconomyServices:
         self._route_shape_checked_month = self.meta.get('month')
 
     def distribute(self, sender, recipients, amount, reason):
-        total = sum(self.population(a) for a in recipients)
-        if total:
-            amount = min(amount, self.accounts[sender]['balance'])
-            for a in recipients:
-                self.transfer(sender, a['id'], amount * self.population(a) / total, reason)
+        # Числовой срез (сумма населения, отсечение по живой кассе и доли) —
+        # в money_boundary: она же держит эталонную Python-ветку и fallback без
+        # собранного .pyd. Переводы идут прежним transfer.
+        return _money.distribute(self, sender, recipients, amount, reason)
 
     def _validate_state(self, before=None):
         for a in self.accounts.values():
