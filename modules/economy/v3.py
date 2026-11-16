@@ -8,6 +8,7 @@ from .support import EPS, EconomyServices
 from .native import cancel_boundary as _cancel
 from .native import cash_boundary as _cash
 from .native import consumption_boundary as _consumption
+from .native import demand_boundary as _demand
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
 from .native import diagnostics_boundary as _diagnostics
@@ -21,6 +22,7 @@ from .native import net_price_boundary as _net_price
 from .native import offer_boundary as _offer
 from .native import order_boundary as _order
 from .native import owner_consumption_boundary as _owner_consumption
+from .native import plan_boundary as _plan
 from .native import production_boundary as _production
 from .native import production_outlook_boundary as _production_outlook
 from .native import quote_boundary as _quote
@@ -1698,18 +1700,12 @@ class Economy(EconomyServices):
                                           price)
 
     def _customer_orders(self, orders, good):
-        """Индекс заявок покупателей по товару для одной фазы рынка."""
-        cache = getattr(self, '_customer_order_index', {})
-        key = (id(orders), len(orders), good)
-        entry = cache.get(key)
-        result = entry[1] if entry and entry[0] is orders else None
-        if result is None:
-            result = [order for order in orders if order['side'] == 'buy' and order['good'] == good]
-            # Держим сам список: Python не сможет выдать его id новому
-            # временному списку до конца отчётного месяца.
-            cache[key] = (orders, result)
-            self._customer_order_index = cache
-        return result
+        """Индекс заявок покупателей по товару для одной фазы рынка.
+
+        Числовой срез (отбор пар ``side/good``) — в demand_boundary; ключ кэша,
+        его проверка тождества списка и запись остаются здесь, как и прежде.
+        """
+        return _demand._customer_orders(self, orders, good)
 
     # После клиринга исходные заявки ещё будут отменены, но планирование
     # следующей фазы должно видеть их состояние на момент закрытия рынка.
@@ -1735,44 +1731,21 @@ class Economy(EconomyServices):
                 for good, orders in sells.items()}
 
     def _customer_quote_index(self, tile_id, good, orders):
-        """Доставка от площадки к покупателям без цены производителя."""
-        cache = getattr(self, '_customer_quotes_cache', {})
-        # Вес товара и тариф — константы контента (см. freight_factors) и в ключе
-        # не нужны: их изменение означает перезагрузку движка, а не новый месяц.
-        key = (id(orders), len(orders), tile_id, good)
-        entry = cache.get(key)
-        result = entry[1] if entry and entry[0] is orders else None
-        if result is None:
-            result = []
-            customer_orders = self._customer_orders(orders, good)
-            for order in self._orders_in_route_component(customer_orders, tile_id):
-                quote = self.landed(tile_id, order['tile_id'], good, 0)
-                if quote:
-                    result.append((order, quote[1]))
-            cache[key] = (orders, result)
-            self._customer_quotes_cache = cache
-        return result
+        """Доставка от площадки к покупателям без цены производителя.
+
+        Обход заявок и ``landed`` — в demand_boundary; ключ кэша котировок,
+        проверка тождества списка и запись остаются здесь, как и прежде.
+        """
+        return _demand._customer_quote_index(self, tile_id, good, orders)
 
     def _orders_in_route_component(self, orders, destination_tile):
         """Вернуть только заявки из физически достижимой части карты.
 
         Группировка строится один раз для конкретного списка заявок. Живые
         объекты заявок сохраняются: сделки продолжают менять те же остатки.
+        Ключ кэша и ``route_component`` остаются в demand_boundary.
         """
-        destination_component = self.route_component(destination_tile)
-        if self._route_component_count == 1:
-            return orders
-        cache = getattr(self, '_route_order_components', {})
-        key = (id(orders), len(orders))
-        entry = cache.get(key)
-        groups = entry[1] if entry is not None and entry[0] is orders else None
-        if groups is None:
-            groups = defaultdict(list)
-            for order in orders:
-                groups[self.route_component(order['tile_id'])].append(order)
-            cache[key] = (orders, groups)
-            self._route_order_components = cache
-        return groups.get(destination_component, ())
+        return _demand._orders_in_route_component(self, orders, destination_tile)
 
     def _market_book(self, buyer, good, sells, record=False):
         """Одна отсортированная доска предложений на рынок назначения.
@@ -2027,13 +2000,10 @@ class Economy(EconomyServices):
         return result
 
     def customer_quotes(self, e, orders=None):
-        result = []
-        orders = getattr(self, '_planning_orders', self.report.get('orders', [])) if orders is None else orders
-        for o, freight in self._customer_quote_index(e['tile_id'], e['good'], orders):
-            if o['participant'] == e['id'] or o['remaining'] <= EPS or o['status'] in ('cancelled', 'expired'):
-                continue
-            result.append((o, o['price']-freight))
-        return result
+        # Числовой срез (предел платёжеспособности каждой заявки) считает
+        # demand_boundary: она же держит эталонную Python-ветку и fallback без
+        # собранного .pyd. Индекс котировок, landed и кэши остаются хуками.
+        return _demand.customer_quotes(self, e, orders)
 
     def investment_customer_limit(self, e):
         """Лучшая цена спроса для кандидата без повторного скана заявок.
@@ -2078,27 +2048,9 @@ class Economy(EconomyServices):
         здесь воспроизводит проверку `limit+EPS < e['price']`, которую делают
         оба вызывающих, только до деления денег на цену.
         """
-        orders = getattr(self, '_planning_orders', self.report.get('orders', [])) if orders is None else orders
-        rows = self._customer_demand_rows(e['tile_id'], e['good'], orders)
-        price = e['price']
-        grouped = {}
-        for participant, tile_id, order_price, limit, freight, remaining, reserved in rows:
-            # Тот же отсев, что делают оба вызывающих (`limit+EPS < e['price']`),
-            # но до деления денег на цену: 93% строк не проходят по цене, и
-            # платёжеспособность для них считать незачем.
-            if limit+EPS < price:
-                continue
-            group_key = (participant, tile_id, order_price)
-            row = grouped.get(group_key)
-            if row is None:
-                row = grouped[group_key] = [participant, tile_id, order_price, limit,
-                                            freight, 0.0]
-            # Solvency belongs to an individual order.  Summing quantity and
-            # money separately can let one order's cash fund another order's
-            # unfunded quantity: min(sum(q), sum(cash) / price) !=
-            # sum(min(q, cash / price)).
-            row[5] += min(remaining, reserved/max(price+freight, EPS))
-        return tuple(tuple(row) for row in grouped.values())
+        # Числовой срез (отсев по цене и платёжеспособность каждой заявки)
+        # вынесен в demand_boundary; строки и их кэш остаются хуками.
+        return _demand.customer_demand_groups(self, e, orders)
 
     def _customer_demand_rows(self, tile_id, good, orders):
         """Дешёвая часть агрегата спроса: плоские строки на смену книги.
@@ -2114,49 +2066,15 @@ class Economy(EconomyServices):
         `_demand_revision`. На версии книги отменённая заявка оставалась в
         записи со старым резервом, и спрос считался по ней ещё раз.
         """
-        key = (id(orders), len(orders), tile_id, good, self._demand_revision[good])
-        cache = getattr(self, '_customer_demand_rows_cache', {})
-        entry = cache.get(key)
-        if entry is not None and entry[0] is orders:
-            return entry[1]
-        rows = []
-        for order, freight in self._customer_quote_index(tile_id, good, orders):
-            if order['remaining'] <= EPS or order['status'] in ('cancelled', 'expired'):
-                continue
-            rows.append((order['participant'], order['tile_id'], order['price'],
-                         order['price']-freight, freight, order['remaining'],
-                         order['reserved']))
-        result = tuple(rows)
-        cache[key] = (orders, result)
-        self._customer_demand_rows_cache = cache
-        return result
+        # Ключ кэша, его проверка и запись остаются в demand_boundary: там же
+        # эталонная Python-ветка и fallback без собранного .pyd.
+        return _demand._customer_demand_rows(self, tile_id, good, orders)
 
     def reachable_demand(self, e, sells):
-        demand = 0.0
-        # Конкуренты важны лишь для товара кандидата: копия всех книг рынка
-        # создавалась тысячи раз при планировании выпуска.
-        remaining = {sell['id']: sell['remaining'] for sell in sells.get(e['good'], [])}
-        for participant, tile_id, order_price, limit, freight, volume in self.customer_demand_groups(e):
-            if participant == e['id']:
-                continue
-            if limit+EPS < e['price']:
-                continue
-            buyer = self.accounts[participant]
-            landed = e['price']+freight
-            # Книга отсортирована по доставленной цене, поэтому за ценовой
-            # границей не остаётся ни одного предложения, способного покрыть
-            # заявку: обход завершается, а не продолжается. До этого 95%
-            # просмотренных предложений были заведомо дороже заявки.
-            for price, sell, _ in self.offers(buyer, e['good'], sells):
-                if price > order_price+EPS or price >= landed-EPS:
-                    break
-                if sell['participant'] == e['id']:
-                    continue
-                covered = min(volume, remaining[sell['id']])
-                volume -= covered
-                remaining[sell['id']] -= covered
-            demand += volume
-        return demand
+        # Числовой срез (покрытие групп живой книгой) вынесен в demand_boundary:
+        # она же держит эталонную Python-ветку и fallback без собранного .pyd.
+        # Книга, offers и счета остаются Python-хуками.
+        return _demand.reachable_demand(self, e, sells)
 
     def unit_cost(self, e, sells):
         # Компенсированные суммы raw/wear и кэш себестоимости — в
@@ -2245,24 +2163,10 @@ class Economy(EconomyServices):
         спрос по той же цене: внутри прогноза выпуска это второй такой расчёт
         подряд, и он был 38% всех вызовов reachable_demand.
         """
-        offered = sum(o['remaining'] for o in sells.get(e['good'], [])
-            if o['participant'] == e['id'] and o['status'] not in ('cancelled', 'expired'))
-        if offered <= EPS:
-            return 0.0
-        cache = getattr(self, '_stock_sales_cache', {})
-        cached = cache.get(e['id'])
-        if cached is not None:
-            return cached
-        if reachable is None:
-            reachable = self.reachable_demand(e, sells)
-        history = e.get('sales_history', [])[-3:]
-        average_sold = (sum(h.get('sold', 0.0) for h in history) / len(history)
-                        if history else 0.0)
-        expected = max(reachable, average_sold)
-        result = min(self.accounts[e['id']]['stock'].get(e['good'], 0), offered, expected)
-        cache[e['id']] = result
-        self._stock_sales_cache = cache
-        return result
+        # Числовой срез (сумма своих офферов, средние продажи и min трёх
+        # величин) вынесен в demand_boundary; кэш `_stock_sales_cache` остался
+        # кэшем движка, порядок вызовов reachable_demand прежний.
+        return _demand.expected_stock_sales(self, e, sells, reachable)
 
     def _outlook_quote_versions(self, e):
         """Версии книг только тех товаров, от которых зависит прогноз выпуска.
@@ -2424,64 +2328,12 @@ class Economy(EconomyServices):
         return 1+max((self.depth(g) for g in inputs), default=-1)
 
     def input_requests(self, e, sells):
-        a = self.accounts[e['id']]
-        input_prices = {good: self.reference_price(a, good, sells)
-            for good in self.goods[e['good']]['inputs']}
-        a['protected'] = max(0, a.get('protected', 0)-a.pop('operating_protected', 0))
-        target = self.plan(e, sells=sells)
-        a, recipe = self.accounts[e['id']], self.goods[e['good']]
-        cash = self.free_cash(e['id'])
-        requested = target
-        first_order = len(self.report['orders'])
-
-        def cash_needed(quantity):
-            needed = self.enterprise_overhead(e)+quantity*recipe['labor']*self.cfg['wage']
-            for good, ratio in recipe['inputs'].items():
-                missing = max(0, quantity*ratio-self.free_stock(e['id'], good))
-                needed += missing*self.quoted_cost(a, good, missing, sells)[1]
-            for good, required in self.equipment_requirements(recipe, quantity).items():
-                missing = max(0, required-self.free_stock(e['id'], good))
-                needed += missing*self.quoted_cost(a, good, missing, sells)[1]
-            return needed
-
-        # Оплаченное ранее сырьё влияет на маржу, но не требует второй оплаты из кассы.
-        if cash_needed(target) > cash:
-            low, high = 0.0, target
-            for _ in range(40):
-                middle = (low+high)/2
-                if cash_needed(middle) <= cash:
-                    low = middle
-                else:
-                    high = middle
-            target = low
-        input_prices = self.volume_input_prices(e, target, sells)
-        # Единственный окончательный план: выпуск не сможет увеличить его после закупок.
-        e['planned_output'] = e['input_target_output'] = target
-        if target+EPS < requested:
-            e['production_limit'] = 'Деньги на выпуск'
-        e['production_plan'] = dict(month=self.meta['month'], output=target,
-            sale_price=e['planned_price'],
-            expected_net_price=e['expected_price'], input_prices=input_prices,
-            input_ratios=dict(recipe['inputs']), wage_unit=recipe['labor']*self.cfg['wage'],
-            equipment_required=self.equipment_requirements(recipe, target),
-            equipment_wear=self.equipment_wear(recipe, target),
-            fixed_unit=e.get('expected_fixed_unit', 0),
-            requested_output=requested, free_cash=cash, known_order_count=first_order,
-            reachable_demand=e['reachable_demand'], sales_forecast=e['sales_forecast'],
-            expected_margin=e['expected_margin'], reason=e['production_limit'])
-        a['payroll_protected'] = target*recipe['labor']*self.cfg['wage']
-        a['protected'] += a['payroll_protected']
-        for good, ratio in recipe['inputs'].items():
-            quantity = max(0, target*ratio-self.free_stock(e['id'], good))
-            _, price, _ = self.quoted_cost(a, good, quantity, sells)
-            order = self.order(e['id'], good, quantity, 'buy', price, 'Сырьё')
-            if order:
-                order['adaptive_input_budget'] = True
-        for good, required in self.equipment_requirements(recipe, target).items():
-            quantity = max(0, required-self.free_stock(e['id'], good))
-            _, price, _ = self.quoted_cost(a, good, quantity, sells)
-            self.order(e['id'], good, quantity, 'buy', price, 'Оборудование')
-        e['production_plan']['input_orders'] = [o['id'] for o in self.report['orders'][first_order:]]
+        # Штатный расчёт закупок (cash_needed, 40 итераций бисекции, потребности
+        # в сырье и оборудовании, резерв зарплат и production_plan) целиком в
+        # plan_boundary: она же держит эталонную Python-ветку и fallback без
+        # собранного .pyd. Заявки, деньги и склад двигают прежние stores через
+        # хуки границы; котировки, прогноз выпуска и отчёт остаются Python.
+        return _plan.input_requests(self, e, sells)
 
     def investment_demand(self, candidate, sells):
         """Сначала пригодные мощности и начатые проекты, затем новая стройка."""
@@ -3036,15 +2888,11 @@ class Economy(EconomyServices):
         self.meta['price_feedback'] = list(feedback.values())
 
     def plan_enterprises(self, existing, sells):
-        # Один проход от конечных товаров ко входам, без рекурсивного перепланирования.
-        for e in sorted(self.shuffled(existing), key=lambda e: -self.depth(e['good'])):
-            a = self.accounts[e['id']]
-            if e['status'] == 'closed' or (self.free_cash(e['id']) <= EPS
-                    and a.get('operating_protected', 0) <= EPS):
-                # Спрос на входы появляется после планирования следующего звена цепочки.
-                self.recover_enterprises(sells, [e])
-            if e['status'] != 'closed' and not e.get('suspended') and e['available_from'] <= self.meta['month']:
-                self.input_requests(e, sells)
+        # Штатный обход (порядок по убыванию глубины товара, условия
+        # восстановления и планирования) выполняет plan_boundary. Перемешивание
+        # списка остаётся здесь: это RNG месяца. Восстановление и закупки идут
+        # прежними методами движка через хуки границы.
+        _plan.plan_enterprises(self, existing, sells)
 
     def step(self, enterprise_planner=None, planning_mode='v3', investment_mode='v3', investment_workers=1,
              native_mode='off'):
