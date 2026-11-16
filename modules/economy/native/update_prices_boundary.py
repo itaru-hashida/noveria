@@ -756,18 +756,32 @@ def apply_update_prices(engine, data, meta):
     enterprises = list(engine.enterprises.values())
     goods = list(engine.goods)
     for account, good, price in meta['ask_updates']:
-        accounts[account].setdefault('ask_prices', {})[goods[good]] = price
-        journal.append(('ask_price_init', account, good, price))
+        asks = accounts[account].setdefault('ask_prices', {})
+        # V3 инициализирует отсутствующую цену как
+        # prices.setdefault(good, goods[good]['price']) и зажимает её через
+        # min()/max(), которые возвращают сам объект, пока зажим не сработал:
+        # int остаётся int. Native хранит float64, поэтому тип берётся из
+        # живого источника, а не из «круглости» значения — 5 и 5.0 различаются.
+        live = asks.get(goods[good])
+        if live is None:
+            live = engine.goods[goods[good]]['price']
+        asks[goods[good]] = live if type(live) is int and live == price else price
+        journal.append(('ask_price_init', account, good, asks[goods[good]]))
     for subject, (enterprise, account, good, _, _, is_stock) in enumerate(meta['subjects']):
         if data['subject_history_count'][subject] == 0:
             continue
         price = float(data['new_prices'][subject])
         if is_stock:
-            accounts[account]['ask_prices'][goods[meta['good_index'][good]]] = price
-            journal.append(('ask_price_set', subject, price))
+            asks = accounts[account]['ask_prices']
+            key = goods[meta['good_index'][good]]
+            live = asks.get(key)
+            asks[key] = live if type(live) is int and live == price else price
+            journal.append(('ask_price_set', subject, asks[key]))
         else:
-            enterprises[enterprise]['price'] = price
-            journal.append(('enterprise_price_set', subject, price))
+            target = enterprises[enterprise]
+            live = target['price']
+            target['price'] = live if type(live) is int and live == price else price
+            journal.append(('enterprise_price_set', subject, target['price']))
     return journal
 
 
@@ -780,14 +794,26 @@ def apply_recovery_quotes(engine, data, meta):
     quotes = defaultdict(list)
     for enterprise in data['recovery_order']:
         enterprise = int(enterprise)
+        target = enterprises[enterprise]
+        # V3 получает цену восстановления из живого значения и зажимает её
+        # через min()/max(), которые возвращают сам объект, пока зажим не
+        # сработал: int остаётся int. Native хранит float64, поэтому тип берётся
+        # из живого источника до очистки кэша, а не из «круглости» значения:
+        # 5 и 5.0 семантически различаются и влияют на встроенный sum().
+        # На первом месяце кэша ещё нет, и V3 растит цену из живого price
+        # предприятия — поэтому он же и остаётся источником типа.
+        live = target.get('production_price')
+        if live is None:
+            live = target.get('price')
         if data['recovery_had_price'][enterprise]:
-            enterprises[enterprise].pop('production_price', None)
+            target.pop('production_price', None)
             journal.append(('production_price_clear', enterprise))
         price = float(data['recovery_production_price'][enterprise])
         if np.isfinite(price):
-            enterprises[enterprise]['production_price'] = price
-            quotes[enterprises[enterprise]['good']].append((enterprises[enterprise], price))
-            journal.append(('production_price_set', enterprise, price))
+            stored = live if type(live) is int and live == price else price
+            target['production_price'] = stored
+            quotes[target['good']].append((target, stored))
+            journal.append(('production_price_set', enterprise, stored))
     engine._recovery_quotes = quotes
     return journal
 
@@ -818,6 +844,11 @@ def apply_sell_orders(engine, data, meta):
     by_entry = {int(data['sell_order_entry'][i]): i for i in range(count)}
     journal = [('invalidate_market_books', -1)]
     sells = defaultdict(list)
+    # Заявки добавляются только через границу заявок: она владеет полями
+    # remaining/reserved/status/price и держит dict как compatibility view.
+    # Поля заявки уже посчитаны выше, поэтому повторный order() здесь не нужен:
+    # он заново списал бы stock_reserved заявки.
+    store = engine.order_store
     engine.invalidate_market_books()
     for account in data['seller_order']:
         account = int(account)
@@ -834,13 +865,25 @@ def apply_sell_orders(engine, data, meta):
             if not is_output:
                 price = float(data['sell_ask_price'][entry])
                 if not data['sell_ask_present'][entry]:
-                    prices[good] = price
-                    journal.append(('sell_ask_price_init', account, good_index, price))
+                    # V3 инициализирует отсутствующую цену живым значением
+                    # goods[good]['price'] через setdefault: тип берётся из
+                    # источника (у товара он часто int), а не из float64.
+                    prices[good] = engine.goods[good]['price']
+                    journal.append(('sell_ask_price_init', account, good_index, prices[good]))
             if entry not in by_entry:
                 continue
             index = by_entry[entry]
             quantity = float(data['sell_order_initial_quantity'][index])
             price = float(data['sell_order_price'][index])
+            # V3 передаёт в order() живой объект цены: у выходного товара —
+            # цену предприятия, у прочего — уже сложившуюся цену предложения.
+            # min()/max() возвращают сам объект, пока зажим не сработал, поэтому
+            # int остаётся int. Тип берётся из источника, а не из «круглости»
+            # значения: 5 и 5.0 различаются и влияют на встроенный sum().
+            live_price = (engine.enterprises[a['id']]['price'] if is_output
+                          else prices.get(good))
+            if live_price is not None and type(live_price) is int and live_price == price:
+                price = live_price
             state_id, province_id, tile_id = meta['order_locations'][account]
             # V3 строит объём через free_stock(), и когда склад, резерв и
             # закрепление — целые, объём остаётся int. Native хранит float64,
@@ -858,7 +901,7 @@ def apply_sell_orders(engine, data, meta):
                 reserved=0, backing=quantity)
             a.setdefault('stock_reserved', {})[good] = \
                 a.get('stock_reserved', {}).get(good, 0)+quantity
-            engine.report['orders'].append(order)
+            store.append(order)
             engine.mark_market_quotes_dirty(good)
             sells[good].append(order)
             journal.append(('create_sell_order', int(data['sell_execution_seq'][index]),
@@ -874,6 +917,9 @@ def apply_households(engine, data, meta, households, sells):
         food_trace = FoodDiagnostics(engine, households, sells)
     accounts = list(engine.accounts.values())
     goods = list(engine.goods)
+    # Заявки идут только через границу заявок: поля remaining/reserved/status/
+    # price принадлежат ей, а dict заявки остаётся compatibility view.
+    store = engine.order_store
     journal = []
     for index in range(data['household_request_count']):
         account = int(data['household_request_account'][index])
@@ -903,7 +949,7 @@ def apply_households(engine, data, meta, households, sells):
             unfunded_need=bool(data['household_unfunded'][index]),
             adaptive_household_budget=True)
         a['reserved'] = a.get('reserved', 0)+reserved
-        engine.report['orders'].append(order)
+        store.append(order)
         engine._demand_revision[good] += 1
         journal.append(('create_household_order', int(data['household_execution_seq'][index]),
                         order['id'], account, good_index, quantity, price, reserved))
@@ -914,6 +960,9 @@ def apply_owners(engine, data, meta, sells):
     """Материализовать личные заявки и диагностику владельцев."""
     accounts = list(engine.accounts.values())
     goods = list(engine.goods)
+    # Заявки идут только через границу заявок: поля remaining/reserved/status/
+    # price принадлежат ей, а dict заявки остаётся compatibility view.
+    store = engine.order_store
     journal = []
     for i, account in enumerate(data['owner_order']):
         account = int(account)
@@ -943,7 +992,7 @@ def apply_owners(engine, data, meta, sells):
                 expires=meta['month'], final_consumption=True, state_id=state_id,
                 province_id=province_id, tile_id=tile_id, reserved=reserved, backing=reserved)
             a['reserved'] = a.get('reserved', 0)+reserved
-            engine.report['orders'].append(order)
+            store.append(order)
             engine._demand_revision[good] += 1
             row['orders'].append(order['id'])
             journal.append(('create_owner_order', int(data['owner_execution_seq'][index]),
