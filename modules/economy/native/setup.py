@@ -166,7 +166,12 @@ setup(
          # Единый контейнер состояния: держит ссылки на существующие
          # OrderStore/CashStore и native update state, собственных данных
          # экономики не заводит и потому не зависит от прочих расширений.
-         Extension('world_state', ['world_state.pyx'])],
+         Extension('world_state', ['world_state.pyx']),
+         # Дерево кратчайших путей от одной площадки: буквальная замена
+         # networkx.single_source_dijkstra для словарного графа. Ни графа, ни
+         # кэша маршрутов ядро не хранит — оно получает живой graph._adj и
+         # возвращает те же два словаря; кэш остаётся кэшем движка.
+         Extension('route_kernel', ['route_kernel.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )

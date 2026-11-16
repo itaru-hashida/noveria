@@ -11,6 +11,7 @@ import networkx as nx
 
 from modules.geography import topology
 from modules.economy.native import money_boundary as _money
+from modules.economy.native import route_boundary as _route
 from modules.economy.native import stock_boundary as _stock
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / 'content/economy.json'
@@ -239,7 +240,12 @@ class EconomyServices:
             trees = ROUTE_TREE_CACHE.setdefault(self._route_cache_key, {})
             tree = trees.get(start)
             if tree is None:
-                tree = nx.single_source_dijkstra(self.graph, start, weight='weight') if start in self.graph else ({}, {})
+                # Обход выполняет route_boundary: это единственный участок
+                # маршрутов, который действительно грел ход (дерево на всю
+                # карту снималось 62080 раз за три месяца). Ключ кэша, сам
+                # кэш и проверка формы графа выше остаются здесь, поэтому
+                # второго кэша маршрутов не появляется.
+                tree = _route.single_source(self.graph, start) if start in self.graph else ({}, {})
                 trees[start] = tree
             self.paths[start] = tree
         distances, paths = self.paths[start]
