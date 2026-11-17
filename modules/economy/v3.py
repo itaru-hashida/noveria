@@ -2716,28 +2716,14 @@ class Economy(EconomyServices):
         _money.settle(self, enterprises, households)
 
     def record_market(self):
-        rows = defaultdict(lambda: dict(volume=0, trade_gold=0, freight=0, requested=0, unmet_solvent=0, limit_value=0, reserved_unmet=0))
-        public = []
-        for o in self.report['orders']:
-            if o['side'] != 'buy' or (o['status'] == 'cancelled' and not o.get('superseded_by_top_up')):
-                continue
-            quantity = o['quantity']-o['remaining'] if o.get('superseded_by_top_up') else o['quantity']
-            remaining = 0 if o.get('superseded_by_top_up') else o['remaining']
-            row = rows[o['state_id'], o['province_id'], o['good']]
-            row['requested'] += quantity
-            row['limit_value'] += quantity*o['price']
-            row['unmet_solvent'] += min(o['remaining'], o['reserved']/o['price'])
-            row['reserved_unmet'] += o['reserved']
-            if remaining > EPS:
-                # Следующий месяц читает только рыночные скаляры; вложенные
-                # диагностические данные заявки не нужны.
-                public.append(self._planning_order_snapshot(o))
-            o['unmet_solvent'] = min(o['remaining'], o['reserved']/o['price'])
-        for t in self.report['trades']:
-            row = rows[t['buyer_state'], t['buyer_province'], t['good']]
-            row['volume'] += t['quantity']
-            row['trade_gold'] += t['gold']
-            row['freight'] += t['freight']
+        # Числовую агрегацию книги заявок и сделок (requested, limit_value,
+        # unmet_solvent, reserved_unmet, volume, trade_gold, freight и отметка
+        # o['unmet_solvent']) считает report_history_kernel: там же
+        # Python-эталон и fallback без собранного .pyd. Ключи строк и их порядок
+        # прежние; снимок заявки для public_orders остаётся Python-хуком.
+        rows, public = _report_history.record_market_rows(
+            self.report['orders'], self.report['trades'],
+            _report_history.MARKET_FIELDS, EPS, self._planning_order_snapshot)
         self.meta['market_history'] = (self.meta.get('market_history', [])+[dict(month=self.meta['month'], markets=[dict(state_id=s, province_id=p, good=g, **r) for (s, p, g), r in sorted(rows.items(), key=lambda x: tuple(v or '' for v in x[0]))])])[-3:]
         # Обычная сделка не запускает инвестиции. Устойчивый платёжеспособный
         # дефицит помечает лишь товар и его потребителей для следующего месяца.

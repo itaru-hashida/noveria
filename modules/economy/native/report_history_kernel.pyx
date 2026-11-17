@@ -135,3 +135,62 @@ def build_report_aggregates(object engine, object report):
     report['open_enterprises'] = _PY_SUM(
         e['status'] != 'closed' for e in engine.enterprises.values())
     return balances, shares
+
+
+# ---------------------------------------------------------------------------
+# record_market: числовая агрегация книги заявок и сделок месяца
+# ---------------------------------------------------------------------------
+
+def record_market_rows(object orders, object trades, object fields, object eps,
+                       object snapshot):
+    """Прежний числовой цикл ``V3.record_market``: строки рынка и public_orders.
+
+    Порядок прежний: заявки — порядок ``report['orders']``, сделки — порядок
+    ``report['trades']``, ключи строк — порядок первого появления пары
+    ``(state_id, province_id, good)``. Накопители стартуют с int-нуля, как
+    прежний ``defaultdict``; ``o['unmet_solvent']`` пишется в той же заявке,
+    где и раньше. Снимок заявки для public_orders делает переданный хук:
+    это прежний ``_planning_order_snapshot``.
+    """
+    cdef dict rows = {}
+    cdef list public = []
+    cdef object order, trade, key, row, quantity, remaining, value, field
+    for order in orders:
+        if order['side'] != 'buy' or (order['status'] == 'cancelled'
+                                      and not order.get('superseded_by_top_up')):
+            continue
+        quantity = (order['quantity']-order['remaining']
+                    if order.get('superseded_by_top_up') else order['quantity'])
+        remaining = 0 if order.get('superseded_by_top_up') else order['remaining']
+        key = (order['state_id'], order['province_id'], order['good'])
+        row = rows.get(key)
+        if row is None:
+            row = {}
+            for field in fields:
+                row[field] = 0
+            rows[key] = row
+        row['requested'] = row['requested']+quantity
+        row['limit_value'] = row['limit_value']+quantity*order['price']
+        # Встроенный min: при равенстве возвращает первый аргумент.
+        value = min(order['remaining'], order['reserved']/order['price'])
+        row['unmet_solvent'] = row['unmet_solvent']+value
+        row['reserved_unmet'] = row['reserved_unmet']+order['reserved']
+        if remaining > eps:
+            public.append(snapshot(order))
+        order['unmet_solvent'] = min(order['remaining'],
+                                     order['reserved']/order['price'])
+    for trade in trades:
+        key = (trade['buyer_state'], trade['buyer_province'], trade['good'])
+        row = rows.get(key)
+        if row is None:
+            row = {}
+            for field in fields:
+                row[field] = 0
+            rows[key] = row
+        row['volume'] = row['volume']+trade['quantity']
+        row['trade_gold'] = row['trade_gold']+trade['gold']
+        row['freight'] = row['freight']+trade['freight']
+    return rows, public
+
+
+# ---------------------------------------------------------------------------

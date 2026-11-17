@@ -93,6 +93,45 @@ def build_report_aggregates_python(engine, report):
     return report['balances'], report['money_shares']
 
 
+MARKET_FIELDS = ('volume', 'trade_gold', 'freight', 'requested',
+                 'unmet_solvent', 'limit_value', 'reserved_unmet')
+
+
+def record_market_rows_python(orders, trades, fields, eps, snapshot):
+    """Эталон числового цикла ``V3.record_market``: буквальный прежний код."""
+    rows = {}
+    public = []
+    for o in orders:
+        if o['side'] != 'buy' or (o['status'] == 'cancelled'
+                                  and not o.get('superseded_by_top_up')):
+            continue
+        quantity = (o['quantity']-o['remaining']
+                    if o.get('superseded_by_top_up') else o['quantity'])
+        remaining = 0 if o.get('superseded_by_top_up') else o['remaining']
+        key = (o['state_id'], o['province_id'], o['good'])
+        row = rows.get(key)
+        if row is None:
+            row = {field: 0 for field in fields}
+            rows[key] = row
+        row['requested'] += quantity
+        row['limit_value'] += quantity*o['price']
+        row['unmet_solvent'] += min(o['remaining'], o['reserved']/o['price'])
+        row['reserved_unmet'] += o['reserved']
+        if remaining > eps:
+            public.append(snapshot(o))
+        o['unmet_solvent'] = min(o['remaining'], o['reserved']/o['price'])
+    for t in trades:
+        key = (t['buyer_state'], t['buyer_province'], t['good'])
+        row = rows.get(key)
+        if row is None:
+            row = {field: 0 for field in fields}
+            rows[key] = row
+        row['volume'] += t['quantity']
+        row['trade_gold'] += t['gold']
+        row['freight'] += t['freight']
+    return rows, public
+
+
 def load_report_history_kernel():
     """Вернуть native-модуль report_history_kernel или None.
 
@@ -113,8 +152,10 @@ if _kernel is not None:
     update_sales_history = _kernel.update_sales_history
     update_stock_sales_history = _kernel.update_stock_sales_history
     build_report_aggregates = _kernel.build_report_aggregates
+    record_market_rows = _kernel.record_market_rows
     NATIVE_KERNEL = True
 else:
     update_sales_history = update_sales_history_python
     update_stock_sales_history = update_stock_sales_history_python
     build_report_aggregates = build_report_aggregates_python
+    record_market_rows = record_market_rows_python
