@@ -22,7 +22,15 @@ Python вызывает ``monthly_step(engine, ...)`` один раз за ме�
   * ``update_prices``/``recover_enterprises``/``project_requests`` и прочие
     фазы — существующие native-границы со своими ядрами;
   * ``report``/``events``/``summarize`` — форматирование отчёта и хуки;
-  * ``log_event``/``build_causal_events`` — слой причинных событий.
+  * ``log_event``/``build_causal_events`` — слой причинных событий;
+  * ``MonthlyHooks`` (``monthly_hooks``) — сброс и защита резервов месяца,
+    истечение заявок и диагностика отчёта. Это поля API-слоя и отчёта, а не
+    деньги: ``balance``/``reserved`` меняет только ``CashStore``, склад —
+    ``StockStore``, поля заявок — ``OrderStore``.
+
+Хуки месяца — единственный обратный переход Cython→Python внутри месяца, и
+их не больше, чем участков, которые остались Python. Фасад ``Economy.step``
+по-прежнему делает ровно один вызов на месяц.
 
 Модуль не импортирует ``modules.economy.v3``: движок приходит аргументом,
 поэтому циклического импорта нет. EPS и прочие константы тоже приходят
@@ -40,6 +48,20 @@ cdef object _call(object fn, object engine):
     return fn(engine)
 
 
+cdef object _make_hooks(object engine):
+    """Взять хуки месяца у движка или собрать их поверх него.
+
+    Хуки — это внешний API-слой, а не состояние: объект держит ссылку на
+    живой движок. Приложение может подменить их (``engine.monthly_hooks``),
+    и тогда ядро обязано звать именно их; иначе берётся ``MonthlyHooks``.
+    """
+    hooks = getattr(engine, 'monthly_hooks', None)
+    if hooks is None:
+        from .monthly_hooks import MonthlyHooks
+        hooks = MonthlyHooks(engine)
+    return hooks
+
+
 def monthly_step(object engine, object eps, object planning_mode='v3',
                  object investment_mode='v3', object investment_workers=1,
                  object native_mode='off', object enterprise_planner=None):
@@ -54,7 +76,6 @@ def monthly_step(object engine, object eps, object planning_mode='v3',
     cdef object phase_started
     cdef object before
     cdef object prior_cash
-    cdef object cash
     cdef object existing
     cdef object world
     cdef bint completed = False
@@ -68,15 +89,12 @@ def monthly_step(object engine, object eps, object planning_mode='v3',
     cdef object planning_sells
     cdef object aggregates
     cdef object async_snapshot = None
-    cdef object store
     cdef object order
-    cdef object account
-    cdef object hold
-    cdef object execution_status
-    cdef object execution_reason
+    cdef object hooks
 
     started = _PERF()
     timings = {}
+    hooks = _make_hooks(engine)
 
     # --- пролог: месяц, отчёт, счета, склад -------------------------------
     engine.__dict__.pop('_planning_orders', None)
@@ -93,15 +111,11 @@ def monthly_step(object engine, object eps, object planning_mode='v3',
     engine.report['opening_balances'] = {a['id']: a['balance'] for a in engine.accounts.values()}
     engine.report['gold_before'] = engine.gold()
     prior_cash = {a['id']: a['balance'] for a in engine.accounts.values() if a['kind'] == 'household'}
-    # Месячный сброс резерва идёт через CashStore: это обычный, а не
-    # recovery-путь, поэтому прямая запись в dict обошла бы владельца поля.
-    cash = engine.cash_store
-    for account in engine.accounts.values():
-        hold = account.get('project', {}).get('working_cash', 0)+account.get('project', {}).get('delivery', 0)
-        cash.set_reserved_cash(account['id'], 0.0)
-        account.update(protected=min(account['balance'], hold), payroll_protected=0.0,
-            operating_protected=0.0)
-        engine.stock_store.reset_reserved(account['id'])
+    # Месячный сброс резерва, защита кассы и резерв склада — Python-хук
+    # ``MonthlyHooks.reset_month_reserves``. Хук не владеет деньгами: резерв
+    # меняется через CashStore, склад — через StockStore, а защита кассы
+    # остаётся полем представления. Порядок обхода прежний.
+    hooks.reset_month_reserves(engine.accounts)
     if native_mode == 'cython':
         engine.stock_store.sync()
     existing = list(engine.enterprises.values())
@@ -217,16 +231,9 @@ def monthly_step(object engine, object eps, object planning_mode='v3',
             for order in engine.report['orders']]
         planning_sells = engine._planning_market_snapshot(sells)
         # Снимок спроса сделан до поздних доходов; остатки заявок больше не блокируют кассу.
-        store = engine.order_store
-        for order in engine.report['orders']:
-            if order['side'] == 'buy':
-                order['reserved_at_clearing'] = order['reserved']
-            execution_status, execution_reason = order['status'], order['reason']
-            engine.cancel_order(order, 'Окончание торгов месяца')
-            if order['status'] == 'cancelled':
-                store.set_status(order, 'expired')
-                order['execution_status'] = execution_status
-                order['reason'] = execution_reason or 'Окончание торгов месяца'
+        # Истечение заявок — Python-хук: статус меняет OrderStore, поля
+        # execution_status/reason и reserved_at_clearing остаются в отчёте.
+        hooks.expire_orders()
         timings['market_tail'] = _PERF()-phase_started
 
         # --- производство, потребление, расчёты ---------------------------
@@ -255,20 +262,15 @@ def monthly_step(object engine, object eps, object planning_mode='v3',
         from . import report_history_boundary as _report_history
         _report_history.update_sales_history(engine, eps)
         _report_history.update_stock_sales_history(engine)
-        for account in engine.accounts.values():
-            hold = account.get('project', {}).get('working_cash', 0)+account.get('project', {}).get('delivery', 0)
-            account['protected'] = min(account['balance'], hold)
+        # Защита кассы под проект и резерв под проекты — тоже хуки: это поля
+        # представления, а расчёт резерва остаётся за ``project_cash_reserve``.
+        hooks.protect_balances(engine.accounts)
         engine.settle(list(engine.enterprises.values()), households)
         engine.pay_dividends(planning_sells)
         engine.update_demography()
         engine.apply_migration()
-        for account in engine.accounts.values():
-            account['project_reserve'] = engine.project_cash_reserve(account['id'], planning_sells)
-        if detail != 'none':
-            engine.report['diagnostics'].extend(engine.report['investment_decisions'])
-            import copy as _copy
-            engine.report['diagnostics'].extend(dict(kind='owner_consumption', **_copy.deepcopy(row))
-                for row in engine.report['owner_consumption'])
+        hooks.apply_project_reserves(engine.accounts, planning_sells)
+        hooks.extend_diagnostics(detail)
         timings['production_settlement'] = _PERF()-phase_started
 
         # --- отчёт, инварианты, события -----------------------------------

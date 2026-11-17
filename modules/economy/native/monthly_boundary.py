@@ -15,6 +15,8 @@ Python вызывает ``monthly_step`` один раз за месяц. Ядр
 
 import importlib
 
+from .monthly_hooks import MonthlyHooks
+
 
 def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
                         investment_workers=1, native_mode='off',
@@ -22,12 +24,15 @@ def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
     """Эталон прежнего тела ``Economy.step``: тот же порядок фаз и тот же RNG.
 
     Это не второй движок и не копия состояния: функция работает с живым
-    ``engine``, его хранилищами и его отчётом, ровно как ядро.
+    ``engine``, его хранилищами и его отчётом, ровно как ядро. Хуки месяца она
+    берёт те же, что и ядро, поэтому differential-тест сравнивает ветки, а не
+    две копии одного кода.
     """
     import time
 
     started = time.perf_counter()
     timings = {}
+    hooks = getattr(engine, 'monthly_hooks', None) or MonthlyHooks(engine)
     engine.__dict__.pop('_planning_orders', None)
     engine.__dict__.pop('_recovery_quotes', None)
     engine.__dict__.pop('_stock_sales_cache', None)
@@ -42,15 +47,9 @@ def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
     engine.report['opening_balances'] = {a['id']: a['balance'] for a in engine.accounts.values()}
     engine.report['gold_before'] = engine.gold()
     prior_cash = {a['id']: a['balance'] for a in engine.accounts.values() if a['kind'] == 'household'}
-    # Месячный сброс резерва идёт через CashStore: это обычный, а не
-    # recovery-путь, поэтому прямая запись в dict обошла бы владельца поля.
-    cash = engine.cash_store
-    for a in engine.accounts.values():
-        hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
-        cash.set_reserved_cash(a['id'], 0.0)
-        a.update(protected=min(a['balance'], hold), payroll_protected=0.0,
-            operating_protected=0.0)
-        engine.stock_store.reset_reserved(a['id'])
+    # Тот же хук, что и в native-ветке: деньги меняет CashStore, склад —
+    # StockStore, защита кассы остаётся полем представления.
+    hooks.reset_month_reserves(engine.accounts)
     if native_mode == 'cython':
         engine.stock_store.sync()
     existing = list(engine.enterprises.values())
@@ -144,16 +143,9 @@ def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
         engine._planning_orders = [engine._planning_order_snapshot(order)
             for order in engine.report['orders']]
         planning_sells = engine._planning_market_snapshot(sells)
-        store = engine.order_store
-        for o in engine.report['orders']:
-            if o['side'] == 'buy':
-                o['reserved_at_clearing'] = o['reserved']
-            execution_status, execution_reason = o['status'], o['reason']
-            engine.cancel_order(o, 'Окончание торгов месяца')
-            if o['status'] == 'cancelled':
-                store.set_status(o, 'expired')
-                o['execution_status'] = execution_status
-                o['reason'] = execution_reason or 'Окончание торгов месяца'
+        # Истечение заявок — тот же хук, что и в ядре: статус меняет OrderStore,
+        # тексты причин остаются полями отчёта.
+        hooks.expire_orders()
         timings['market_tail'] = time.perf_counter()-phase_started
         phase_started = time.perf_counter()
         engine.reserve_expedited_construction_labor()
@@ -166,20 +158,13 @@ def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
         from . import report_history_boundary as _report_history
         _report_history.update_sales_history(engine, eps)
         _report_history.update_stock_sales_history(engine)
-        for a in engine.accounts.values():
-            hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
-            a['protected'] = min(a['balance'], hold)
+        hooks.protect_balances(engine.accounts)
         engine.settle(list(engine.enterprises.values()), households)
         engine.pay_dividends(planning_sells)
         engine.update_demography()
         engine.apply_migration()
-        for a in engine.accounts.values():
-            a['project_reserve'] = engine.project_cash_reserve(a['id'], planning_sells)
-        if detail != 'none':
-            import copy
-            engine.report['diagnostics'].extend(engine.report['investment_decisions'])
-            engine.report['diagnostics'].extend(dict(kind='owner_consumption', **copy.deepcopy(row))
-                for row in engine.report['owner_consumption'])
+        hooks.apply_project_reserves(engine.accounts, planning_sells)
+        hooks.extend_diagnostics(detail)
         timings['production_settlement'] = time.perf_counter()-phase_started
         phase_started = time.perf_counter()
         if detail == 'none':
