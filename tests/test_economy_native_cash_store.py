@@ -231,20 +231,41 @@ def test_normal_mutation_does_not_adopt_foreign_dict_value():
 
 
 def test_direct_dict_mismatch_is_counted_in_diagnostics():
-    """Обход границы подхватывается, но это видно в диагностике."""
+    """Вне окна владения обход границы подхватывается, но виден в диагностике.
+
+    Так выглядит граница импорта: счёт выставил checkpoint, откат хода или
+    фикстура теста. Штатный прогон закрывает окно владения только на время
+    месяца, и там та же правка падает.
+    """
     live = account('a', balance=10.0, protected=1.0)
     store = make_store(live)
     assert store.diagnostics()['adopt_mismatch'] == 0
     live['protected'] = 9.0
     assert store.get_protected_cash('a') == 9.0
     assert store.diagnostics()['adopt_mismatch'] == 1
-    assert store.diagnostics()['strict'] is False
+    assert store.diagnostics()['strict'] is True
+    assert store.diagnostics()['runtime'] is False
 
 
-def test_strict_mode_rejects_unexpected_dict_write():
-    """В strict обычный путь не принимает произвольную правку dict."""
+def test_adopt_mismatch_reports_offending_accounts():
+    """Диагностика называет счета, по которым границу обошли.
+
+    Без списка ``adopt_mismatch`` был бы неотличим от счётчика случайных
+    расхождений: непонятно, какой именно writer писал мимо владельца.
+    """
+    first, second = account('a', balance=10.0), account('b', balance=20.0)
+    store = make_store(first, second)
+    first['balance'] = 5.0
+    assert store.get_balance('a') == 5.0
+    diagnostics = store.diagnostics()
+    assert diagnostics['adopt_mismatch'] == 1
+    assert diagnostics['adopt_accounts'] == ['a']
+
+
+def test_strict_mode_rejects_dict_write_inside_runtime():
+    """Внутри окна владения обычный путь не принимает правку dict."""
     live = account('a', balance=10.0, protected=1.0)
-    store = cash_boundary.CashStore({'a': live}, True)
+    store = cash_boundary.CashStore({'a': live}, True).begin_runtime()
     assert store.diagnostics()['strict'] is True
     live['protected'] = 9.0
     with pytest.raises(ValueError, match='в обход'):
@@ -267,10 +288,21 @@ def test_python_owner_exposes_the_same_adoption_surface():
     live = account('a', balance=10.0, protected=1.0)
     reference = cash_boundary.CashStorePython({'a': live})
     assert reference.diagnostics() == dict(version=reference.version, accounts=1,
-                                           adopt_mismatch=0, strict=False)
+                                           adopt_mismatch=0, adopt_accounts=[],
+                                           strict=True, runtime=False)
     live['protected'] = 4.0
     assert reference.get_protected_cash('a') == 4.0
     assert reference.diagnostics()['adopt_mismatch'] == 1
+    assert reference.diagnostics()['adopt_accounts'] == ['a']
+
+
+def test_python_owner_rejects_dict_write_inside_runtime():
+    """Окно владения у эталона то же: внутри месяца правка dict — ошибка."""
+    live = account('a', balance=10.0, protected=1.0)
+    reference = cash_boundary.CashStorePython({'a': live}).begin_runtime()
+    live['protected'] = 4.0
+    with pytest.raises(ValueError, match='в обход'):
+        reference.get_protected_cash('a')
 
 
 # --- 4. Python compatibility view ---------------------------------------
@@ -304,33 +336,48 @@ def test_move_balance_to_same_account_keeps_operation_order():
     assert live['balance'] == expected
 
 
-# --- 5. Обход границы: dict новее колонки -------------------------------
-def test_direct_dict_write_is_adopted_by_column():
-    """native-ветки пишут balance в dict напрямую: колонка обязана догнать."""
+# --- 5. Обход границы: dict разошёлся с колонкой -------------------------
+def test_direct_dict_write_is_adopted_outside_runtime():
+    """Вне окна правка ``balance`` — импорт: колонка принимает и считает."""
     live = account('a', balance=10.0)
     store = make_store(live)
     live['balance'] = 4.0
     assert store.get_balance('a') == 4.0
     assert store.columns()['balance'] == [4.0]
+    assert store.diagnostics()['adopt_accounts'] == ['a']
 
 
-def test_direct_reserved_write_is_adopted_by_column():
+def test_direct_reserved_write_is_adopted_outside_runtime():
     live = account('a', balance=10.0, reserved=2.0)
     store = make_store(live)
     live['reserved'] = 6.0
     assert store.get_reserved_cash('a') == 6.0
 
 
+def test_direct_dict_write_is_rejected_inside_runtime():
+    """Внутри окна та же правка — обход владельца и ошибка."""
+    live = account('a', balance=10.0)
+    store = make_store(live).begin_runtime()
+    live['balance'] = 4.0
+    with pytest.raises(ValueError, match='в обход'):
+        store.get_balance('a')
+
+
 def test_new_account_outside_boundary_is_picked_up():
-    """Счёт открывается прямо в engine.accounts: колонки обязаны догнать."""
+    """Новый счёт в ``engine.accounts`` импортируется: это рост раскладки.
+
+    Заведение счёта — не мутация денежного поля существующего счёта, поэтому
+    ``_sync`` добавляет его в хвост колонок со значениями из словаря.
+    """
     live = account('a')
     store = make_store(live)
     fresh = account('firm-1', balance=50.0)
-    store.accounts['firm-1'] = fresh          # в обход границы
+    store.accounts['firm-1'] = fresh          # новый счёт, а не правка поля
     assert store.get_balance('firm-1') == 50.0
     assert store.columns()['keys'] == ['a', 'firm-1']
     store.add_balance('firm-1', 5.0)
     assert fresh['balance'] == 55.0
+    assert store.diagnostics()['adopt_mismatch'] == 0
 
 
 # --- 6. Явные ошибки -----------------------------------------------------
@@ -446,19 +493,20 @@ def test_engine_deepcopy_gets_its_own_store():
 
 
 def test_transfer_matches_reference_semantics():
-    """Копия ``transfer`` обязана совпадать с эталоном на тех же данных.
+    """``Economy.transfer`` и ``EconomyServices.transfer`` дают одно состояние.
 
-    ``Economy.transfer`` дублирует тело ``EconomyServices.transfer``, потому
-    что эталон пишет в dict напрямую. Расхождение тел сдвинуло бы экономику,
-    поэтому равенство проверяется явно.
+    Тело живёт в ``EconomyServices``; ``Economy`` добавляет только guard
+    свободной кассы. Тест фиксирует, что деньги двигает один владелец и
+    результат у обеих точек входа совпадает.
     """
     from modules.economy.support import EconomyServices
 
     def run(method):
         engine = build_engine()
         engine.activate_rules()
-        engine.accounts['carrier:s']['balance'] = 10.0
-        engine.accounts['treasury:s']['balance'] = 0.0
+        cash = engine.cash_store
+        cash.set_balance('carrier:s', 10.0)
+        cash.set_balance('treasury:s', 0.0)
         method(engine, 'carrier:s', 'treasury:s', 2.5, 'Проверка')
         return (engine.accounts['carrier:s']['balance'],
                 engine.accounts['treasury:s']['balance'],
@@ -470,9 +518,7 @@ def test_transfer_matches_reference_semantics():
 def test_transfer_to_same_account_is_exact():
     engine = build_engine()
     engine.activate_rules()
-    engine.accounts['carrier:s']['balance'] = 0.1+0.2
-    cash = engine.cash_store
-    cash.get_balance('carrier:s')
+    engine.cash_store.set_balance('carrier:s', 0.1+0.2)
     engine.transfer('carrier:s', 'carrier:s', 0.1, 'Проверка')
     assert engine.accounts['carrier:s']['balance'] == (0.1+0.2)
 

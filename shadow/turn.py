@@ -46,7 +46,10 @@ class AgentTurn:
         budget = {}
         for firm in eligible:
             account = engine.accounts[firm]
-            account['protected'] = max(0, account['protected']-account.pop('operating_protected', 0))
+            # ``protected`` — денежная колонка CashStore: снятие прошлого
+            # резерва идёт через владельца, как и в штатном плане.
+            engine.cash_store.release_protected_cash(
+                firm, account.pop('operating_protected', 0))
             budget[firm] = engine.free_cash(firm)
         arrays, meta = agent_snapshot.build(engine, budget, sells=sells)
         parameters = tuple(engine.cfg[k] for k in
@@ -133,7 +136,9 @@ class AgentTurn:
         reason = intents[0][6]
         wage_reserve = output*engine.goods[firm['good']]['labor']*engine.cfg['wage']
         account['payroll_protected'] = wage_reserve
-        account['protected'] += wage_reserve
+        # Денежное поле пишет владелец: ``payroll_protected`` — поле-спутник
+        # отчёта, а ``protected`` — колонка CashStore.
+        engine.cash_store.add_protected_cash(firm['id'], wage_reserve)
         firm.update(agent_sales_forecast=trace['forecast'], sales_forecast=trace['forecast'],
                     reachable_demand=trace['observed'], planned_output=output,
                     input_target_output=output, production_limit=reason,

@@ -102,16 +102,22 @@ class EconomyServices:
         return self.accounts[identity]
 
     def transfer(self, sender, recipient, amount, reason):
+        """Перевод через владельца денежных полей: баланс и ровно один flow.
+
+        ``balance`` пишет ``CashStore``, а не dict: у поля один владелец, и
+        запись идёт колонкой с зеркалом в словарь. Порядок проверок прежний —
+        конечность и знак, доступный остаток, отсечение нулём и по балансу.
+        """
         if not math.isfinite(amount) or amount < -EPS:
             raise ValueError('Некорректный денежный перевод')
         if amount <= 0:
             return
-        a, b = self.accounts[sender], self.accounts[recipient]
-        if amount > a['balance'] + EPS:
+        cash = self.cash_store
+        balance = cash.get_balance(sender)
+        if amount > balance + EPS:
             raise ValueError('Недостаточно золота для перевода')
-        amount = min(amount, a['balance'])
-        a['balance'] -= amount
-        b['balance'] += amount
+        amount = min(amount, balance)
+        cash.move_balance(sender, recipient, amount)
         self.report['flows'].append(dict(sender=sender, recipient=recipient, gold=amount, reason=reason))
 
     def add_stock(self, account, good, quantity, value=0):

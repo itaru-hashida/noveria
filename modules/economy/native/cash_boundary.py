@@ -20,22 +20,24 @@ import importlib
 class CashStorePython:
     """Эталон границы: колонки денежных полей над теми же живыми счетами.
 
-    Сверка с dict повторяет native-ветку: прямая запись в обход границы
-    (native-ветки восстановления предприятий) не должна теряться. Сравнивается
-    и тип, потому что ``5`` и ``5.0`` равны по значению, но подмена типа
-    сдвинула бы последние биты отчёта.
+    Сверка с dict повторяет native-ветку: внутри окна владения расхождение
+    колонки с dict — ошибка ``ValueError``, вне окна оно принимается как импорт
+    старого состояния и считается в ``adopt_mismatch``. Сравнивается и тип,
+    потому что ``5`` и ``5.0`` равны по значению, но подмена типа сдвинула бы
+    последние биты отчёта.
 
     ``protected`` — отдельная колонка, а не второй ``reserved``: резерв под
-    заявки и защита кассы под обязательства считаются независимо. Принятое из
-    dict расхождение считается в ``adopt_mismatch``; в ``strict`` оно вместо
-    этого падает, потому что обычная мутация обязана идти через владельца.
+    заявки и защита кассы под обязательства считаются независимо. ``strict``
+    выключает compatibility целиком; движок его не выключает.
     """
 
-    def __init__(self, accounts, strict=False):
+    def __init__(self, accounts, strict=True):
         self.accounts = accounts
         self.strict = bool(strict)
         self.adopt_mismatch = 0
+        self.adopt_accounts = []
         self.version = 0
+        self.runtime = False
         self.keys = []
         self.balances = []
         self.reserved = []
@@ -92,18 +94,24 @@ class CashStorePython:
         return slot
 
     def _reconcile(self, column, column_slot, account_id, field, default):
-        """Принять значение dict, если оно изменилось в обход границы."""
+        """Сверить колонку с dict: обход владельца или законный импорт.
+
+        Внутри окна владения расхождение — ошибка; вне окна это импорт
+        состояния, который принимается и считается в ``adopt_mismatch``.
+        """
         account = self.accounts[account_id]
         value = account[field] if default is None else account.get(field, default)
         current = column[column_slot]
         if current is not value and (current != value
                                      or type(current) is not type(value)):
-            if self.strict:
+            if self.strict and self.runtime:
                 raise ValueError(
                     f'CashStore: {field} счёта {account_id!r} изменён в обход '
                     f'владельца (колонка {current!r}, dict {value!r})')
             column[column_slot] = value
             self.adopt_mismatch += 1
+            if account_id not in self.adopt_accounts:
+                self.adopt_accounts.append(account_id)
         return column[column_slot]
 
     def get_balance(self, account_id):
@@ -203,14 +211,49 @@ class CashStorePython:
             return 0.0
         return free
 
+    def begin_runtime(self):
+        """Открыть окно владения месяцем: явный импорт на границе."""
+        self.adopt()
+        self.runtime = True
+        return self
+
+    def end_runtime(self, check=True):
+        """Закрыть окно владения: перед закрытием колонки сверяются с dict."""
+        if check:
+            self.verify()
+        self.runtime = False
+        return self
+
+    def verify(self):
+        """Сверить колонки с живым словарём счетов и упасть на расхождении."""
+        self.sync()
+        for slot, account_id in enumerate(self.keys):
+            self._reconcile(self.balances, slot, account_id, 'balance', None)
+            self._reconcile(self.reserved, slot, account_id, 'reserved', 0)
+            self._reconcile(self.protected, slot, account_id, 'protected', 0)
+        return self
+
     def adopt(self):
-        """Явный импорт значений dict во все колонки (load/new-account)."""
+        """Явный импорт значений dict во все колонки (граница импорта состояния).
+
+        Каждое принятое расхождение считается в ``adopt_mismatch``, а счёт, по
+        которому границу обошли, попадает в ``adopt_accounts``: ноль в обычном
+        прогоне и есть доказательство, что runtime не писал cash в dict.
+        """
         self.sync()
         for slot, account_id in enumerate(self.keys):
             account = self.accounts[account_id]
-            self.balances[slot] = account['balance']
-            self.reserved[slot] = account.get('reserved', 0)
-            self.protected[slot] = account.get('protected', 0)
+            for column, field, default in ((self.balances, 'balance', None),
+                                           (self.reserved, 'reserved', 0),
+                                           (self.protected, 'protected', 0)):
+                value = account[field] if default is None else account.get(field, default)
+                current = column[slot]
+                if current is not value and (current != value
+                                             or type(current) is not type(value)):
+                    column[slot] = value
+                    self.adopt_mismatch += 1
+                    if account_id not in self.adopt_accounts:
+                        self.adopt_accounts.append(account_id)
         return self
 
     def columns(self):
@@ -221,7 +264,8 @@ class CashStorePython:
     def diagnostics(self):
         return dict(version=int(self.version), accounts=len(self.keys),
                     adopt_mismatch=int(self.adopt_mismatch),
-                    strict=bool(self.strict))
+                    adopt_accounts=list(self.adopt_accounts),
+                    strict=bool(self.strict), runtime=bool(self.runtime))
 
     def __deepcopy__(self, memo):
         return type(self)(copy.deepcopy(self.accounts, memo), self.strict)

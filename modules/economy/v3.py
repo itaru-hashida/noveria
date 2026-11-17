@@ -1282,27 +1282,17 @@ class Economy(EconomyServices):
     def transfer(self, sender, recipient, amount, reason):
         """Перевод — единственная точка изменения ``balance``.
 
-        Проверки и арифметика те же, что в ``EconomyServices.transfer``, но
-        значения читает и пишет ``CashStore``: колонки остаются источником
-        истины, а словарь счёта получает зеркало. Дублирование тела нужно
-        потому, что ``super().transfer`` пишет в dict напрямую и обошёл бы
-        владельца полей. Порядок операций сохранён: проверка доступного
-        остатка, проверка конечности и знака, отсечение нуля, отсечение по
-        балансу, затем списание и зачисление.
+        Тело живёт в ``EconomyServices.transfer``: там же владелец полей —
+        ``CashStore``, колонки остаются источником истины, а словарь счёта
+        получает зеркало. Здесь остаётся только дополнительный guard свободной
+        кассы: у ``Economy`` зарезервированные и защищённые деньги двигать
+        нельзя, а у сервиса такого ограничения нет. Порядок прежний: guard
+        свободной кассы, затем конечность и знак, отсечение нуля, отсечение по
+        балансу, списание и зачисление, одна запись в ``report['flows']``.
         """
         if amount > self.free_cash(sender)+EPS:
             raise ValueError('Деньги зарезервированы или недостаточны: '+sender)
-        if not math.isfinite(amount) or amount < -EPS:
-            raise ValueError('Некорректный денежный перевод')
-        if amount <= 0:
-            return
-        cash = self.cash_store
-        balance = cash.get_balance(sender)
-        if amount > balance+EPS:
-            raise ValueError('Недостаточно золота для перевода')
-        amount = min(amount, balance)
-        cash.move_balance(sender, recipient, amount)
-        self.report['flows'].append(dict(sender=sender, recipient=recipient, gold=amount, reason=reason))
+        return EconomyServices.transfer(self, sender, recipient, amount, reason)
 
     def locked_material(self, account, good):
         # Числовой обход проекта, публичных строек, оснащения и поддержки —
@@ -1466,15 +1456,39 @@ class Economy(EconomyServices):
         """Единая граница денежных мутаций: живой словарь ``self.accounts``.
 
         Хранилище не копирует счета: оно получает сам словарь и меняет
-        ``balance``/``reserved`` тех же словарей. Ссылка перепроверяется по
-        тождеству словаря — ``step`` пересобирает ``self.accounts`` сортировкой,
-        и без сверки граница писала бы в счета прошлого месяца. Горячие циклы
-        берут ссылку один раз на вызов.
+        ``balance``/``reserved``/``protected`` тех же словарей. Ссылка
+        перепроверяется по тождеству словаря — ``step`` пересобирает
+        ``self.accounts`` сортировкой, и без сверки граница писала бы в счета
+        прошлого месяца. Горячие циклы берут ссылку один раз на вызов.
+
+        Пересборка словаря — не импорт значений: если окно владения открыто,
+        старые колонки сначала сверяются с теми же счетами, и только потом
+        новое хранилище продолжает работу в том же строгом режиме. Иначе одна
+        сортировка словаря выключала бы проверку до конца месяца.
         """
         accounts = self.accounts
         store = self.__dict__.get('_cash_store')
-        if store is None or store.accounts is not accounts:
+        if store is None:
             store = self._cash_store = _cash.CashStore(accounts)
+        elif store.accounts is not accounts:
+            store = self._cash_store = self._handover_cash_store(store, accounts)
+        return store
+
+    def _handover_cash_store(self, previous, accounts):
+        """Перепривязать владельца к пересобранному словарю счетов.
+
+        ``step`` и ``restore_state`` заменяют ``self.accounts`` целиком.
+        Пересборка сортировкой — это те же живые счета, поэтому колонки
+        обязаны совпасть с dict: расхождение означает запись мимо владельца и
+        падает при открытом окне. Замена счетов новыми объектами — импорт
+        (checkpoint, откат хода), и значения берутся из словаря как есть.
+        """
+        runtime = bool(getattr(previous, 'runtime', False))
+        if runtime:
+            previous.verify()
+        store = _cash.CashStore(accounts)
+        if runtime:
+            store.begin_runtime()
         return store
 
     @property
@@ -2801,8 +2815,21 @@ class Economy(EconomyServices):
         recorder = self.event_recorder
         recorder.configure(self.report_detail(), batch_size=256,
                            capacity=4096, drop_diagnostic=False)
-        report = monthly_boundary.monthly_step(self, EPS, planning_mode,
-            investment_mode, investment_workers, native_mode, enterprise_planner)
+        # Окно владения cash открыто ровно на месяц: вход в него — импорт уже
+        # лежащего в словаре состояния (checkpoint, откат, инструмент), выход —
+        # сверка колонок с dict. Внутри месяца деньги пишет только CashStore,
+        # поэтому прямой writer в dict даёт ошибку, а не скрытое восстановление.
+        self.cash_store.begin_runtime()
+        completed = False
+        try:
+            report = monthly_boundary.monthly_step(self, EPS, planning_mode,
+                investment_mode, investment_workers, native_mode, enterprise_planner)
+            completed = True
+        finally:
+            # Ошибка внутри месяца уже несёт причину; вторая ошибка сверки
+            # замаскировала бы её, поэтому при исключении окно закрывается без
+            # проверки. Успешный месяц обязан пройти сверку.
+            self.cash_store.end_runtime(check=completed)
         # Готовые батчи уходят в фон без ожидания диска. Если writer не
         # подключён, батчи отпускаются, но счётчики буфера остаются: replay
         # по-прежнему живёт в report['events'] и ничего не теряется.

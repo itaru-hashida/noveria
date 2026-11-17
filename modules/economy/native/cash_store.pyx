@@ -25,17 +25,44 @@ Python-dict, чтобы весь остальной код продолжал ч
 операция сначала выравнивает хвост колонок по словарю: новый счёт
 импортируется из своего словаря. Это проверка длин, а не скан.
 
-Обратная ситуация — прямая запись в dict в обход границы. Так делают
-native-ветки восстановления предприятий: они меняют ``balance``/``protected``
-напрямую. Чтобы не завести второе независимое состояние, каждая мутация и
-чтение сверяют колонку с dict и, если dict новее, принимают его значение.
+Обратная ситуация — прямая запись в dict в обход границы. Раньше так делали
+native-ветки восстановления предприятий, и хранилище молча принимало значение
+dict при каждом чтении. Теперь это запрещено: ``strict`` включён по умолчанию,
+и расхождение колонки с dict — ошибка ``ValueError``, а не скрытое
+восстановление. Иначе у поля снова было бы два владельца, а порядок операций
+зависел бы от того, кто прочитал счёт первым.
 
-Приём значения из dict — это compatibility-режим, и он явный: ``adopt_mismatch``
-хранит, сколько раз колонка догнала разошедшийся dict, а ``strict`` запрещает
-такое принятие ошибкой. Обычный путь мутации (``set_*``/``add_*``/
-``move_balance``) никогда не импортирует произвольное значение: он пишет и
-колонку, и dict. Импорт из dict — только у ``_append`` (новый счёт или
-пересборка раскладки), ``adopt`` (явный импорт) и сверки чтения.
+Импорт значений из dict остался ровно на границе импорта: ``_load`` (создание
+хранилища над словарём счетов) и ``_relayout`` (новый счёт появился в словаре).
+Обычный путь мутации (``set_*``/``add_*``/``release_*``/``move_balance``) пишет
+и колонку, и dict, а запись мимо владельца падает.
+
+Разница между импортом и обходом — это не «когда прочитали», а «идёт ли
+штатный прогон». Движок открывает окно владения на время хода
+(``begin_runtime``/``end_runtime``): внутри окна любое расхождение колонки с
+dict — ошибка ``ValueError``, потому что писать деньги мимо владельца в
+runtime нельзя. Вне окна значения dict принимаются и считаются в
+``adopt_mismatch``: это граница импорта старого состояния — загрузка
+checkpoint, откат хода, сборка счёта инструментом или тестом.
+
+Граница импорта — это ровно ``begin_runtime``: он вызывает ``adopt`` и тем
+самым принимает расхождения, накопленные до месяца. Дальше, до
+``end_runtime``, приём запрещён. Поэтому ``adopt_mismatch`` — наблюдаемая
+величина, а не догадка: в штатном прогоне она остаётся нулём, потому что все
+writers идут через владельца, а ненулевое значение означает, что состояние
+пришло извне границы. Именно это проверяет
+``test_economy_native_cash_runtime.py`` на всём жизненном цикле движка.
+
+``strict=False`` выключает и это правило: compatibility-режим нужен только для
+явного импорта старого состояния и differential-тестов и никогда не
+включается движком.
+
+Пересборка словаря — не импорт. ``step`` пересобирает ``engine.accounts``
+сортировкой, и граница перепривязывается к новому словарю. При этом те же
+живые счета обязаны совпадать с колонками: ``verify`` сверяет их до создания
+нового хранилища и падает на расхождении, если окно владения открыто. Окно
+переносится на новое хранилище, иначе одна сортировка словаря выключала бы
+строгий режим до конца месяца.
 """
 
 import copy
@@ -59,20 +86,31 @@ cdef class CashStore:
     cdef public dict index
     cdef public unsigned long version
     # Compatibility-режим: сколько раз колонка принимала разошедшийся dict.
-    # Ноль означает, что обычный путь ни разу не импортировал чужое значение.
+    # Ноль означает, что штатный прогон ни разу не импортировал чужое значение.
     cdef public unsigned long adopt_mismatch
+    # Счета, по которым расхождение было принято: диагностика показывает не
+    # только «сколько», но и «где», иначе обход владельца неотличим от шума.
+    cdef public list adopt_accounts
     cdef public bint strict
+    # Окно владения: открыто на время хода. Внутри окна расхождение колонки с
+    # dict — ошибка, а не импорт. Вне окна значениe dict принимается: это
+    # граница импорта старого состояния (checkpoint, откат, сборка счёта).
+    cdef public bint runtime
 
-    def __cinit__(self, object accounts, bint strict=False):
+    def __cinit__(self, object accounts, bint strict=True):
         self.accounts = accounts
         # Номер раскладки. Меняется при пересборке колонок; нужен диагностике и
         # тестам, чтобы отличить импорт от продолжения работы.
         self.version = 0
         self.adopt_mismatch = 0
-        # Strict запрещает принимать значение dict в обход границы: обычный
-        # путь обязан идти через ``set_*``/``add_*``. Импорт при новой
-        # раскладке разрешён и в strict: без него счёт не завести.
+        self.adopt_accounts = []
+        # Strict выключает compatibility целиком: и импорт вне окна, и приём
+        # расхождения. Движок его не выключает — режим только для импорта
+        # старого состояния и differential-тестов.
         self.strict = strict
+        # Окно владения по умолчанию закрыто: только что созданное хранилище
+        # ещё не начало прогон, и его значения — это импорт словаря счетов.
+        self.runtime = False
         self._load()
 
     # --- импорт текущих значений ------------------------------------------
@@ -169,12 +207,21 @@ cdef class CashStore:
     # --- сверка с dict -----------------------------------------------------
     cdef object _adopt(self, list column, Py_ssize_t slot, object account_id,
                        object field, object default):
-        """Принять значение dict, если оно изменилось в обход границы.
+        """Сверить колонку с dict: обход владельца или законный импорт.
 
-        Это compatibility-путь: он видит прямой writer в dict и подтягивает
-        колонку. В strict такое расхождение — ошибка, а не молчаливое
-        принятие: иначе два владельца снова стали бы неотличимы. Импорт при
-        пересборке раскладки сюда не идёт — его делает ``_append``.
+        Внутри окна владения (``runtime``) расхождение — ошибка: это штатный
+        прогон, и деньги здесь пишет только хранилище. Вне окна расхождение —
+        импорт состояния: checkpoint, откат хода, инструмент или фикстура
+        теста. Такой импорт принимается и считается в ``adopt_mismatch``.
+
+        Граница импорта держится на измерении, а не на обещании: в штатном
+        жизненном цикле (старт мира, месяцы, откат, save/load, игровые
+        действия) ``adopt_mismatch`` остаётся нулём — это проверяет
+        ``test_economy_native_cash_runtime.py``. Ненулевое значение означает,
+        что состояние пришло извне границы владельца.
+
+        ``strict=False`` разрешает приём и внутри окна: это compatibility для
+        differential-тестов и явного импорта старого состояния.
         """
         cdef object account = self.accounts[account_id]
         cdef object value
@@ -185,12 +232,16 @@ cdef class CashStore:
         if <object>column[slot] is not value:
             if (<object>column[slot] != value
                     or type(<object>column[slot]) is not type(value)):
-                if self.strict:
+                if self.strict and self.runtime:
                     raise ValueError(
                         f'CashStore: {field} счёта {account_id!r} изменён в обход '
                         f'владельца (колонка {<object>column[slot]!r}, dict {value!r})')
                 column[slot] = value
                 self.adopt_mismatch += 1
+                # Счёт, по которому границу обошли: без него счётчик не говорит,
+                # какой writer писал мимо владельца.
+                if account_id not in self.adopt_accounts:
+                    self.adopt_accounts.append(account_id)
         return column[slot]
 
     cdef object _reconcile_balance(self, Py_ssize_t slot, object account_id):
@@ -360,14 +411,41 @@ cdef class CashStore:
         self._sync()
         self._verify()
 
-    def adopt(self):
-        """Явный импорт значений dict во все колонки.
+    def begin_runtime(self):
+        """Открыть окно владения месяцем: явный импорт на границе.
 
-        Это путь load/new-account: сюда приходят значения, которые владелец не
-        писал — восстановленные из checkpoint, собранные миграцией или
-        выставленные тестом. Обычная мутация им не пользуется, поэтому
-        произвольная правка dict не подменяет владельца молча: сверка чтения
-        учитывает её отдельно и диагностируется через ``adopt_mismatch``.
+        Месяц начинается с состояния, которое уже лежит в словаре счетов:
+        checkpoint, откат хода, инструмент или тест могли выставить денежные
+        поля в обход границы. Импорт делается здесь и только здесь — вызовом
+        ``adopt``, а не побочным эффектом чтения. Принятые расхождения видны в
+        ``adopt_mismatch``: в нормальном прогоне счётчик остаётся нулём,
+        потому что все writers идут через владельца.
+
+        После этого приём запрещён до ``end_runtime``: любое расхождение —
+        ошибка, иначе появился бы второй владелец поля.
+        """
+        self.adopt()
+        self.runtime = True
+        return self
+
+    def end_runtime(self, bint check=True):
+        """Закрыть окно владения.
+
+        Перед закрытием колонки сверяются со словарём: запись мимо владельца,
+        которую никто не прочитал за месяц, видна здесь. Проверка отключена
+        только для аварийного выхода, где уже есть исходное исключение.
+        """
+        if check:
+            self.verify()
+        self.runtime = False
+        return self
+
+    def verify(self):
+        """Сверить колонки с живым словарём счетов и упасть на расхождении.
+
+        Проверка идёт при открытом окне: вызывающий передаёт уже собранное
+        хранилище заново, например после пересборки словаря сортировкой в
+        ``step``. Это не импорт, а значит любое расхождение — обход владельца.
         """
         cdef Py_ssize_t slot, total = len(self.keys)
         cdef object account_id
@@ -375,9 +453,51 @@ cdef class CashStore:
         self._verify()
         for slot in range(total):
             account_id = <object>self.keys[slot]
-            self.balances[slot] = (<object>self.accounts[account_id])['balance']
-            self.reserved[slot] = (<object>self.accounts[account_id]).get('reserved', 0)
-            self.protected[slot] = (<object>self.accounts[account_id]).get('protected', 0)
+            self._reconcile_balance(slot, account_id)
+            self._reconcile_reserved(slot, account_id)
+            self._reconcile_protected(slot, account_id)
+        return self
+
+    def adopt(self):
+        """Явный импорт значений dict во все колонки: граница импорта.
+
+        Это путь загрузки: сюда приходят значения, которые владелец не писал —
+        восстановленные из checkpoint, собранные миграцией или выставленные
+        инструментом. Обычная мутация им не пользуется. Каждое принятое
+        расхождение считается в ``adopt_mismatch``: ноль в обычном прогоне и
+        есть доказательство, что runtime не писал cash в dict напрямую.
+        """
+        cdef Py_ssize_t slot, total = len(self.keys)
+        cdef object account_id, account, value
+        self._sync()
+        self._verify()
+        for slot in range(total):
+            account_id = <object>self.keys[slot]
+            account = self.accounts[account_id]
+            value = account['balance']
+            if (<object>self.balances[slot] is not value
+                    and (<object>self.balances[slot] != value
+                         or type(<object>self.balances[slot]) is not type(value))):
+                self.balances[slot] = value
+                self.adopt_mismatch += 1
+                if account_id not in self.adopt_accounts:
+                    self.adopt_accounts.append(account_id)
+            value = account.get('reserved', 0)
+            if (<object>self.reserved[slot] is not value
+                    and (<object>self.reserved[slot] != value
+                         or type(<object>self.reserved[slot]) is not type(value))):
+                self.reserved[slot] = value
+                self.adopt_mismatch += 1
+                if account_id not in self.adopt_accounts:
+                    self.adopt_accounts.append(account_id)
+            value = account.get('protected', 0)
+            if (<object>self.protected[slot] is not value
+                    and (<object>self.protected[slot] != value
+                         or type(<object>self.protected[slot]) is not type(value))):
+                self.protected[slot] = value
+                self.adopt_mismatch += 1
+                if account_id not in self.adopt_accounts:
+                    self.adopt_accounts.append(account_id)
         return self
 
     def columns(self):
@@ -388,10 +508,11 @@ cdef class CashStore:
                     reserved=list(self.reserved), protected=list(self.protected))
 
     def diagnostics(self):
-        """Сводка compatibility-режима: раскладка и число принятых расхождений."""
+        """Сводка режима владения: раскладка, окно и принятые расхождения."""
         return dict(version=int(self.version), accounts=len(self.keys),
                     adopt_mismatch=int(self.adopt_mismatch),
-                    strict=bool(self.strict))
+                    adopt_accounts=list(self.adopt_accounts),
+                    strict=bool(self.strict), runtime=bool(self.runtime))
 
     # --- копии -------------------------------------------------------------
     def __deepcopy__(self, memo):

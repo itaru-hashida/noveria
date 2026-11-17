@@ -187,13 +187,19 @@ def test_dict_mirrors_store_after_step_reset():
     assert columns['balance'] == [a['balance'] for a in engine.accounts.values()]
 
 
-def test_direct_dict_write_does_not_create_second_state():
-    """Обход границы подхватывается колонкой, второго состояния не возникает."""
+def test_direct_dict_write_is_adopted_outside_runtime_and_counted():
+    """Вне окна обход границы подхватывается, но виден в диагностике.
+
+    Это граница импорта: счёт выставила фикстура, checkpoint или откат хода.
+    Штатный месяц закрывает окно, и там та же правка падает — см.
+    ``test_economy_native_cash_runtime.py``.
+    """
     engine = build_engine()
     engine.step()
     target = next(iter(engine.accounts))
     engine.accounts[target]['reserved'] = 3.5
     assert engine.cash_store.get_reserved_cash(target) == 3.5
+    assert target in engine.cash_store.diagnostics()['adopt_accounts']
     engine.cash_store.add_reserved_cash(target, 1.5)
     assert engine.accounts[target]['reserved'] == 5.0
     assert engine.cash_store.get_reserved_cash(target) == 5.0

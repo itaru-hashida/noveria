@@ -225,11 +225,13 @@ def apply_plans(engine, plans):
         if firm['status'] == 'closed':
             continue
         account = engine.accounts[firm_id]
-        account['protected'] = max(
-            0.0, account.get('protected', 0.0)-account.pop('operating_protected', 0.0))
+        # ``protected`` — денежная колонка CashStore, поэтому снятие прошлого
+        # резерва и защита зарплат идут через владельца, как и в штатном плане.
+        cash = engine.cash_store
+        cash.release_protected_cash(firm_id, account.pop('operating_protected', 0.0))
         payroll = min(item.output*item.wage_unit, engine.free_cash(firm_id))
         account['payroll_protected'] = payroll
-        account['protected'] += payroll
+        cash.add_protected_cash(firm_id, payroll)
         firm.update(
             agent_sales_forecast=item.sales_forecast,
             sales_forecast=item.sales_forecast,
