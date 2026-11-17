@@ -235,6 +235,40 @@ cdef inline bint _ready(object project, object eps):
 # Распределение доходов
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Оброк предприятия и финансирование кандидата
+# ---------------------------------------------------------------------------
+
+def enterprise_overhead(object capacity, object labor, object wage, object rate):
+    """Прежний ``V3.enterprise_overhead``: capacity*labor*wage*rate.
+
+    Порядок сомножителей буквальный: слева направо, без перегруппировки. Тип
+    результата не приводится, поэтому int-сомножители дают int, как и раньше.
+    """
+    return capacity*labor*wage*rate
+
+
+def project_finances(object capacity, object available, object startup,
+                     object material, object delivery, object unit,
+                     object fixed_unit, object equipment_capital, object margin,
+                     object expansion, object eps):
+    """Прежний ``v3.project_finances``: мощность, оборот, вложения, прибыль.
+
+    ``min``/``max`` — встроенные: при равенстве побеждает первый аргумент, и
+    тип сохраняется. Порядок сложений ``material+delivery+unit+equipment_capital``
+    и ``(unit+fixed_unit)`` прежний, поэтому последний бит тот же.
+    """
+    cdef object budget, need, working, investment
+    budget = _max0(available-startup)
+    need = _max2(material+delivery+unit+equipment_capital, eps)
+    capacity = _min2(capacity, budget/need)
+    working = capacity*equipment_capital
+    if not expansion:
+        working = working+_max2(startup, capacity*(unit+fixed_unit))
+    investment = capacity*(material+delivery)+working
+    return capacity, working, investment, capacity*margin
+
+
 def distribute(object hooks, object sender, object recipients, object amount,
                object reason):
     """Прежний ``EconomyServices.distribute``: доли по населению.

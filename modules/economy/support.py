@@ -116,10 +116,14 @@ class EconomyServices:
         return _stock.use_stock(self, account, good, quantity)
 
     def total_stock(self):
-        return {g: sum(a['stock'].get(g, 0) for a in self.accounts.values()) for g in self.goods}
+        # Числовой обход склада (компенсированный sum по каждому товару) —
+        # в stock_boundary: там же Python-эталон и fallback без собранного .pyd.
+        # Список обязателен: ядро проходит счета заново на каждый товар.
+        return _stock.total_stock(list(self.accounts.values()), self.goods)
 
     def gold(self):
-        return sum(a['balance'] for a in self.accounts.values())
+        # Компенсированная сумма балансов в прежнем порядке обхода — в ядре.
+        return _stock.gold(self.accounts.values())
 
     def _seed_state(self):
         if self.accounts:

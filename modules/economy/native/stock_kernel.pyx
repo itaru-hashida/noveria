@@ -45,6 +45,85 @@ cdef inline object _track(dict totals, object good, object before, object after)
     return None
 
 
+cdef inline tuple _fold(object total, object comp, object value):
+    """Шаг суммирования ровно как встроенный ``sum`` в CPython 3.12.
+
+    ``sum`` складывает float компенсированно (Neumaier); наивное ``+=`` дало бы
+    другой последний бит, а он меняет траекторию. Целые складываются обычным
+    ``+``, чтобы тип остался ``int``.
+    """
+    cdef object new_total
+    if type(total) is float and type(value) is float:
+        new_total = total+value
+        if abs(total) >= abs(value):
+            comp = comp+((total-new_total)+value)
+        else:
+            comp = comp+((value-new_total)+total)
+        return new_total, comp
+    return total+value, comp
+
+
+cdef inline object _finish(object total, object comp):
+    """Итог компенсированной суммы: ``total+comp`` только при ненулевой поправке."""
+    if comp != 0.0:
+        return total+comp
+    return total
+
+
+def locked_material(object account_data, object good):
+    """V3 locked_material: проект, публичные стройки, оснащение и поддержка.
+
+    Порядок сложений прежний — сначала проект, затем по каждому проекту
+    материалы, оснащение и поддержка. Арифметика объектная, поэтому int
+    остаётся int, как и в прежнем коде.
+    """
+    cdef object locked = account_data.get('project', {}).get('materials', {}).get(good, 0)
+    cdef object project
+    for project in account_data.get('public_projects', ()):
+        locked = locked+project.get('materials', {}).get(good, 0)
+        locked = locked+project.get('equipment_held', {}).get(good, 0)
+        locked = locked+project.get('support_stock', {}).get(good, 0)
+    return locked
+
+
+def free_stock(object account_data, object good):
+    """V3 free_stock: ``max(0, stock - reserved - locked_material)``.
+
+    Встроенный ``max`` возвращает первый аргумент при равенстве, поэтому при
+    неположительном остатке результат — именно ``0`` (int), как и раньше.
+    """
+    cdef object value = (account_data['stock'].get(good, 0)
+                         -account_data.get('stock_reserved', {}).get(good, 0)
+                         -locked_material(account_data, good))
+    if value > 0:
+        return value
+    return 0
+
+
+def total_stock(object accounts, object goods):
+    """V3 total_stock: компенсированная сумма склада по каждому товару."""
+    cdef dict totals = {}
+    cdef dict comps = {}
+    cdef object good, account, total, comp
+    for good in goods:
+        total = 0
+        comp = 0.0
+        for account in accounts:
+            total, comp = _fold(total, comp, account['stock'].get(good, 0))
+        totals[good] = _finish(total, comp)
+    return totals
+
+
+def gold(object accounts):
+    """V3 gold: компенсированная сумма балансов в прежнем порядке обхода."""
+    cdef object total = 0
+    cdef object comp = 0.0
+    cdef object account
+    for account in accounts:
+        total, comp = _fold(total, comp, account['balance'])
+    return _finish(total, comp)
+
+
 def add_stock(owner, account, good, quantity, value=0):
     """V3 add_stock через единый StockStore."""
     cdef dict account_data = owner.accounts[account]

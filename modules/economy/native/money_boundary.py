@@ -398,6 +398,29 @@ def _settle_python(hooks, accounts, households, rates, eps):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Оброк предприятия и финансирование кандидата
+# ---------------------------------------------------------------------------
+
+def enterprise_overhead_python(capacity, labor, wage, rate):
+    """Эталон V3.enterprise_overhead: буквальный прежний код."""
+    return capacity*labor*wage*rate
+
+
+def project_finances_python(capacity, available, startup, material, delivery,
+                            unit, fixed_unit, equipment_capital, margin,
+                            expansion, eps):
+    """Эталон ``v3.project_finances``: буквальный прежний код."""
+    capacity = min(capacity, max(0, available-startup)
+                   / max(material+delivery+unit+equipment_capital, eps))
+    working = capacity*equipment_capital
+    if not expansion:
+        working += max(startup, capacity*(unit+fixed_unit))
+    investment = capacity*(material+delivery)+working
+    profit = capacity*margin
+    return capacity, working, investment, profit
+
+
 NATIVE_KERNEL = False
 
 _kernel = load_money_kernel()
@@ -407,6 +430,8 @@ if _kernel is not None:
     run_expedited = _kernel.expedited_labor
     run_distribute = _kernel.distribute
     run_settle = _kernel.settle_distributions
+    enterprise_overhead = _kernel.enterprise_overhead
+    project_finances = _kernel.project_finances
     NATIVE_KERNEL = True
 else:
     run_project_reserve = _project_reserve_python
@@ -414,3 +439,5 @@ else:
     run_expedited = _expedited_python
     run_distribute = _distribute_python
     run_settle = _settle_python
+    enterprise_overhead = enterprise_overhead_python
+    project_finances = project_finances_python

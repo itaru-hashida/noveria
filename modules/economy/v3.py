@@ -50,15 +50,15 @@ CONSUMPTION_PURPOSES = ('Базовые нужды', 'Дополнительны
 
 def project_finances(capacity, available, startup, material, delivery,
                      unit, fixed_unit, equipment_capital, margin, expansion):
-    """Чистый расчёт финансирования кандидата после рыночных котировок."""
-    capacity = min(capacity, max(0, available-startup)
-                   / max(material+delivery+unit+equipment_capital, EPS))
-    working = capacity*equipment_capital
-    if not expansion:
-        working += max(startup, capacity*(unit+fixed_unit))
-    investment = capacity*(material+delivery)+working
-    profit = capacity*margin
-    return capacity, working, investment, profit
+    """Чистый расчёт финансирования кандидата после рыночных котировок.
+
+    Числовое тело (мощность по кассе, оборотный капитал, вложения и прибыль)
+    живёт в ``money_boundary``: там же Python-эталон и fallback без собранного
+    .pyd. Имя остаётся публичным: ``shadow.investment_batch`` зовёт его напрямую.
+    """
+    return _money.project_finances(capacity, available, startup, material,
+                                   delivery, unit, fixed_unit, equipment_capital,
+                                   margin, expansion, EPS)
 
 
 # Совместимость: имя остаётся доступным в модуле, но реализация одна — та,
@@ -1103,8 +1103,12 @@ class Economy(EconomyServices):
 
     def enterprise_overhead(self, e):
         """Ежемесячный оброк за площадку и мастерскую при открытом предприятии."""
-        return (e['capacity']*self.goods[e['good']]['labor']*self.cfg['wage']
-                *self.cfg.get('enterprise_overhead_rate', 0))
+        # Произведение capacity*labor*wage*rate считает money_boundary: она же
+        # держит Python-эталон и fallback без собранного .pyd. Порядок
+        # сомножителей прежний, поэтому последний бит не меняется.
+        return _money.enterprise_overhead(
+            e['capacity'], self.goods[e['good']]['labor'], self.cfg['wage'],
+            self.cfg.get('enterprise_overhead_rate', 0))
 
     def update_demography(self):
         """Агрегированная демография после фактического потребления месяца.
@@ -1370,13 +1374,9 @@ class Economy(EconomyServices):
         self.report['flows'].append(dict(sender=sender, recipient=recipient, gold=amount, reason=reason))
 
     def locked_material(self, account, good):
-        a = self.accounts[account]
-        locked = a.get('project', {}).get('materials', {}).get(good, 0)
-        for project in a.get('public_projects', []):
-            locked += project.get('materials', {}).get(good, 0)
-            locked += project.get('equipment_held', {}).get(good, 0)
-            locked += project.get('support_stock', {}).get(good, 0)
-        return locked
+        # Числовой обход проекта, публичных строек, оснащения и поддержки —
+        # в stock_boundary: там же Python-эталон и fallback без собранного .pyd.
+        return _stock.locked_material(self.accounts[account], good)
 
     def start_public_project(self, city_id, kind, mode='normal'):
         """Создать муниципальный проект учреждения по статической смете."""
@@ -1505,8 +1505,9 @@ class Economy(EconomyServices):
             city_id=project['city_id'], asset_value=asset_value)
 
     def free_stock(self, account, good):
-        a = self.accounts[account]
-        return max(0, a['stock'].get(good, 0)-a.get('stock_reserved', {}).get(good, 0)-self.locked_material(account, good))
+        # ``max(0, stock - reserved - locked_material)`` считает stock_boundary:
+        # там же Python-эталон и fallback без собранного .pyd.
+        return _stock.free_stock(self.accounts[account], good)
 
     def use_stock(self, account, good, quantity):
         if quantity > self.free_stock(account, good)+EPS:

@@ -69,6 +69,41 @@ def _update_physical_stock_total(owner, good, before, after):
     row['count'] += int(after > _EPS)-int(before > _EPS)
 
 
+# ---------------------------------------------------------------------------
+# Object-level numeric helpers склада и кассы
+# ---------------------------------------------------------------------------
+#
+# Это чистые чтения: они ничего не мутируют и не заводят второго ledger'а.
+# Арифметика объектная, чтобы int-остаток оставался int, а встроенный sum
+# сохранял компенсацию float (Neumaier) в Python 3.12.
+
+def locked_material_python(account_data, good):
+    """Эталон V3 locked_material: проект, стройки, оснащение и поддержка."""
+    locked = account_data.get('project', {}).get('materials', {}).get(good, 0)
+    for project in account_data.get('public_projects', ()):
+        locked += project.get('materials', {}).get(good, 0)
+        locked += project.get('equipment_held', {}).get(good, 0)
+        locked += project.get('support_stock', {}).get(good, 0)
+    return locked
+
+
+def free_stock_python(account_data, good):
+    """Эталон V3 free_stock: ``max(0, stock - reserved - locked)``."""
+    return max(0, account_data['stock'].get(good, 0)
+               -account_data.get('stock_reserved', {}).get(good, 0)
+               -locked_material_python(account_data, good))
+
+
+def total_stock_python(accounts, goods):
+    """Эталон V3 total_stock: встроенный ``sum`` по каждому товару."""
+    return {good: sum(a['stock'].get(good, 0) for a in accounts) for good in goods}
+
+
+def gold_python(accounts):
+    """Эталон V3 gold: встроенный ``sum`` балансов."""
+    return sum(a['balance'] for a in accounts)
+
+
 def load_stock_kernel():
     """Вернуть native-модуль stock_kernel или None, если он не собран.
 
@@ -88,7 +123,15 @@ _kernel = load_stock_kernel()
 if _kernel is not None:
     add_stock = _kernel.add_stock
     use_stock = _kernel.use_stock
+    locked_material = _kernel.locked_material
+    free_stock = _kernel.free_stock
+    total_stock = _kernel.total_stock
+    gold = _kernel.gold
     NATIVE_KERNEL = True
 else:
     add_stock = add_stock_python
     use_stock = use_stock_python
+    locked_material = locked_material_python
+    free_stock = free_stock_python
+    total_stock = total_stock_python
+    gold = gold_python
