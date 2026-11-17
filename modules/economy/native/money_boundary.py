@@ -399,6 +399,101 @@ def _settle_python(hooks, accounts, households, rates, eps):
 
 
 # ---------------------------------------------------------------------------
+# Инвестиционные потоки
+# ---------------------------------------------------------------------------
+
+def confirmed_output_python(history, capacity, planned):
+    """Эталон ``confirmed_output``: буквальный прежний код."""
+    actual = max((row.get('output', 0) for row in history[-3:]), default=0)
+    return min(capacity, max(0, planned, actual))
+
+
+def flow_balances_python(state_ids, goods, firms, projects):
+    """Эталон ``V3.investment_flow_balances`` на тех же плоских строках.
+
+    Сравнение идёт по уже подготовленным парам, поэтому тест проверяет именно
+    числовое ядро: подготовка строк живёт в ``v3.py`` и общая для обеих веток.
+    """
+    balances = {(state_id, good): dict(
+        state_id=state_id, good=good, supply=0.0, capacity_supply=0.0,
+        operating_demand=0.0, construction_demand=0.0, committed=0.0,
+        free=0.0, shortage=0.0, rampable_free=0.0,
+        suppliers=[], consumers=[], projects=[])
+        for state_id in state_ids for good in goods}
+    for state_id, good, output, capacity, inputs, enterprise_id in firms:
+        if (state_id, good) not in balances:
+            continue
+        own = balances[state_id, good]
+        own['supply'] += output
+        own['capacity_supply'] += capacity
+        own['suppliers'].append(dict(enterprise_id=enterprise_id, output=output,
+            capacity=capacity))
+        for input_good, ratio in inputs:
+            if (state_id, input_good) not in balances:
+                continue
+            demand = output*ratio
+            row = balances[state_id, input_good]
+            row['operating_demand'] += demand
+            row['consumers'].append(dict(enterprise_id=enterprise_id,
+                output=output, ratio=ratio, demand=demand))
+    for state_id, good, capacity, inputs, project_id, investor in projects:
+        for input_good, ratio in inputs:
+            if (state_id, input_good) not in balances:
+                continue
+            demand = capacity*ratio
+            row = balances[state_id, input_good]
+            row['construction_demand'] += demand
+            row['projects'].append(dict(project_id=project_id, investor=investor,
+                good=good, ratio=ratio, demand=demand))
+    for row in balances.values():
+        row['committed'] = row['operating_demand']+row['construction_demand']
+        row['free'] = max(0, row['supply']-row['committed'])
+        row['shortage'] = max(0, row['committed']-row['supply'])
+        row['rampable_free'] = max(0, row['capacity_supply']-row['committed'])
+    return balances
+
+
+def flow_rows(engine, state_ids):
+    """Плоские строки предприятий и проектов для ядра потоков.
+
+    Порядок прежний: предприятия — порядок ``enterprises.values()``, проекты —
+    порядок ``accounts.values()``. Фильтры прежнего кода (закрытые,
+    приостановленные, не входящие в ``state_ids``, без проекта) применяются
+    здесь, чтобы ядру не приходилось знать про политику месяца.
+    """
+    goods = engine.goods
+    month = engine.meta['month']
+    firms = []
+    for firm in engine.enterprises.values():
+        state_id = firm['state_id']
+        if (state_id not in state_ids or firm['status'] == 'closed'
+                or firm.get('suspended') or firm['available_from'] > month):
+            continue
+        output = run_confirmed_output(firm.get('sales_history', []),
+                                      firm['capacity'],
+                                      firm.get('planned_output', 0))
+        firms.append((state_id, firm['good'], output, firm['capacity'],
+                      tuple(goods[firm['good']]['inputs'].items()), firm['id']))
+    projects = []
+    for account in engine.accounts.values():
+        project = account.get('project')
+        state_id = account.get('state_id')
+        if not project or state_id not in state_ids:
+            continue
+        projects.append((state_id, project['good'], project['capacity'],
+                         tuple(goods[project['good']]['inputs'].items()),
+                         project.get('project_id'), account['id']))
+    return firms, projects
+
+
+def flows(engine, state_ids):
+    """Единственный вход из ``V3.investment_flow_balances``."""
+    state_ids = tuple(state_ids)
+    firms, projects = flow_rows(engine, state_ids)
+    return run_flows(state_ids, list(engine.goods), firms, projects)
+
+
+# ---------------------------------------------------------------------------
 # Оброк предприятия и финансирование кандидата
 # ---------------------------------------------------------------------------
 
@@ -432,6 +527,8 @@ if _kernel is not None:
     run_settle = _kernel.settle_distributions
     enterprise_overhead = _kernel.enterprise_overhead
     project_finances = _kernel.project_finances
+    run_flows = _kernel.flow_balances
+    run_confirmed_output = _kernel.confirmed_output
     NATIVE_KERNEL = True
 else:
     run_project_reserve = _project_reserve_python
@@ -441,3 +538,5 @@ else:
     run_settle = _settle_python
     enterprise_overhead = enterprise_overhead_python
     project_finances = project_finances_python
+    run_flows = flow_balances_python
+    run_confirmed_output = confirmed_output_python

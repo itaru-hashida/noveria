@@ -269,6 +269,86 @@ def project_finances(object capacity, object available, object startup,
     return capacity, working, investment, capacity*margin
 
 
+# ---------------------------------------------------------------------------
+# Инвестиционные потоки: устойчивый баланс и резерв цепочки
+# ---------------------------------------------------------------------------
+
+def flow_balances(object state_ids, object goods, object firms, object projects):
+    """Прежний ``V3.investment_flow_balances``: строки потоков state × good.
+
+    ``firms`` — пары ``(state_id, good, output, capacity, inputs)`` в порядке
+    обхода предприятий, ``projects`` — пары ``(state_id, good, capacity, inputs,
+    project_id, investor)`` в порядке обхода счетов. ``inputs`` — пары
+    ``(good, ratio)`` в порядке рецепта. Готовые строки собирает Python, ядро
+    только накапливает числа в прежнем порядке: поставщики и потребители — в
+    порядке предприятий, проекты — в порядке счетов. Своего ledger'а ядро не
+    заводит: оно возвращает те же dict-ы, что и прежний код.
+    """
+    cdef dict balances = {}
+    cdef object state_id, good, row, entry, ratio, demand, input_good
+    for state_id in state_ids:
+        for good in goods:
+            balances[state_id, good] = dict(
+                state_id=state_id, good=good, supply=0.0, capacity_supply=0.0,
+                operating_demand=0.0, construction_demand=0.0, committed=0.0,
+                free=0.0, shortage=0.0, rampable_free=0.0,
+                suppliers=[], consumers=[], projects=[])
+    for entry in firms:
+        state_id = entry[0]
+        good = entry[1]
+        if not (state_id, good) in balances:
+            continue
+        row = balances[state_id, good]
+        row['supply'] = row['supply']+entry[2]
+        row['capacity_supply'] = row['capacity_supply']+entry[3]
+        row['suppliers'].append(dict(enterprise_id=entry[5], output=entry[2],
+            capacity=entry[3]))
+        for input_good, ratio in entry[4]:
+            if not (state_id, input_good) in balances:
+                continue
+            demand = entry[2]*ratio
+            target = balances[state_id, input_good]
+            target['operating_demand'] = target['operating_demand']+demand
+            target['consumers'].append(dict(enterprise_id=entry[5],
+                output=entry[2], ratio=ratio, demand=demand))
+    for entry in projects:
+        state_id = entry[0]
+        for input_good, ratio in entry[3]:
+            if not (state_id, input_good) in balances:
+                continue
+            demand = entry[2]*ratio
+            target = balances[state_id, input_good]
+            target['construction_demand'] = target['construction_demand']+demand
+            target['projects'].append(dict(project_id=entry[4], investor=entry[5],
+                good=entry[1], ratio=ratio, demand=demand))
+    for row in balances.values():
+        row['committed'] = row['operating_demand']+row['construction_demand']
+        row['free'] = _max0(row['supply']-row['committed'])
+        row['shortage'] = _max0(row['committed']-row['supply'])
+        row['rampable_free'] = _max0(row['capacity_supply']-row['committed'])
+    return balances
+
+
+def confirmed_output(object history, object capacity, object planned):
+    """Прежний ``confirmed_output`` из ``investment_flow_balance``.
+
+    ``max`` по последним трём строкам истории, затем ``max(0, planned, actual)``
+    и ``min(capacity, ...)``; при равенстве встроенные ``min``/``max``
+    возвращают первый аргумент, поэтому порядок проверок буквальный.
+    """
+    cdef object actual = 0
+    cdef object candidate
+    for candidate in history[-3:]:
+        if candidate.get('output', 0) > actual:
+            actual = candidate.get('output', 0)
+    candidate = _max0(planned)
+    if actual > candidate:
+        candidate = actual
+    if capacity < candidate:
+        return capacity
+    return candidate
+
+
 def distribute(object hooks, object sender, object recipients, object amount,
                object reason):
     """Прежний ``EconomyServices.distribute``: доли по населению.

@@ -592,51 +592,13 @@ class Economy(EconomyServices):
         одному разу.
         """
         state_ids = tuple(state_ids)
-        balances = {(state_id, good): dict(
-            state_id=state_id, good=good, supply=0.0, capacity_supply=0.0,
-            operating_demand=0.0, construction_demand=0.0, committed=0.0,
-            free=0.0, shortage=0.0, rampable_free=0.0,
-            suppliers=[], consumers=[], projects=[])
-            for state_id in state_ids for good in self.goods}
-
-        for firm in self.enterprises.values():
-            state_id = firm['state_id']
-            if state_id not in state_ids or firm['status'] == 'closed' or firm.get('suspended') \
-                    or firm['available_from'] > self.meta['month']:
-                continue
-            history = firm.get('sales_history', [])[-3:]
-            actual = max((row.get('output', 0) for row in history), default=0)
-            output = min(firm['capacity'], max(0, firm.get('planned_output', 0), actual))
-            own = balances[state_id, firm['good']]
-            own['supply'] += output
-            own['capacity_supply'] += firm['capacity']
-            own['suppliers'].append(dict(enterprise_id=firm['id'], output=output,
-                capacity=firm['capacity']))
-            for input_good, ratio in self.goods[firm['good']]['inputs'].items():
-                demand = output*ratio
-                row = balances[state_id, input_good]
-                row['operating_demand'] += demand
-                row['consumers'].append(dict(enterprise_id=firm['id'], output=output,
-                    ratio=ratio, demand=demand))
-
-        for account in self.accounts.values():
-            project = account.get('project')
-            state_id = account.get('state_id')
-            if not project or state_id not in state_ids:
-                continue
-            for input_good, ratio in self.goods[project['good']]['inputs'].items():
-                demand = project['capacity']*ratio
-                row = balances[state_id, input_good]
-                row['construction_demand'] += demand
-                row['projects'].append(dict(project_id=project.get('project_id'),
-                    investor=account['id'], good=project['good'], ratio=ratio,
-                    demand=demand))
-
-        for row in balances.values():
-            row['committed'] = row['operating_demand']+row['construction_demand']
-            row['free'] = max(0, row['supply']-row['committed'])
-            row['shortage'] = max(0, row['committed']-row['supply'])
-            row['rampable_free'] = max(0, row['capacity_supply']-row['committed'])
+        # Числовые накопления строк (supply, capacity_supply, operating_demand,
+        # construction_demand, committed, free, shortage, rampable_free) и
+        # диагностические списки считает money_boundary: там же Python-эталон и
+        # fallback без собранного .pyd. Плоские строки предприятий и проектов
+        # готовит граница в прежнем порядке обхода, поэтому состав и порядок
+        # записей не меняются, а второго ledger'а нет.
+        balances = _money.flows(self, state_ids)
         state = getattr(self, '_investment_state', None)
         if state is not None:
             state['flow_balances'].update(balances)
