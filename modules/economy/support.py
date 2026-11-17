@@ -12,6 +12,7 @@ import networkx as nx
 from modules.geography import topology
 from modules.economy.native import money_boundary as _money
 from modules.economy.native import route_boundary as _route
+from modules.economy.native import route_hierarchy_boundary as _route_hierarchy
 from modules.economy.native import stock_boundary as _stock
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / 'content/economy.json'
@@ -48,6 +49,12 @@ class EconomyServices:
         self._route_shape_checked_month = None
         self._route_components = None
         self._route_component_count = None
+        # Иерархия HPA* строится лениво по живому графу и живёт до ближайшей
+        # инвалидации. Размер региона и порог включения — параметры карты:
+        # маленькие карты остаются на прежнем Dijkstra, где дерево дешевле.
+        self._route_chunk = 32
+        self._route_min_nodes = 4096
+        self._route_hierarchy = None
         # Загрузка из БД получает свежие объекты (json.loads на каждую запись) и
         # забирает их во владение: повторное deepcopy только удваивало время.
         # Тесты и внешние вызовы, передающие собственные структуры, копируют.
@@ -240,6 +247,15 @@ class EconomyServices:
             if (self.graph.number_of_nodes(), self.graph.number_of_edges()) != self._route_graph_shape:
                 self.invalidate_routes()
             self._route_shape_checked_month = self.meta.get('month')
+        # Точечный запрос на большой карте обслуживает иерархия HPA*: она
+        # читает регионы, а не всю карту, и не строит дерево на весь мир.
+        # На малых графах, multigraph, нестандартном весе и при неоднозначном
+        # кратчайшем пути она уступает прежнему Dijkstra — тогда ниже работает
+        # ровно прежний путь: тот же ключ кэша, то же дерево в ``self.paths``.
+        if start != end and _route_hierarchy.NATIVE_HIERARCHY:
+            direct = _route_hierarchy.route(self, start, end)
+            if direct is not None:
+                return direct
         if start not in self.paths:
             trees = ROUTE_TREE_CACHE.setdefault(self._route_cache_key, {})
             tree = trees.get(start)
@@ -275,6 +291,9 @@ class EconomyServices:
     def invalidate_routes(self):
         """Сбросить маршруты после изменения дороги или ручной правки графа."""
         self.paths = {}
+        # Иерархия держит собственные таблицы регионов: после правки карты
+        # они недействительны. Кэш маршрутов остаётся прежним, второго нет.
+        _route_hierarchy.invalidate(self)
         self._route_components = None
         self._route_component_count = None
         self.__dict__.pop('_route_order_components', None)
