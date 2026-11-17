@@ -12,6 +12,8 @@ from .native import demand_boundary as _demand
 from .native import construction_buy_boundary as _construction_buy
 from .native import delivery_boundary as _delivery
 from .native import diagnostics_boundary as _diagnostics
+from .native import event_buffer_boundary as _event_buffer
+from .native import event_writer as _event_writer
 from .native import enterprise_settlement_boundary as _enterprise_settlement
 from .native import enterprise_state_boundary as _enterprise_state
 from .native import dividend_boundary as _dividend
@@ -80,6 +82,37 @@ class Economy(EconomyServices):
     ENTERPRISE_OVERHEAD_REVISION = 1
     QUOTE_CACHE = True
 
+    @property
+    def event_recorder(self):
+        """Синхронный буфер событий месяца: записи, фильтры, батчи.
+
+        Живёт на движке, а не в отчёте: это поток вывода, а не состояние.
+        Хранит лишь числа и ссылки на уже созданные строки ``report['events']``,
+        поэтому второго ledger'а не появляется. Фоновая часть — отдельный
+        ``event_writer``; игровой цикл его не ждёт.
+        """
+        recorder = self.__dict__.get('_event_recorder')
+        if recorder is None:
+            recorder = self.__dict__['_event_recorder'] = \
+                _event_buffer.EventRecorder(self.report_detail(),
+                                            batch_size=256, capacity=4096,
+                                            drop_diagnostic=False)
+        return recorder
+
+    @property
+    def event_writer(self):
+        """Фоновый writer вывода или None, если приложение его не подключило.
+
+        Подключается снаружи (``engine.event_writer = writer``) и только он
+        касается диска. Без writer'а буфер всё равно ведёт учёт: события
+        отчёта не теряются, потому что канонический источник — сам отчёт.
+        """
+        return self.__dict__.get('_event_writer')
+
+    @event_writer.setter
+    def event_writer(self, writer):
+        self.__dict__['_event_writer'] = writer
+
     def report_detail(self):
         # Игра работает в none: deep добавляет снимок каждой книги и причинный
         # слой, которые нужны только аудиту и лаборатории. Диагностика не должна
@@ -138,6 +171,13 @@ class Economy(EconomyServices):
                    decision_id=decision_id, project_id=project_id).items() if v is not None})
         row.update({k: v for k, v in values.items() if v is not None})
         self.report['events'].append(row)
+        # Синхронная часть пайплайна: буфер получает ту же строку отчёта и
+        # ставит её в порядок вывода. Ядро Cython (event_buffer_kernel) лишь
+        # считает, фильтрует и батчит — строки, JSON и диск остаются фону
+        # (event_writer). Поэтому порядок, количество и содержимое
+        # report['events'] не меняются, а replay-событие нельзя потерять.
+        self.event_recorder.record(row, kind=_event_buffer.REPLAY,
+                                   channel=_event_buffer.EVENTS)
         return event_id
 
     def build_causal_events(self):
@@ -2748,8 +2788,19 @@ class Economy(EconomyServices):
         # вызвать monthly_step и вернуть живой отчёт. Всё, что делает
         # monthly_step, — прежний порядок фаз с прежним RNG и хуками.
         from .native import monthly_boundary
-        return monthly_boundary.monthly_step(self, EPS, planning_mode,
+        # Буфер событий месяца настраивается до фазы: детализация решает, какие
+        # каналы открыты (events — только deep), батч и предел очереди заданы
+        # здесь же. Это только числа и фильтры — ни строк, ни диска.
+        recorder = self.event_recorder
+        recorder.configure(self.report_detail(), batch_size=256,
+                           capacity=4096, drop_diagnostic=False)
+        report = monthly_boundary.monthly_step(self, EPS, planning_mode,
             investment_mode, investment_workers, native_mode, enterprise_planner)
+        # Готовые батчи уходят в фон без ожидания диска. Если writer не
+        # подключён, батчи отпускаются, но счётчики буфера остаются: replay
+        # по-прежнему живёт в report['events'] и ничего не теряется.
+        _event_writer.drain_recorder(recorder, self.event_writer)
+        return report
 
     def validate(self, before=None):
         super().validate(before)
