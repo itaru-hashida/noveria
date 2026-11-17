@@ -1007,6 +1007,20 @@ def apply_owners(engine, data, meta, sells):
     return journal
 
 
+RECOVERY_TRANSFER_REASON = 'Восстановление оборотного капитала'
+
+
+def _recovery_transfer(engine, sender, recipient, amount):
+    """Перевод восстановления через владельца кассы: guard и один flow.
+
+    Ядро уже посчитало сумму, но менять ``balance`` напрямую нельзя: тогда
+    обходились бы проверки ``Economy.transfer`` и запись ``report['flows']``
+    шла бы руками. Здесь вызывается та же точка владельца, поэтому проверки,
+    порядок арифметики и единственная запись в ledger — прежние.
+    """
+    engine.transfer(sender, recipient, amount, RECOVERY_TRANSFER_REASON)
+
+
 def apply_recovery(engine, data, meta, sells):
     """Применить готовые переводы, reopen, отмены и операционные резервы."""
     accounts = list(engine.accounts.values())
@@ -1069,9 +1083,11 @@ def apply_recovery(engine, data, meta, sells):
         owner = accounts[int(data['enterprise_owner'][index])]
         amount = float(data['recovery_transfer'][i])
         if amount > 0:
-            engine.cash_store.move_balance(owner['id'], firm['id'], amount)
-            engine.report['flows'].append(dict(sender=owner['id'], recipient=firm['id'],
-                gold=amount, reason='Восстановление оборотного капитала'))
+            # Перевод идёт через ту же точку владельца, что и ``Economy.transfer``:
+            # guard (свободная касса, конечность, знак, отсечение по балансу) и
+            # ровно одна запись в ``report['flows']``. Прямой ``move_balance``
+            # обходил guard и писал flow руками — это был второй writer.
+            _recovery_transfer(engine, owner['id'], firm['id'], amount)
             journal.append(('recovery_transfer', i, owner['id'], firm['id'], amount))
         if data['recovery_reopened'][i]:
             e.update(status='idle', closed=None, unviable_months=0)
@@ -1091,7 +1107,9 @@ def apply_recovery(engine, data, meta, sells):
         hold = float(data['recovery_hold'][i])
         if e['status'] != 'closed':
             firm['operating_protected'] = hold
-            firm['protected'] += hold
+            # Защита кассы — денежная колонка CashStore: писать её в dict мимо
+            # владельца нельзя, иначе у поля снова два owner'а.
+            engine.cash_store.add_protected_cash(firm['id'], hold)
             journal.append(('recovery_hold', i, e['id'], hold))
     return journal
 
@@ -2043,14 +2061,15 @@ class _CandidateContext:
         return needed
 
     def cash_after_commitments(self, account_id, project_reserve):
-        account = self.engine.accounts[account_id]
-        hold = max(account.get('protected', 0), project_reserve)
-        return max(0, account['balance']-account.get('reserved', 0)-hold)
+        # Чтение денежных полей идёт через владельца: колонки остаются истиной,
+        # а формула ``max(0, balance-reserved-hold)`` здесь прежняя.
+        cash = self.engine.cash_store
+        hold = max(cash.get_protected_cash(account_id), project_reserve)
+        return max(0, cash.get_balance(account_id)-cash.get_reserved_cash(account_id)-hold)
 
     def free_cash(self, account_id):
-        account = self.engine.accounts[account_id]
-        return max(0.0, account['balance']-account.get('reserved', 0)
-                   -account.get('protected', 0))
+        """Свободная касса — через владельца полей, без второй формулы."""
+        return self.engine.cash_store.free_cash(account_id)
 
     def labor_available(self, state_id, province_id):
         return sum(self.engine.population(a)*self.labor_share

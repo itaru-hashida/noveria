@@ -3,7 +3,9 @@
 Модуль не хранит состояние движка и не создаёт второго склада: ``account`` и
 ``project`` — живые словари движка, поэтому ``project['delivery']`` и
 ``account['protected']``, которые меняет ядро, — те же поля, что читает
-остальной движок. Материалы в проект, склад и резерв применяет существующая
+остальной движок. ``protected`` при этом остаётся денежной колонкой
+``CashStore``: политика считается здесь, а пишет значение владелец полей.
+Материалы в проект, склад и резерв применяет существующая
 граница резерва (``material_boundary``), а не вторая копия её логики.
 
 Что перенесено в ядро (``delivery_kernel``): объём перевозки
@@ -20,7 +22,7 @@
     до этого вызова;
   * ``protected cash`` — хук ``set_project_protection``: денежная политика
     (слагаемые, урезание по ``balance-reserved``) остаётся у движка, ядро
-    задаёт только момент вызова и аргументы;
+    задаёт только момент вызова и аргументы; значение пишет ``CashStore``;
   * материалы, склад, резерв, ``stock_reserved``, строительные закупки,
     ``cancel_order`` и ``mark_market_quotes_dirty`` — существующая граница
     ``material_boundary``: доставка лишь считает числа и защищает деньги
@@ -40,6 +42,7 @@ focused-теста на побитовое совпадение и как fallba
 import builtins
 import importlib
 
+from . import cash_boundary
 from . import material_boundary
 
 # Встроенный max сохраняет тип аргумента: ``max(0, x)`` оставляет целый 0
@@ -65,14 +68,21 @@ def set_project_protection(owner, account, project, delivery, eps):
     """Хук защиты денег: те же слагаемые и то же урезание, что и прежде.
 
     Сначала склад инвестора, затем площадка: обе перевозки реальны и входят в
-    оценку. Тело остаётся у движка, поэтому денежная политика не переезжает в
-    расширение.
+    оценку. Денежная политика (слагаемые и урезание по ``balance-reserved``)
+    остаётся здесь, а сами значения полей пишет ``CashStore``: ``protected`` и
+    ``reserved`` — его колонки, и второй писатель завёл бы второе состояние.
     """
-    account['protected'] = (account.get('operating_protected', 0)
-                            +account.get('payroll_protected', 0)
-                            +project['working_cash']+delivery)
-    if account['protected']+account.get('reserved', 0) > account['balance']+eps:
-        account['protected'] = _PY_MAX(0, account['balance']-account.get('reserved', 0))
+    cash = cash_boundary.store_for(owner, account)
+    hold = (account.get('operating_protected', 0)
+            +account.get('payroll_protected', 0)
+            +project['working_cash']+delivery)
+    cash.set_protected_cash(account['id'], hold)
+    if (cash.get_protected_cash(account['id'])
+            +cash.get_reserved_cash(account['id'])
+            > cash.get_balance(account['id'])+eps):
+        cash.set_protected_cash(account['id'],
+            _PY_MAX(0, cash.get_balance(account['id'])
+                    -cash.get_reserved_cash(account['id'])))
 
 
 def plan_delivery_python(owner, account, project, bill, distance, eps,

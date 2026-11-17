@@ -35,11 +35,11 @@ pytestmark = pytest.mark.skipif(KERNEL is None,
                                 reason='Cython-расширение cash_store не собрано')
 
 
-def account(identity='h', balance=100.0, reserved=0.0):
+def account(identity='h', balance=100.0, reserved=0.0, protected=0.0):
     """Живой счёт: обычный словарь, как у настоящего движка."""
     return dict(id=identity, kind='household', balance=balance, reserved=reserved,
-                stock={}, values={}, state_id='s', province_id='p', city_id=None,
-                tile_id='t')
+                protected=protected, stock={}, values={}, state_id='s',
+                province_id='p', city_id=None, tile_id='t')
 
 
 def make_store(*accounts):
@@ -109,6 +109,168 @@ def test_release_reserved_never_goes_negative():
     assert store.get_reserved_cash('a') == 0
     store.set_reserved_cash('a', 3.0)
     assert store.release_reserved_cash('a', 1.25) == 1.75
+
+
+# --- 3b. protected cash --------------------------------------------------
+def test_protected_cash_operations():
+    """``protected`` — отдельная колонка со своим set/read/reset."""
+    live = account('a', balance=10.0, protected=4.0)
+    store = make_store(live)
+    assert store.get_protected_cash('a') == 4.0
+    assert store.set_protected_cash('a', 2.5) == 2.5
+    assert store.get_protected_cash('a') == 2.5
+    assert live['protected'] == 2.5
+    assert store.add_protected_cash('a', 1.5) == 4.0
+    assert live['protected'] == 4.0
+    # Сброс: ``set_protected_cash(0)`` — прежняя запись ``protected = 0``.
+    assert store.set_protected_cash('a', 0) == 0
+    assert store.get_protected_cash('a') == 0
+    assert type(store.get_protected_cash('a')) is int
+
+
+def test_release_protected_never_goes_negative():
+    """Семантика ``max(0, protected-value)``: отсечение нулём, а не минус."""
+    live = account('a', balance=10.0, protected=3.0)
+    store = make_store(live)
+    assert store.release_protected_cash('a', 5.0) == 0
+    assert type(store.release_protected_cash('a', 1.0)) is int
+    store.set_protected_cash('a', 3.0)
+    assert store.release_protected_cash('a', 1.25) == 1.75
+
+
+def test_protected_and_reserved_are_independent():
+    """Два разных понятия: запись одного не трогает второе."""
+    live = account('a', balance=100.0, reserved=7.0, protected=11.0)
+    store = make_store(live)
+    store.set_protected_cash('a', 21.0)
+    assert store.get_reserved_cash('a') == 7.0
+    store.set_reserved_cash('a', 3.0)
+    assert store.get_protected_cash('a') == 21.0
+    assert (live['reserved'], live['protected']) == (3.0, 21.0)
+
+
+def test_missing_protected_gets_default_zero():
+    live = dict(id='a', kind='household', balance=5.0, stock={}, values={})
+    store = cash_boundary.CashStore({'a': live})
+    assert store.get_protected_cash('a') == 0
+
+
+def test_protected_type_preserved_across_operations():
+    """int остаётся int, float — float: приведение сломало бы точность."""
+    live = account('a', balance=100.0, protected=3)
+    store = make_store(live)
+    assert type(store.get_protected_cash('a')) is int
+    store.add_protected_cash('a', 0.1+0.2)
+    assert type(store.get_protected_cash('a')) is float
+    assert store.get_protected_cash('a') == 3+(0.1+0.2)
+
+
+# --- 3c. единая формула свободной кассы ----------------------------------
+def test_free_cash_normal_case():
+    live = account('a', balance=100.0, reserved=0.0, protected=0.0)
+    store = make_store(live)
+    assert store.free_cash('a') == 100.0
+
+
+def test_free_cash_subtracts_reserved():
+    store = make_store(account('a', balance=100.0, reserved=30.0, protected=0.0))
+    assert store.free_cash('a') == 70.0
+
+
+def test_free_cash_subtracts_protected():
+    store = make_store(account('a', balance=100.0, reserved=0.0, protected=25.0))
+    assert store.free_cash('a') == 75.0
+
+
+def test_free_cash_subtracts_reserved_and_protected_in_order():
+    """Порядок тот же, что в прежней формуле: сначала reserved, затем protected."""
+    live = account('a', balance=100.0, reserved=30.0, protected=25.0)
+    store = make_store(live)
+    assert store.free_cash('a') == (100.0-30.0)-25.0
+
+
+def test_free_cash_clamps_to_zero_float():
+    """Отсечение нулём возвращает именно ``0.0``, как прежний ``max(0.0, ...)``."""
+    store = make_store(account('a', balance=10.0, reserved=30.0, protected=0.0))
+    assert store.free_cash('a') == 0.0
+    assert type(store.free_cash('a')) is float
+
+
+def test_free_cash_matches_python_owner_exactly():
+    """Python-эталон и native-владелец дают побитово одно значение."""
+    cases = [
+        dict(balance=100.0, reserved=0.0, protected=0.0),
+        dict(balance=0.1+0.2, reserved=0.1, protected=0.0),
+        dict(balance=1e-9, reserved=0.0, protected=0.0),
+        dict(balance=7, reserved=2, protected=1),
+        dict(balance=100.0, reserved=30.0, protected=95.0),
+    ]
+    for values in cases:
+        live = account('a', **values)
+        native = cash_boundary.CashStore({'a': live})
+        reference_live = account('a', **values)
+        reference = cash_boundary.CashStorePython({'a': reference_live})
+        assert native.free_cash('a') == reference.free_cash('a'), values
+        assert type(native.free_cash('a')) is type(reference.free_cash('a')), values
+
+
+def test_free_cash_module_helper_uses_owner():
+    """``cash_boundary.free_cash`` — адаптер, а не вторая копия формулы."""
+    store = make_store(account('a', balance=100.0, reserved=30.0, protected=25.0))
+    assert cash_boundary.free_cash(store, 'a') == store.free_cash('a')
+
+
+# --- 3d. явная политика adoption -----------------------------------------
+def test_normal_mutation_does_not_adopt_foreign_dict_value():
+    """Обычная запись пишет и колонку, и dict: расхождений не появляется."""
+    live = account('a', balance=10.0, protected=1.0)
+    store = make_store(live)
+    store.add_protected_cash('a', 2.0)
+    assert store.diagnostics()['adopt_mismatch'] == 0
+    assert store.get_protected_cash('a') == 3.0
+
+
+def test_direct_dict_mismatch_is_counted_in_diagnostics():
+    """Обход границы подхватывается, но это видно в диагностике."""
+    live = account('a', balance=10.0, protected=1.0)
+    store = make_store(live)
+    assert store.diagnostics()['adopt_mismatch'] == 0
+    live['protected'] = 9.0
+    assert store.get_protected_cash('a') == 9.0
+    assert store.diagnostics()['adopt_mismatch'] == 1
+    assert store.diagnostics()['strict'] is False
+
+
+def test_strict_mode_rejects_unexpected_dict_write():
+    """В strict обычный путь не принимает произвольную правку dict."""
+    live = account('a', balance=10.0, protected=1.0)
+    store = cash_boundary.CashStore({'a': live}, True)
+    assert store.diagnostics()['strict'] is True
+    live['protected'] = 9.0
+    with pytest.raises(ValueError, match='в обход'):
+        store.get_protected_cash('a')
+
+
+def test_explicit_adopt_imports_dict_values():
+    """Явный импорт (load/new-account) принимает значения dict в колонки."""
+    live = account('a', balance=10.0, reserved=1.0, protected=2.0)
+    store = make_store(live)
+    live.update(balance=50.0, reserved=5.0, protected=6.0)
+    store.adopt()
+    assert store.columns()['balance'] == [50.0]
+    assert store.columns()['reserved'] == [5.0]
+    assert store.columns()['protected'] == [6.0]
+
+
+def test_python_owner_exposes_the_same_adoption_surface():
+    """Эталон повторяет владельца: те же методы, тот же strict и счётчик."""
+    live = account('a', balance=10.0, protected=1.0)
+    reference = cash_boundary.CashStorePython({'a': live})
+    assert reference.diagnostics() == dict(version=reference.version, accounts=1,
+                                           adopt_mismatch=0, strict=False)
+    live['protected'] = 4.0
+    assert reference.get_protected_cash('a') == 4.0
+    assert reference.diagnostics()['adopt_mismatch'] == 1
 
 
 # --- 4. Python compatibility view ---------------------------------------

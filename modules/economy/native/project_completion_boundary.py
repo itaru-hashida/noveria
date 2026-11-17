@@ -14,8 +14,8 @@
   * список счетов, порядок обхода и выбор проектов — в ``v3``: ядро получает
     готовый список;
   * снятие проекта со счёта, защита денег и перевод доставки — хуки: деньги
-    двигает прежний ``Economy.transfer`` через ``cash_store``, второго
-    cash ledger нет;
+    двигает прежний ``Economy.transfer`` через ``cash_store``, а ``protected``
+    пишет сам ``CashStore``; второго cash ledger нет;
   * склад уменьшает прежний ``use_stock`` (через существующую stock
     boundary) — хук, второй склад не заводится;
   * создание предприятия, квитанции, отчёты, события и lifecycle — хуки:
@@ -35,6 +35,8 @@
 """
 
 import importlib
+
+from . import cash_boundary
 
 # EPS проекта. Импорт из support безопасен: support не импортирует эту
 # границу, поэтому цикла support -> boundary -> support не возникает.
@@ -80,7 +82,7 @@ class ProjectCompletionHooks(object):
     def detach_project(self, a):
         """Снятие проекта со счёта и сброс защиты денег."""
         a.pop('project')
-        a['protected'] = 0
+        cash_boundary.store_for(self.engine, a).set_protected_cash(a['id'], 0)
 
     def pay_delivery(self, a, p):
         self.engine.transfer(a['id'], 'carrier:'+a['state_id'],

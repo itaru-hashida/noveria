@@ -1,18 +1,24 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
 """Cython-owned денежные поля счетов: колонки — истина, dict — compatibility view.
 
-Хранилище импортирует живой словарь ``engine.accounts`` и держит ``balance`` и
-``reserved`` в параллельных колонках. Дальше истина живёт в колонках: каждая
-операция пишет колонку, а затем повторяет значение в Python-dict, чтобы весь
-остальной код продолжал читать счёт как обычный словарь. Второго независимо
-изменяемого состояния нет: dict — это отражение колонок.
+Хранилище импортирует живой словарь ``engine.accounts`` и держит ``balance``,
+``reserved`` и ``protected`` в параллельных колонках. Дальше истина живёт в
+колонках: каждая операция пишет колонку, а затем повторяет значение в
+Python-dict, чтобы весь остальной код продолжал читать счёт как обычный
+словарь. Второго независимо изменяемого состояния нет: dict — это отражение
+колонок.
 
 Колонки — списки Python-объектов, а не типизированные массивы. Это требование
-точности: ``balance``/``reserved`` бывают и ``int``, и ``float``, а приведение к
-``double`` поменяло бы тип и последний разряд, от которого зависят порядок
-сделок и RNG. Значение кладётся в колонку как есть, арифметика выполняется
-обычным Python-сложением над ``object``, поэтому порядок операций тот же, что
-и в прежнем коде: ``balance - amount``, ``reserved + extra``.
+точности: ``balance``/``reserved``/``protected`` бывают и ``int``, и ``float``,
+а приведение к ``double`` поменяло бы тип и последний разряд, от которого
+зависят порядок сделок и RNG. Значение кладётся в колонку как есть, арифметика
+выполняется обычным Python-сложением над ``object``, поэтому порядок операций
+тот же, что и в прежнем коде: ``balance - amount``, ``reserved + extra``.
+
+``protected`` — отдельное понятие, а не второй ``reserved``: резерв под заявки
+и защита кассы под обязательства (проект, зарплаты, доставка) считаются
+независимо и не сводятся друг к другу. Складываются они только в проверках
+инварианта и в единой формуле свободной кассы, где вычитаются по очереди.
 
 Словарь счетов может вырасти в обход границы: ``open_enterprise`` и
 ``sync_locations`` создают счета прямо в ``engine.accounts``. Поэтому любая
@@ -20,11 +26,16 @@
 импортируется из своего словаря. Это проверка длин, а не скан.
 
 Обратная ситуация — прямая запись в dict в обход границы. Так делают
-native-ветки восстановления предприятий (``update_prices_boundary``, файл вне
-разрешённого участка правки): они меняют ``balance`` напрямую. Чтобы не
-завести второе независимое состояние, каждая мутация и чтение сверяют колонку
-с dict и, если dict новее, принимают его значение. В обычном пути значения
-равны, поэтому сверка стоит одного чтения и не меняет арифметику.
+native-ветки восстановления предприятий: они меняют ``balance``/``protected``
+напрямую. Чтобы не завести второе независимое состояние, каждая мутация и
+чтение сверяют колонку с dict и, если dict новее, принимают его значение.
+
+Приём значения из dict — это compatibility-режим, и он явный: ``adopt_mismatch``
+хранит, сколько раз колонка догнала разошедшийся dict, а ``strict`` запрещает
+такое принятие ошибкой. Обычный путь мутации (``set_*``/``add_*``/
+``move_balance``) никогда не импортирует произвольное значение: он пишет и
+колонку, и dict. Импорт из dict — только у ``_append`` (новый счёт или
+пересборка раскладки), ``adopt`` (явный импорт) и сверки чтения.
 """
 
 import copy
@@ -44,14 +55,24 @@ cdef class CashStore:
     cdef public list keys
     cdef public list balances
     cdef public list reserved
+    cdef public list protected
     cdef public dict index
     cdef public unsigned long version
+    # Compatibility-режим: сколько раз колонка принимала разошедшийся dict.
+    # Ноль означает, что обычный путь ни разу не импортировал чужое значение.
+    cdef public unsigned long adopt_mismatch
+    cdef public bint strict
 
-    def __cinit__(self, object accounts):
+    def __cinit__(self, object accounts, bint strict=False):
         self.accounts = accounts
         # Номер раскладки. Меняется при пересборке колонок; нужен диагностике и
         # тестам, чтобы отличить импорт от продолжения работы.
         self.version = 0
+        self.adopt_mismatch = 0
+        # Strict запрещает принимать значение dict в обход границы: обычный
+        # путь обязан идти через ``set_*``/``add_*``. Импорт при новой
+        # раскладке разрешён и в strict: без него счёт не завести.
+        self.strict = strict
         self._load()
 
     # --- импорт текущих значений ------------------------------------------
@@ -61,6 +82,7 @@ cdef class CashStore:
         self.keys = []
         self.balances = []
         self.reserved = []
+        self.protected = []
         self.index = {}
         for account_id in self.accounts:
             self._append(account_id)
@@ -74,6 +96,7 @@ cdef class CashStore:
         self.keys.append(account_id)
         self.balances.append(account['balance'])
         self.reserved.append(account.get('reserved', 0))
+        self.protected.append(account.get('protected', 0))
         return 0
 
     cdef int _sync(self) except -1:
@@ -144,23 +167,43 @@ cdef class CashStore:
         return slot
 
     # --- сверка с dict -----------------------------------------------------
+    cdef object _adopt(self, list column, Py_ssize_t slot, object account_id,
+                       object field, object default):
+        """Принять значение dict, если оно изменилось в обход границы.
+
+        Это compatibility-путь: он видит прямой writer в dict и подтягивает
+        колонку. В strict такое расхождение — ошибка, а не молчаливое
+        принятие: иначе два владельца снова стали бы неотличимы. Импорт при
+        пересборке раскладки сюда не идёт — его делает ``_append``.
+        """
+        cdef object account = self.accounts[account_id]
+        cdef object value
+        if default is None:
+            value = account[field]
+        else:
+            value = account.get(field, default)
+        if <object>column[slot] is not value:
+            if (<object>column[slot] != value
+                    or type(<object>column[slot]) is not type(value)):
+                if self.strict:
+                    raise ValueError(
+                        f'CashStore: {field} счёта {account_id!r} изменён в обход '
+                        f'владельца (колонка {<object>column[slot]!r}, dict {value!r})')
+                column[slot] = value
+                self.adopt_mismatch += 1
+        return column[slot]
+
     cdef object _reconcile_balance(self, Py_ssize_t slot, object account_id):
         """Принять значение dict, если оно изменилось в обход границы."""
-        cdef object value = (<object>self.accounts[account_id])['balance']
-        if <object>self.balances[slot] is not value:
-            if (<object>self.balances[slot] != value
-                    or type(<object>self.balances[slot]) is not type(value)):
-                self.balances[slot] = value
-        return self.balances[slot]
+        return self._adopt(self.balances, slot, account_id, 'balance', None)
 
     cdef object _reconcile_reserved(self, Py_ssize_t slot, object account_id):
         """Принять reserved из dict, если он изменился в обход границы."""
-        cdef object value = (<object>self.accounts[account_id]).get('reserved', 0)
-        if <object>self.reserved[slot] is not value:
-            if (<object>self.reserved[slot] != value
-                    or type(<object>self.reserved[slot]) is not type(value)):
-                self.reserved[slot] = value
-        return self.reserved[slot]
+        return self._adopt(self.reserved, slot, account_id, 'reserved', 0)
+
+    cdef object _reconcile_protected(self, Py_ssize_t slot, object account_id):
+        """Принять protected из dict, если он изменился в обход границы."""
+        return self._adopt(self.protected, slot, account_id, 'protected', 0)
 
     # --- balance -----------------------------------------------------------
     def get_balance(self, account_id):
@@ -248,18 +291,107 @@ cdef class CashStore:
         (<object>self.accounts[account_id])['reserved'] = left
         return left
 
+    # --- protected cash ----------------------------------------------------
+    def get_protected_cash(self, account_id):
+        """Защита кассы счёта из колонки.
+
+        ``protected`` — не второй ``reserved``: он держит обязательства счёта
+        (проект, зарплаты, доставку), а ``reserved`` — заявки. Понятия разные,
+        поэтому у них отдельные колонки и отдельные методы.
+        """
+        cdef Py_ssize_t slot = self._known(account_id)
+        return self._reconcile_protected(slot, account_id)
+
+    def set_protected_cash(self, account_id, value):
+        """Записать защиту кассы: колонка, затем зеркало в dict."""
+        cdef Py_ssize_t slot = self._known(account_id)
+        self.protected[slot] = value
+        (<object>self.accounts[account_id])['protected'] = value
+        return value
+
+    def add_protected_cash(self, account_id, value):
+        """Прибавить к защите: ``protected + value`` без смены типа.
+
+        Порядок прежний: ``account['protected'] += hold``. Тип результата
+        складывается из типов слагаемых, поэтому колонка хранит его как есть.
+        """
+        cdef Py_ssize_t slot = self._known(account_id)
+        cdef object total = self._reconcile_protected(slot, account_id)+value
+        self.protected[slot] = total
+        (<object>self.accounts[account_id])['protected'] = total
+        return total
+
+    def release_protected_cash(self, account_id, value):
+        """Снять часть защиты: ``max(0, protected - value)``.
+
+        Порядок тот же, что в прежнем коде: сначала вычитание, затем отсечение
+        нулём. Возвращается целый ``0`` при неположительном остатке — ровно
+        семантика встроенного ``max(0, ...)``, тип сохраняется.
+        """
+        cdef Py_ssize_t slot = self._known(account_id)
+        cdef object left = self._reconcile_protected(slot, account_id)-value
+        if not left > 0:
+            left = 0
+        self.protected[slot] = left
+        (<object>self.accounts[account_id])['protected'] = left
+        return left
+
+    # --- свободная касса ---------------------------------------------------
+    def free_cash(self, account_id):
+        """Единственная формула свободной кассы: ``max(0.0, balance-reserved-protected)``.
+
+        Порядок вычитаний прежний и обязательный: сначала ``reserved``, затем
+        ``protected``; ``max`` возвращает ``0.0``, а не целый ``0``. Тот же
+        метод отдаёт и читаемая функция модуля ``free_cash``, и Python-адаптер
+        ``Economy.free_cash``, поэтому второй реализации формулы нет.
+        """
+        cdef Py_ssize_t slot = self._known(account_id)
+        cdef object balance = self._reconcile_balance(slot, account_id)
+        cdef object reserved = self._reconcile_reserved(slot, account_id)
+        cdef object protected = self._reconcile_protected(slot, account_id)
+        cdef object free = balance-reserved-protected
+        if not free > 0.0:
+            return 0.0
+        return free
+
     # --- обслуживание ------------------------------------------------------
     def sync(self):
         """Выровнять колонки по словарю счетов."""
         self._sync()
         self._verify()
 
+    def adopt(self):
+        """Явный импорт значений dict во все колонки.
+
+        Это путь load/new-account: сюда приходят значения, которые владелец не
+        писал — восстановленные из checkpoint, собранные миграцией или
+        выставленные тестом. Обычная мутация им не пользуется, поэтому
+        произвольная правка dict не подменяет владельца молча: сверка чтения
+        учитывает её отдельно и диагностируется через ``adopt_mismatch``.
+        """
+        cdef Py_ssize_t slot, total = len(self.keys)
+        cdef object account_id
+        self._sync()
+        self._verify()
+        for slot in range(total):
+            account_id = <object>self.keys[slot]
+            self.balances[slot] = (<object>self.accounts[account_id])['balance']
+            self.reserved[slot] = (<object>self.accounts[account_id]).get('reserved', 0)
+            self.protected[slot] = (<object>self.accounts[account_id]).get('protected', 0)
+        return self
+
     def columns(self):
         """Снимок колонок для тестов и диагностики (без записи в хранилище)."""
         self._sync()
         self._verify()
         return dict(keys=list(self.keys), balance=list(self.balances),
-                    reserved=list(self.reserved))
+                    reserved=list(self.reserved), protected=list(self.protected))
+
+    def diagnostics(self):
+        """Сводка compatibility-режима: раскладка и число принятых расхождений."""
+        return dict(version=int(self.version), accounts=len(self.keys),
+                    adopt_mismatch=int(self.adopt_mismatch),
+                    strict=bool(self.strict))
 
     # --- копии -------------------------------------------------------------
     def __deepcopy__(self, memo):
@@ -268,8 +400,8 @@ cdef class CashStore:
         Через ``memo`` словарь счетов остаётся тем же объектом, что и
         ``engine.accounts`` копии, поэтому у копии одно хранилище.
         """
-        return CashStore(copy.deepcopy(self.accounts, memo))
+        return type(self)(copy.deepcopy(self.accounts, memo), self.strict)
 
     def __reduce__(self):
         """Pickle: восстановить хранилище над словарём счетов."""
-        return (CashStore, (self.accounts,))
+        return (type(self), (self.accounts,))

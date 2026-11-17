@@ -75,7 +75,8 @@ def run_enterprises_python(order, engine, labor, resources, observe, hooks, eps)
         recipe, a = engine.goods[e['good']], engine.accounts[e['id']]
         # Закупочные резервы уже сняты, проектный капитал остаётся защищён.
         project_hold = a.get('project', {}).get('working_cash', 0)+a.get('project', {}).get('delivery', 0)
-        a['protected'] = project_hold
+        # Защита кассы — денежная колонка счёта, а не локальная копия.
+        engine.cash_store.set_protected_cash(e['id'], project_hold)
         constraints = {'План': planned, 'Мощность': e['capacity'], 'Труд': labor[e['state_id'], e['province_id']]/recipe['labor'],
             'Деньги на зарплату': engine.free_cash(e['id'])/(recipe['labor']*engine.cfg['wage'])}
         if recipe['resource']:

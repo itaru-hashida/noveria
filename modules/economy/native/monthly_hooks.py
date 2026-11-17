@@ -12,10 +12,10 @@ Python→Cython на месяц — сам ``monthly_step``, а обратных
 
   * состояние не хранится: объект держит только ссылку на живой движок и не
     заводит второго ledger'а, копии счетов, склада или отчёта;
-  * ``balance``/``reserved`` меняются только через ``CashStore``, резерв
-    склада — только через ``StockStore``, ``remaining``/``status``/``price``
-    заявок — только через ``OrderStore``;
-  * ``report``, ``protected``/``payroll_protected``/``operating_protected``,
+  * ``balance``/``reserved``/``protected`` меняются только через ``CashStore``,
+    резерв склада — только через ``StockStore``, ``remaining``/``status``/
+    ``price`` заявок — только через ``OrderStore``;
+  * ``report``, поля-спутники ``payroll_protected``/``operating_protected``,
     ``project_reserve`` и тексты причин — это поля отчёта и представления, а
     не деньги; их пишет Python-хук;
   * порядок вызовов и порядок обхода задаёт ядро месяца: хук его не
@@ -46,23 +46,31 @@ class MonthlyHooks(object):
         """Сбросить резервы месяца: деньги — через CashStore, склад — через StockStore.
 
         Порядок на счёт прежний: посчитать ``hold``, обнулить денежный резерв,
-        выставить защиту кассы, обнулить резерв склада.
+        выставить защиту кассы, обнулить резерв склада. ``protected`` — такое
+        же денежное поле счёта, как ``reserved``, поэтому его пишет тот же
+        владелец: ``min(balance, hold)`` считается здесь, а значение уходит в
+        колонку. ``balance`` читается из владельца, иначе политика опиралась бы
+        на dict в обход него.
         """
         engine = self.engine
         cash = engine.cash_store
         for account in accounts.values():
             hold = account.get('project', {}).get('working_cash', 0)+account.get('project', {}).get('delivery', 0)
             cash.set_reserved_cash(account['id'], 0.0)
-            account.update(protected=min(account['balance'], hold), payroll_protected=0.0,
-                operating_protected=0.0)
+            cash.set_protected_cash(account['id'],
+                min(cash.get_balance(account['id']), hold))
+            account.update(payroll_protected=0.0, operating_protected=0.0)
             engine.stock_store.reset_reserved(account['id'])
 
     # --- производство и расчёты ------------------------------------------
     def protect_balances(self, accounts):
-        """Пересчитать защиту кассы после закупок месяца (поле представления)."""
+        """Пересчитать защиту кассы после закупок месяца."""
+        engine = self.engine
+        cash = engine.cash_store
         for account in accounts.values():
             hold = account.get('project', {}).get('working_cash', 0)+account.get('project', {}).get('delivery', 0)
-            account['protected'] = min(account['balance'], hold)
+            cash.set_protected_cash(account['id'],
+                min(cash.get_balance(account['id']), hold))
 
     def apply_project_reserves(self, accounts, planning_sells):
         """Записать резерв под проекты: расчёт остаётся за ``project_cash_reserve``."""

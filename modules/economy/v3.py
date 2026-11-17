@@ -1090,7 +1090,8 @@ class Economy(EconomyServices):
         for a in self.accounts.values():
             if 'reserved' not in a:
                 cash.set_reserved_cash(a['id'], 0.0)
-            a.setdefault('protected', 0.0)
+            if 'protected' not in a:
+                cash.set_protected_cash(a['id'], 0.0)
             self.stock_store.ensure_reserved(a['id'])
         for e in self.enterprises.values():
             e.setdefault('available_from', e['opened']+1 if e['opened'] else 0)
@@ -1100,8 +1101,13 @@ class Economy(EconomyServices):
             e.setdefault('unviable_months', 0)
 
     def free_cash(self, account):
-        a = self.accounts[account]
-        return max(0.0, a['balance']-a.get('reserved', 0)-a.get('protected', 0))
+        """Свободная касса счёта — из единственного владельца полей.
+
+        Формула живёт в ``CashStore.free_cash``: ``max(0.0, balance-reserved
+        -protected)``. Здесь остаётся только адаптер, поэтому второй копии
+        расчёта нет ни в Python, ни в native-границах.
+        """
+        return self.cash_store.free_cash(account)
 
     def enterprise_overhead(self, e):
         """Ежемесячный оброк за площадку и мастерскую при открытом предприятии."""
@@ -2039,7 +2045,9 @@ class Economy(EconomyServices):
             if e['status'] != 'closed':
                 hold = min(self.free_cash(e['id']), required)
                 a['operating_protected'] = hold
-                a['protected'] += hold
+                # Защита кассы — денежное поле счёта, поэтому её двигает
+                # владелец полей, а не прямая запись в dict.
+                self.cash_store.add_protected_cash(e['id'], hold)
 
     def expected_stock_sales(self, e, sells, reachable=None):
         """Продажа старого склада до поступления планируемого нового выпуска.
@@ -2691,8 +2699,7 @@ class Economy(EconomyServices):
         _production.produce(self, existing)
 
     def return_capital(self, e):
-        a = self.accounts[e['id']]
-        a['protected'] = 0
+        self.cash_store.set_protected_cash(e['id'], 0)
         self.transfer(e['id'], e['owner_id'], self.free_cash(e['id']), 'Возврат капитала закрытого предприятия')
 
     def close_enterprise(self, e, unpaid=0):

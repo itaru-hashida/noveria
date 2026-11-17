@@ -30,8 +30,9 @@
   * снятие проекта со счёта, восстановление ``protected`` и запись
     ``report['investment_decisions']`` — хук ``apply_cancellation_hook``:
     денежная политика и отчёт остаются у движка, ядро задаёт только момент
-    вызова и аргументы. Оба среза применяют отмену одним и тем же хуком,
-    поэтому side effects прежнего пути не меняются;
+    вызова и аргументы, а значение ``protected`` пишет ``CashStore``. Оба
+    среза применяют отмену одним и тем же хуком, поэтому side effects прежнего
+    пути не меняются;
   * цена, себестоимость, рыночный сигнал и ``reachable_demand`` — хуки
     движка: это большие методы с кэшами, ядро зовёт их в прежнем порядке;
   * ``cancel_order``, освобождение sell-заявок, ``mark_market_quotes_dirty``,
@@ -53,6 +54,8 @@ focused-теста на побитовое совпадение и как fallba
 
 import builtins
 import importlib
+
+from . import cash_boundary
 
 # Встроенный sum: float-слагаемые CPython 3.12 складывает компенсированно,
 # поэтому прогресс обязан считаться той же функцией, что и прежде.
@@ -161,11 +164,13 @@ def apply_cancellation_hook(owner, account, reason, result):
     Тело повторяет прежние три операции прежним порядком: ``del project``,
     восстановление ``protected`` и запись решения в отчёт. ``result`` уже
     подготовлен ядром, поэтому ключи решения идут прежним порядком
-    ``kind``/``investor``/``outcome``/``reason``.
+    ``kind``/``investor``/``outcome``/``reason``. Восстановленную защиту пишет
+    ``CashStore``: это его денежная колонка, а не поле представления.
     """
     del account['project']
-    account['protected'] = (account.get('operating_protected', 0)
-                            +account.get('payroll_protected', 0))
+    cash_boundary.store_for(owner, account).set_protected_cash(
+        account['id'],
+        account.get('operating_protected', 0)+account.get('payroll_protected', 0))
     owner.report['investment_decisions'].append(
         dict(kind='investment_decision', investor=account['id'], **result))
     return None

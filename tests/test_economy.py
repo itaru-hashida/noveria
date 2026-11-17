@@ -199,3 +199,87 @@ def test_territory_labels(service):
     assert 'Новерская Республика' in labels['city-0-0']
     assert 'провинция Лунария' in labels['city-0-0']
     assert 'провинция' in labels['province-0']
+
+
+# --- единый владелец кассы: free_cash, protected, ledger -----------------
+def cash_engine(service):
+    """Небольшой живой движок с явно выставленными денежными полями."""
+    engine = small_market(service)
+    for identity in ('buyer', 'near-seller'):
+        engine.cash_store.set_reserved_cash(identity, 0)
+        engine.cash_store.set_protected_cash(identity, 0)
+    return engine
+
+
+@pytest.mark.parametrize('reserved,protected,expected', [
+    (0.0, 0.0, 100.0),
+    (30.0, 0.0, 70.0),
+    (0.0, 25.0, 75.0),
+    (30.0, 25.0, 45.0),
+    (90.0, 90.0, 0.0),
+])
+def test_engine_free_cash_uses_the_single_formula(service, reserved, protected, expected):
+    engine = cash_engine(service)
+    engine.cash_store.set_balance('buyer', 100.0)
+    engine.cash_store.set_reserved_cash('buyer', reserved)
+    engine.cash_store.set_protected_cash('buyer', protected)
+    assert engine.free_cash('buyer') == expected
+    # Тот же ответ у владельца: адаптер не считает по-своему.
+    assert engine.free_cash('buyer') == engine.cash_store.free_cash('buyer')
+
+
+def test_engine_free_cash_is_exact_against_owner(service):
+    """Побитовое равенство адаптера и владельца, а не только по значению."""
+    engine = cash_engine(service)
+    engine.cash_store.set_balance('buyer', 0.1+0.2)
+    engine.cash_store.set_reserved_cash('buyer', 0.1)
+    engine.cash_store.set_protected_cash('buyer', 0.0)
+    assert engine.free_cash('buyer').hex() == engine.cash_store.free_cash('buyer').hex()
+
+
+def test_protected_is_not_merged_with_reserved(service):
+    """Два разных поля: запись одного не меняет второе и на уровне движка."""
+    engine = cash_engine(service)
+    engine.cash_store.set_balance('buyer', 100.0)
+    engine.cash_store.set_reserved_cash('buyer', 10.0)
+    engine.cash_store.set_protected_cash('buyer', 20.0)
+    assert engine.accounts['buyer']['reserved'] == 10.0
+    assert engine.accounts['buyer']['protected'] == 20.0
+    engine.cash_store.set_protected_cash('buyer', 35.0)
+    assert engine.accounts['buyer']['reserved'] == 10.0
+
+
+def test_ledger_records_one_flow_per_transfer(service):
+    engine = cash_engine(service)
+    engine.cash_store.set_balance('buyer', 100.0)
+    engine.cash_store.set_balance('near-seller', 0.0)
+    before = len(engine.report['flows'])
+    engine.transfer('buyer', 'near-seller', 7.5, 'Проверка')
+    assert len(engine.report['flows']) == before+1
+    assert engine.report['flows'][-1] == dict(
+        sender='buyer', recipient='near-seller', gold=7.5, reason='Проверка')
+    assert engine.accounts['buyer']['balance'] == 92.5
+    assert engine.accounts['near-seller']['balance'] == 7.5
+    assert engine.gold() == pytest.approx(100.0)
+
+
+def test_transfer_respects_protected_and_reserved_cash(service):
+    """Guard свободной кассы: защищённые деньги перевести нельзя."""
+    engine = cash_engine(service)
+    engine.cash_store.set_balance('buyer', 100.0)
+    engine.cash_store.set_reserved_cash('buyer', 80.0)
+    engine.cash_store.set_protected_cash('buyer', 20.0)
+    with pytest.raises(ValueError):
+        engine.transfer('buyer', 'near-seller', 10.0, 'Проверка')
+    assert engine.accounts['buyer']['balance'] == 100.0
+
+
+def test_months_keep_protected_and_reserved_within_balance(service):
+    """Инвариант кассы после месяцев: reserved+protected не больше баланса."""
+    service.initialize_economy()
+    state = service.economy_state()
+    for step in range(3):
+        service.advance_turn(command_id=f'cash-invariant-{step}')
+        assert all(state.last_report['invariants'].values())
+        for live in state.engine.accounts.values():
+            assert live.get('reserved', 0)+live.get('protected', 0) <= live['balance']+1e-7

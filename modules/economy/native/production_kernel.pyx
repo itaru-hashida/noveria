@@ -51,9 +51,11 @@ def run_enterprises(object order, object engine, object labor, object resources,
         recipe = engine.goods[e['good']]
         account = engine.accounts[e['id']]
         # Закупочные резервы уже сняты, проектный капитал остаётся защищён.
+        # ``protected`` — денежная колонка CashStore, поэтому значение пишет
+        # владелец полей, а не ядро напрямую: иначе появился бы второй writer.
         project = account.get('project', {})
         project_hold = project.get('working_cash', 0)+project.get('delivery', 0)
-        account['protected'] = project_hold
+        engine.cash_store.set_protected_cash(e['id'], project_hold)
         # dict сохраняет порядок вставки: он задаёт как порядок вызовов
         # free_cash/free_stock, так и порядок ключей в report-наблюдении.
         constraints = {'План': planned, 'Мощность': e['capacity'],

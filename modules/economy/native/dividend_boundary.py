@@ -80,7 +80,8 @@ class DividendHooks:
         return self.engine.cash_store.get_reserved_cash(account_id)
 
     def protected(self, account_id):
-        return self.engine.accounts[account_id].get('protected', 0)
+        # Защита кассы — колонка того же владельца, что balance/reserved.
+        return self.engine.cash_store.get_protected_cash(account_id)
 
     # --- товары, склад и котировки (остаются в Python) ---------------------
     def recipe(self, good):

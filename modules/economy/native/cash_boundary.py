@@ -24,14 +24,22 @@ class CashStorePython:
     (native-ветки восстановления предприятий) не должна теряться. Сравнивается
     и тип, потому что ``5`` и ``5.0`` равны по значению, но подмена типа
     сдвинула бы последние биты отчёта.
+
+    ``protected`` — отдельная колонка, а не второй ``reserved``: резерв под
+    заявки и защита кассы под обязательства считаются независимо. Принятое из
+    dict расхождение считается в ``adopt_mismatch``; в ``strict`` оно вместо
+    этого падает, потому что обычная мутация обязана идти через владельца.
     """
 
-    def __init__(self, accounts):
+    def __init__(self, accounts, strict=False):
         self.accounts = accounts
+        self.strict = bool(strict)
+        self.adopt_mismatch = 0
         self.version = 0
         self.keys = []
         self.balances = []
         self.reserved = []
+        self.protected = []
         self.index = {}
         for account_id in accounts:
             self._append(account_id)
@@ -43,11 +51,13 @@ class CashStorePython:
         self.keys.append(account_id)
         self.balances.append(account['balance'])
         self.reserved.append(account.get('reserved', 0))
+        self.protected.append(account.get('protected', 0))
 
     def _load(self):
         self.keys = []
         self.balances = []
         self.reserved = []
+        self.protected = []
         self.index = {}
         for account_id in self.accounts:
             self._append(account_id)
@@ -81,19 +91,24 @@ class CashStorePython:
             raise KeyError(f'Нет счёта в CashStore: {account_id!r}')
         return slot
 
-    @staticmethod
-    def _reconcile(column, value):
-        current = column
+    def _reconcile(self, column, column_slot, account_id, field, default):
+        """Принять значение dict, если оно изменилось в обход границы."""
+        account = self.accounts[account_id]
+        value = account[field] if default is None else account.get(field, default)
+        current = column[column_slot]
         if current is not value and (current != value
-                                    or type(current) is not type(value)):
-            return value
-        return current
+                                     or type(current) is not type(value)):
+            if self.strict:
+                raise ValueError(
+                    f'CashStore: {field} счёта {account_id!r} изменён в обход '
+                    f'владельца (колонка {current!r}, dict {value!r})')
+            column[column_slot] = value
+            self.adopt_mismatch += 1
+        return column[column_slot]
 
     def get_balance(self, account_id):
         slot = self._known(account_id)
-        self.balances[slot] = self._reconcile(
-            self.balances[slot], self.accounts[account_id]['balance'])
-        return self.balances[slot]
+        return self._reconcile(self.balances, slot, account_id, 'balance', None)
 
     def set_balance(self, account_id, value):
         slot = self._known(account_id)
@@ -111,18 +126,21 @@ class CashStorePython:
     def move_balance(self, sender, recipient, amount):
         source, target = self._known(sender), self._known(recipient)
         left = self.get_balance(sender)-amount
-        right = self.get_balance(recipient)+amount
         self.balances[source] = left
-        self.balances[target] = right
         self.accounts[sender]['balance'] = left
+        # Перевод самому себе считается от результата первой операции: прежний
+        # код применял оба присваивания к одному словарю.
+        if target == source:
+            right = left+amount
+        else:
+            right = self.get_balance(recipient)+amount
+        self.balances[target] = right
         self.accounts[recipient]['balance'] = right
         return left, right
 
     def get_reserved_cash(self, account_id):
         slot = self._known(account_id)
-        self.reserved[slot] = self._reconcile(
-            self.reserved[slot], self.accounts[account_id].get('reserved', 0))
-        return self.reserved[slot]
+        return self._reconcile(self.reserved, slot, account_id, 'reserved', 0)
 
     def set_reserved_cash(self, account_id, value):
         slot = self._known(account_id)
@@ -147,16 +165,95 @@ class CashStorePython:
         self.accounts[account_id]['reserved'] = left
         return left
 
+    def get_protected_cash(self, account_id):
+        slot = self._known(account_id)
+        return self._reconcile(self.protected, slot, account_id, 'protected', 0)
+
+    def set_protected_cash(self, account_id, value):
+        slot = self._known(account_id)
+        self.protected[slot] = value
+        self.accounts[account_id]['protected'] = value
+        return value
+
+    def add_protected_cash(self, account_id, value):
+        slot = self._known(account_id)
+        total = self.get_protected_cash(account_id)+value
+        self.protected[slot] = total
+        self.accounts[account_id]['protected'] = total
+        return total
+
+    def release_protected_cash(self, account_id, value):
+        """Снять часть защиты: ``max(0, protected - value)``."""
+        slot = self._known(account_id)
+        left = self.get_protected_cash(account_id)-value
+        if not left > 0:
+            left = 0
+        self.protected[slot] = left
+        self.accounts[account_id]['protected'] = left
+        return left
+
+    def free_cash(self, account_id):
+        """Единственная формула свободной кассы, как в native-хранилище."""
+        slot = self._known(account_id)
+        balance = self.get_balance(account_id)
+        reserved = self.get_reserved_cash(account_id)
+        protected = self.get_protected_cash(account_id)
+        free = balance-reserved-protected
+        if not free > 0.0:
+            return 0.0
+        return free
+
+    def adopt(self):
+        """Явный импорт значений dict во все колонки (load/new-account)."""
+        self.sync()
+        for slot, account_id in enumerate(self.keys):
+            account = self.accounts[account_id]
+            self.balances[slot] = account['balance']
+            self.reserved[slot] = account.get('reserved', 0)
+            self.protected[slot] = account.get('protected', 0)
+        return self
+
     def columns(self):
         self.sync()
         return dict(keys=list(self.keys), balance=list(self.balances),
-                    reserved=list(self.reserved))
+                    reserved=list(self.reserved), protected=list(self.protected))
+
+    def diagnostics(self):
+        return dict(version=int(self.version), accounts=len(self.keys),
+                    adopt_mismatch=int(self.adopt_mismatch),
+                    strict=bool(self.strict))
 
     def __deepcopy__(self, memo):
-        return type(self)(copy.deepcopy(self.accounts, memo))
+        return type(self)(copy.deepcopy(self.accounts, memo), self.strict)
 
     def __reduce__(self):
         return (type(self), (self.accounts,))
+
+
+def store_for(owner, account):
+    """Владелец денежных полей для счёта: хранилище движка или граница над dict.
+
+    Обычный путь — ``owner.cash_store``: это живое хранилище движка, и его
+    колонки остаются истиной. Заглушки границ (focused-тесты хуков) движка не
+    имеют, но приносят тот же живой словарь счёта; для них строится
+    ``CashStore`` над этим словарём. Владелец тот же по типу и арифметике, а
+    значение попадает в тот же словарь, поэтому второго независимого состояния
+    не появляется.
+    """
+    store = getattr(owner, 'cash_store', None)
+    if store is not None:
+        return store
+    return CashStore({account['id']: account})
+
+
+def free_cash(store, account_id):
+    """Свободная касса через владельца полей: одна формула на весь проект.
+
+    Функция не считает сама: она вызывает ``CashStore.free_cash``, поэтому
+    Python-адаптер и native-хранилище дают побитово одно значение. Второй
+    реализации формулы быть не должно.
+    """
+    return store.free_cash(account_id)
 
 
 def load_cash_store():

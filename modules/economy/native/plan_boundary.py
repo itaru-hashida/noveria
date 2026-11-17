@@ -73,8 +73,8 @@ class PlanHooks(object):
     def reset_protected(self):
         """Снять прошлый ``operating_protected``: прежний ``max(0, ...)``."""
         account = self.engine.accounts[self.enterprise['id']]
-        account['protected'] = max(0, account.get('protected', 0)
-                                    - account.pop('operating_protected', 0))
+        self.engine.cash_store.release_protected_cash(
+            self.enterprise['id'], account.pop('operating_protected', 0))
 
     def commit_target(self, target, requested, eps):
         """Записать итоговый выпуск и причину предела до ``production_plan``.
@@ -92,7 +92,8 @@ class PlanHooks(object):
         """Записать ``production_plan`` и резерв зарплат в прежнем порядке.
 
         ``payroll_protected`` и прибавка к ``protected`` идут после плана: этот
-        резерв читает ``free_cash`` следующих предприятий.
+        резерв читает ``free_cash`` следующих предприятий. Прибавку к
+        ``protected`` делает ``CashStore``: это денежная колонка счёта.
         """
         e = self.enterprise
         e['production_plan'] = plan
@@ -100,7 +101,8 @@ class PlanHooks(object):
         account['payroll_protected'] = (plan['output']
                                         *self.engine.goods[e['good']]['labor']
                                         *self.engine.cfg['wage'])
-        account['protected'] += account['payroll_protected']
+        self.engine.cash_store.add_protected_cash(e['id'],
+                                                  account['payroll_protected'])
 
     # --- заявки: единственная точка мутации -------------------------------
     def begin_orders(self):
@@ -125,11 +127,17 @@ class PlanHooks(object):
 # ---------------------------------------------------------------------------
 
 def input_requests_python(engine, e, sells):
-    """Эталон ``V3.input_requests``: буквальный прежний код."""
+    """Эталон ``V3.input_requests``: буквальный прежний код.
+
+    Денежные поля пишет владелец: ``protected`` — колонка ``CashStore``,
+    поэтому снятие прошлого ``operating_protected`` и прибавка резерва зарплат
+    идут через его методы с той же арифметикой и в том же порядке.
+    """
     a = engine.accounts[e['id']]
+    protected = engine.cash_store
     input_prices = {good: engine.reference_price(a, good, sells)
         for good in engine.goods[e['good']]['inputs']}
-    a['protected'] = max(0, a.get('protected', 0)-a.pop('operating_protected', 0))
+    protected.release_protected_cash(e['id'], a.pop('operating_protected', 0))
     target = engine.plan(e, sells=sells)
     a, recipe = engine.accounts[e['id']], engine.goods[e['good']]
     cash = engine.free_cash(e['id'])
@@ -172,7 +180,7 @@ def input_requests_python(engine, e, sells):
         reachable_demand=e['reachable_demand'], sales_forecast=e['sales_forecast'],
         expected_margin=e['expected_margin'], reason=e['production_limit'])
     a['payroll_protected'] = target*recipe['labor']*engine.cfg['wage']
-    a['protected'] += a['payroll_protected']
+    protected.add_protected_cash(e['id'], a['payroll_protected'])
     for good, ratio in recipe['inputs'].items():
         quantity = max(0, target*ratio-engine.free_stock(e['id'], good))
         _, price, _ = engine.quoted_cost(a, good, quantity, sells)

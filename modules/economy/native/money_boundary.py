@@ -165,12 +165,13 @@ def cash_after_commitments(engine, account, project_reserve, working_reserve=0):
 
     Повторно не переносится: ``dividend_kernel.cash_after_commitments`` уже
     держит ``max(protected, project+working)`` и ``max(0, balance-reserved-hold)``.
+    Все три денежных поля читаются у владельца — колонки остаются истиной.
     """
-    a = engine.accounts[account]
     return _dividend.cash_after_commitments(
         engine.cash_store.get_balance(account),
         engine.cash_store.get_reserved_cash(account),
-        a.get('protected', 0), project_reserve, working_reserve)
+        engine.cash_store.get_protected_cash(account), project_reserve,
+        working_reserve)
 
 
 def cash_after_commitments_python(engine, account, project_reserve,
