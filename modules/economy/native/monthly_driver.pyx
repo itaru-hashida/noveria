@@ -290,6 +290,12 @@ def monthly_step(object engine, object eps, object planning_mode='v3',
         engine.persist_investment_state()
         engine.meta['rng_state'] = engine.rng.getstate()
         engine.validate(before)
+        # Числовые diagnostics/history-записи месяца уходят в синхронный буфер
+        # через границу месяца: там же живёт Python-эталон, поэтому у правила
+        # Channels одна реализация, а не две. Буфер лишь фильтрует и батчит —
+        # форматирование и диск остаются фоновому writer'у.
+        from .monthly_boundary import _record_report_channels
+        _record_report_channels(engine, detail)
         if food_trace:
             engine.report['food_diagnostics'] = food_trace.finish(engine)
         if detail == 'deep':

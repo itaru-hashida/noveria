@@ -177,6 +177,10 @@ def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
         engine.persist_investment_state()
         engine.meta['rng_state'] = engine.rng.getstate()
         engine.validate(before)
+        # Числовые histories и diagnostics-строки месяца уходят в синхронный
+        # буфер теми же объектами, что уже лежат в отчёте и на счетах: буфер
+        # только фильтрует и батчит, форматирует и пишет в фон writer.
+        _record_report_channels(engine, detail)
         if food_trace:
             engine.report['food_diagnostics'] = food_trace.finish(engine)
         if detail == 'deep':
@@ -197,6 +201,34 @@ def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
         if world is not None:
             world.end_step(engine, completed=completed)
     return engine.report
+
+
+def _record_report_channels(engine, detail):
+    """Отдать готовые числовые записи месяца синхронному буферу событий.
+
+    Буфер — поток вывода, а не состояние: он получает ссылки на уже созданные
+    строки отчёта и складских историй, ставит их в порядок и батчит. Ни одна
+    строка здесь не форматируется и ни один файл не открывается. Списки не
+    копируются, поэтому ``report``/``sales_history`` остаются единственным
+    источником истины, а RNG, порядок сделок и порядок событий не меняются.
+    """
+    recorder = getattr(engine, 'event_recorder', None)
+    if recorder is None:
+        return 0
+    from .event_buffer_boundary import DIAGNOSTICS, HISTORY, REPLAY
+    written = recorder.record_rows(engine.report.get('diagnostics', ()),
+                                   kind=DIAGNOSTICS, channel=DIAGNOSTICS)
+    histories = []
+    for enterprise in engine.enterprises.values():
+        history = enterprise.get('sales_history')
+        if history:
+            histories.append(history[-1])
+    for account in engine.accounts.values():
+        for rows in account.get('stock_sales_history', {}).values():
+            if rows:
+                histories.append(rows[-1])
+    written += recorder.record_rows(histories, kind=REPLAY, channel=HISTORY)
+    return written
 
 
 def load_monthly_driver():

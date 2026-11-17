@@ -138,6 +138,12 @@ setup(
          # (trade.executed): counters и суммы по прежнему ключу и порядку.
          # События создаёт прежний log_event, тексты остаются Python.
          Extension('diagnostics_kernel', ['diagnostics_kernel.pyx']),
+         # Event buffer: упорядоченные записи событий месяца, фильтрация
+         # standard/deep, батчи, backpressure и явная политика отбрасывания
+         # diagnostic-only событий. Ядро не форматирует и не пишет на диск:
+         # строки отчёта остаются живыми, тяжёлая сериализация — за фоновым
+         # writer'ом, поэтому второго ledger'а/состояния нет.
+         Extension('event_buffer_kernel', ['event_buffer_kernel.pyx']),
          # Числовой срез котировок и себестоимости: обход книги в quoted_cost,
          # ориентир рынка в reference_price, компенсированные суммы unit_cost,
          # средние цены входов плана, потолок автоматической закупки и решение
