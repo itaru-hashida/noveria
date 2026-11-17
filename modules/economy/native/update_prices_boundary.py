@@ -1,6 +1,7 @@
 """Общий flat pack/journal/apply для native-фаз V3 до owner_requests."""
 import time
 
+import networkx as nx
 import numpy as np
 
 from modules.economy.support import EPS
@@ -12,6 +13,13 @@ from . import load_serial_step
 # pack. Keep its directed distance matrix across turns/world reloads, keyed by
 # the immutable route signature and the exact tile ordering.
 _PROJECT_DISTANCE_MATRICES = {}
+
+# На малых картах построение all-pairs матрицы для investment pack дороже
+# через native route kernel: native вызов строит отдельное дерево на каждый
+# источник и оплачивает переход границы для каждого дерева. Для карты игры
+# NetworkX строит те же числовые расстояния заметно дешевле; native route
+# kernel остаётся путём для обычных запросов и больших карт.
+_PROJECT_ROUTE_NATIVE_MIN_NODES = 4096
 
 # update_prices packs the same rule/goods topology every turn. Recipes and
 # goods membership change only with content reloads, so their derived flat
@@ -2122,6 +2130,21 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     all_tiles = sorted(tile_index, key=tile_index.get)
     n_tiles = len(all_tiles)
     old_n = inv_data['distances'].shape[0]
+    # Native investment code only reads distance rows for current sellers and
+    # accounts that own an active project. Building a tree for every tile made
+    # the first native turn pay for unreachable pairs that could never be
+    # queried by this pack.
+    route_sources = {
+        account.get('cell_id') or account['tile_id']
+        for account in engine.accounts.values()
+        if account.get('project')
+    }
+    route_sources.update(
+        sell['tile_id']
+        for rows in sells.values()
+        for sell in rows
+    )
+    route_sources = sorted(set(route_sources) & set(all_tiles))
     # Trigger the existing once-per-month graph-shape check before accepting a
     # process-wide cached matrix. Explicit road edits call invalidate_routes;
     # this also catches editor changes that only altered graph shape.
@@ -2136,12 +2159,19 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
             # from exact directed NetworkX route-tree values, then reuse the
             # packed array on every subsequent project phase.
             path_distances = {}
-            for source in all_tiles:
-                engine.path(source, source)
-                path_distances[source] = engine.paths[source][0]
+            use_python_matrix = n_tiles < _PROJECT_ROUTE_NATIVE_MIN_NODES
+            for source in route_sources:
+                if use_python_matrix:
+                    path_distances[source] = nx.single_source_dijkstra(
+                        engine.graph, source, weight='weight')[0]
+                else:
+                    engine.path(source, source)
+                    path_distances[source] = engine.paths[source][0]
             for i, source in enumerate(all_tiles):
                 row = distances[i]
-                route_row = path_distances[source]
+                route_row = path_distances.get(source)
+                if route_row is None:
+                    continue
                 for target, distance in route_row.items():
                     j = tile_index.get(target)
                     if j is not None:
