@@ -12,7 +12,6 @@ need-словаря, а остаток — из ``free_stock``, поэтому �
 import copy
 import hashlib
 import importlib
-import inspect
 import json
 import sys
 from pathlib import Path
@@ -512,15 +511,25 @@ def test_fallback_without_extension(monkeypatch):
 
 
 def test_v3_has_single_call_site():
-    """В V3.step один вызов границы, а не вторая копия цикла."""
-    source = inspect.getsource(Economy.step)
-    assert '_consumption.consume_households(self, households)' in source
+    """Один вызов границы на всю оркестрацию, а не вторая копия цикла.
+
+    Call site переехал вместе с оркестрацией месяца: ``Economy.step`` стал
+    тонким фасадом, а последовательность фаз живёт в ``monthly_driver``
+    (он же держит Python-эталон в ``monthly_boundary``). Смысл проверки тот
+    же: у правила ровно одна точка вызова и ни одной второй копии цикла.
+    """
     module_source = (ROOT/'modules/economy/v3.py').read_text(encoding='utf-8')
-    assert module_source.count('_consumption.consume_households(') == 1
+    assert module_source.count('_consumption.consume_households(') == 0, \
+        'оркестрация ушла из v3.py, второй call site там не нужен'
+    native_source = (ROOT/'modules/economy/native/monthly_driver.pyx').read_text(encoding='utf-8')
+    reference_source = (ROOT/'modules/economy/native/monthly_boundary.py').read_text(encoding='utf-8')
+    assert native_source.count('_consumption.consume_households(') == 1
+    assert reference_source.count('_consumption.consume_households(') == 1
     assert module_source.count('def consume_households(') == 0, \
         'тело цикла не должно вернуться в v3.py'
-    # Прежний цикл по needs в step больше не дублируется.
-    assert "consumed = min(need['needed'], self.free_stock(a['id'], good))" not in module_source
+    # Прежний цикл по needs в оркестрации больше не дублируется.
+    assert "consumed = min(need['needed'], self.free_stock(a['id'], good))" not in native_source
+    assert "consumed = min(need['needed'], engine.free_stock(a['id'], good))" not in native_source
 
 
 # ---------------------------------------------------------------------------

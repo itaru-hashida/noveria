@@ -171,7 +171,13 @@ setup(
          # networkx.single_source_dijkstra для словарного графа. Ни графа, ни
          # кэша маршрутов ядро не хранит — оно получает живой graph._adj и
          # возвращает те же два словаря; кэш остаётся кэшем движка.
-         Extension('route_kernel', ['route_kernel.pyx'])],
+         Extension('route_kernel', ['route_kernel.pyx']),
+         # Месячный orchestration: единственный native-entrypoint месяца,
+         # который вызывает фазы в прежнем порядке. Экономику не хранит —
+         # работает с живым движком и его существующими хранилищами, поэтому
+         # второго WorldState/ledger'а нет и ядро не зависит от прочих
+         # расширений: фазы остаются их собственными границами.
+         Extension('monthly_driver', ['monthly_driver.pyx'])],
         compiler_directives={'language_level': 3},
     ),
 )
