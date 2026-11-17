@@ -96,6 +96,181 @@ def _isfinite(value):
     return math.isfinite(value)
 
 
+# ---------------------------------------------------------------------------
+# Демография и миграция: числовые тела
+# ---------------------------------------------------------------------------
+#
+# Перенесены расчётные срезы ``V3.update_demography`` и ``V3.apply_migration``
+# (бывшие ``_province_population``/``_split_people``). Ядро пишет только те же
+# поля тех же живых dict-ов: численность группы, ``rounding_carry`` группы,
+# ``food_stress``/``last_month`` провинции. Строки отчёта собирает Python из
+# возвращённых чисел, переводы и склад двигают прежние ``transfer``/``add_stock``.
+
+def province_population_python(accounts, province_id, population_hook):
+    """Эталон ``V3._province_population``: буквальный прежний код."""
+    return sum(population_hook(a) for a in accounts
+               if a['kind'] == 'household' and a['province_id'] == province_id)
+
+
+def split_people_python(households, total, population_hook):
+    """Эталон ``V3._split_people``: буквальный прежний код."""
+    population = sum(population_hook(a) for a in households)
+    if total <= 0 or population <= 0:
+        return {}
+    raw = [(a, total*population_hook(a)/population) for a in households]
+    result = {a['id']: math.floor(value) for a, value in raw}
+    left = total-sum(result.values())
+    for account, value in sorted(raw, key=lambda row: (
+            -(row[1]-math.floor(row[1])), row[0]['id']))[:left]:
+        result[account['id']] += 1
+    return {account: count for account, count in result.items() if count}
+
+
+def run_demography_python(entities, accounts, province_ids, basic_goods,
+                          provinces, groups, population_hook, cfg, month, eps):
+    """Эталон числового тела ``V3.update_demography``: буквальный прежний код."""
+    rows = []
+    for pid in province_ids:
+        households = [a for a in accounts
+                      if a['kind'] == 'household' and a['province_id'] == pid]
+        population = sum(population_hook(a) for a in households)
+        needed = sum(a.get('needs', {}).get(good, {}).get('needed', 0)
+                     for a in households for good in basic_goods)
+        consumed = sum(a.get('needs', {}).get(good, {}).get('consumed', 0)
+                       for a in households for good in basic_goods)
+        market_shortfall = max(0, needed-consumed)/needed if needed > eps else 0.0
+        protected = min(max(0, needed-consumed), needed*cfg['subsistence_share'])
+        effective_shortfall = (max(0, needed-consumed-protected)/needed
+                              if needed > eps else 0.0)
+        province_cache = provinces.setdefault(pid, {})
+        prior = province_cache.get('food_stress', 0.0)
+        stress = (cfg['stress_decay']*prior
+                  +(1-cfg['stress_decay'])*effective_shortfall)
+        province_cache.update(food_stress=stress, last_month=month)
+        births = baseline_deaths = hunger_deaths = rounding_adjustment = 0.0
+        for household in households:
+            group = entities[household['group_id']]['properties']
+            count = group['population']
+            births += count*cfg['birth_rate']
+            baseline_deaths += count*cfg['base_death_rate']
+            hunger_deaths += count*stress*cfg['hunger_death_rate']
+            group_cache = groups.setdefault(household['group_id'], {})
+            raw_change = count*(cfg['birth_rate']-cfg['base_death_rate']
+                                -stress*cfg['hunger_death_rate'])
+            change = raw_change+group_cache.get('rounding_carry', 0.0)
+            delta = math.floor(change) if change >= 0 else math.ceil(change)
+            group_cache['rounding_carry'] = change-delta
+            group['population'] = max(0, count+delta)
+            rounding_adjustment += delta-raw_change
+        rows.append(dict(province_id=pid, population_before=population,
+            population_after=sum(population_hook(a) for a in households),
+            births=births, deaths=baseline_deaths+hunger_deaths,
+            baseline_deaths=baseline_deaths, hunger_deaths=hunger_deaths,
+            food_stress=stress, market_food_shortfall=market_shortfall,
+            protected_by_subsistence=protected,
+            rounding_adjustment=rounding_adjustment, migration_in=0,
+            migration_out=0))
+    return rows
+
+
+class MigrationHooks(object):
+    """Живой доступ ядра миграции к движку.
+
+    Ядро считает только числа; RNG (``shuffled``), маршрут (``path``),
+    переводы и склад остаются здесь: ``move_share`` — прежний
+    ``_move_household_share`` целиком, включая ``transfer`` и ``add_stock``.
+    """
+
+    __slots__ = ('engine',)
+
+    def __init__(self, engine):
+        self.engine = engine
+
+    def population(self, province_id):
+        return self.engine._province_population(province_id)
+
+    def location_tile(self, province_id):
+        return self.engine.location(province_id)['tile_id']
+
+    def owner(self, province_id):
+        return self.engine.owners[province_id]
+
+    def distance(self, source_tile, destination_tile):
+        return self.engine.path(source_tile, destination_tile)[0]
+
+    def shuffled(self, candidates):
+        # RNG месяца: прежний shuffled по ключу id провинции.
+        return self.engine.shuffled(candidates, key=lambda row: row[1])
+
+    def households(self, province_id):
+        return [a for a in self.engine.accounts.values()
+                if a['kind'] == 'household' and a['province_id'] == province_id]
+
+    def split_people(self, people, households):
+        return self.engine._split_people(people, households)
+
+    def move_share(self, account_id, destination_id, count):
+        return self.engine._move_household_share(
+            self.engine.accounts[account_id], destination_id, count)
+
+
+def run_migration_python(rows, hooks, cfg, eps):
+    """Эталон числового тела ``V3.apply_migration``: буквальный прежний код."""
+    incoming = {}
+    moved_rows = []
+    sources = sorted(rows.values(), key=lambda row: (-row['food_stress'],
+                                                     row['province_id']))
+    for source_row in sources:
+        source_id = source_row['province_id']
+        if incoming.get(source_id, 0):
+            continue
+        push = max(0, source_row['food_stress']-cfg['stress_threshold'])
+        if push <= eps:
+            continue
+        rate = min(cfg['max_monthly_rate'],
+                   cfg['pressure_rate']*push/(1-cfg['stress_threshold']))
+        requested = math.floor(hooks.population(source_id)*rate)
+        if requested <= 0:
+            continue
+        source_tile = hooks.location_tile(source_id)
+        candidates = []
+        for destination_id, destination_row in rows.items():
+            if destination_id == source_id or hooks.owner(destination_id) != hooks.owner(source_id):
+                continue
+            advantage = (source_row['food_stress']-destination_row['food_stress']
+                         -cfg['minimum_advantage'])
+            distance = hooks.distance(source_tile, hooks.location_tile(destination_id))
+            if advantage > eps and distance is not None:
+                candidates.append((advantage/(1+distance), destination_id,
+                                   distance, destination_row))
+        if not candidates:
+            continue
+        _, destination_id, distance, destination_row = max(
+            hooks.shuffled(candidates), key=lambda row: row[0])
+        room = max(0, math.floor(hooks.population(destination_id)
+                                 *cfg['destination_max_rate'])
+                   -incoming.get(destination_id, 0))
+        people = min(requested, room)
+        if people <= 0:
+            continue
+        households = hooks.households(source_id)
+        moved_gold, moved_stock = 0.0, {}
+        for account_id, count in hooks.split_people(people, households).items():
+            moved = hooks.move_share(account_id, destination_id, count)
+            moved_gold += moved['gold']
+            for good, quantity in moved['stock'].items():
+                moved_stock[good] = moved_stock.get(good, 0.0)+quantity
+        source_row['migration_out'] += people
+        destination_row['migration_in'] += people
+        incoming[destination_id] = incoming.get(destination_id, 0)+people
+        moved_rows.append(dict(source_province=source_id,
+            destination_province=destination_id, state_id=hooks.owner(source_id),
+            people=people, source_stress=source_row['food_stress'],
+            destination_stress=destination_row['food_stress'], distance=distance,
+            gold=moved_gold, stock=dict(moved_stock), cause='chronic_food_stress'))
+    return moved_rows
+
+
 def validate(engine, eps):
     """Единственный вход из ``Economy.validate``: native-цикл или эталон.
 
@@ -130,6 +305,14 @@ NATIVE_KERNEL = False
 _kernel = load_settlement_kernel()
 if _kernel is not None:
     run_validate = _kernel.run_validate
+    province_population = _kernel.province_population
+    split_people = _kernel.split_people
+    run_demography = _kernel.run_demography
+    run_migration = _kernel.run_migration
     NATIVE_KERNEL = True
 else:
     run_validate = run_validate_python
+    province_population = province_population_python
+    split_people = split_people_python
+    run_demography = run_demography_python
+    run_migration = run_migration_python

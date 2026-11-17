@@ -1124,66 +1124,30 @@ class Economy(EconomyServices):
         cache = self.meta.setdefault('demography', {})
         provinces = cache.setdefault('provinces', {})
         groups = cache.setdefault('groups', {})
+        # Числовое тело (стресс, рождения, смерти, округление) — в
+        # settlement_kernel: там же Python-эталон и fallback без собранного .pyd.
+        # Ядро пишет те же поля тех же живых dict-ов, а строки отчёта собирает
+        # и складывает этот метод, как и прежде.
+        rows = _settlement.run_demography(
+            self.entities, list(self.accounts.values()),
+            sorted(e['id'] for e in self.entities.values() if e['kind'] == 'Province'),
+            self.cfg['basic_needs'], provinces, groups, self.population, cfg,
+            self.meta['month'], EPS)
         by_province = {}
-        basic_goods = self.cfg['basic_needs']
-        for pid in sorted(e['id'] for e in self.entities.values() if e['kind'] == 'Province'):
-            households = [a for a in self.accounts.values()
-                          if a['kind'] == 'household' and a['province_id'] == pid]
-            population = sum(self.population(a) for a in households)
-            needed = sum(a.get('needs', {}).get(good, {}).get('needed', 0)
-                         for a in households for good in basic_goods)
-            consumed = sum(a.get('needs', {}).get(good, {}).get('consumed', 0)
-                           for a in households for good in basic_goods)
-            market_shortfall = max(0, needed-consumed)/needed if needed > EPS else 0.0
-            protected = min(max(0, needed-consumed), needed*cfg['subsistence_share'])
-            effective_shortfall = max(0, needed-consumed-protected)/needed if needed > EPS else 0.0
-            province_cache = provinces.setdefault(pid, {})
-            prior = province_cache.get('food_stress', 0.0)
-            stress = cfg['stress_decay']*prior+(1-cfg['stress_decay'])*effective_shortfall
-            province_cache.update(food_stress=stress, last_month=self.meta['month'])
-            births = baseline_deaths = hunger_deaths = rounding_adjustment = 0.0
-            for household in households:
-                group = self.entities[household['group_id']]['properties']
-                count = group['population']
-                births += count*cfg['birth_rate']
-                baseline_deaths += count*cfg['base_death_rate']
-                hunger_deaths += count*stress*cfg['hunger_death_rate']
-                group_cache = groups.setdefault(household['group_id'], {})
-                raw_change = count*(cfg['birth_rate']-cfg['base_death_rate']
-                                    -stress*cfg['hunger_death_rate'])
-                change = raw_change+group_cache.get('rounding_carry', 0.0)
-                delta = math.floor(change) if change >= 0 else math.ceil(change)
-                group_cache['rounding_carry'] = change-delta
-                group['population'] = max(0, count+delta)
-                # Это не потеря населения: население целочисленно, а темп
-                # рождения/смертности дробный. Поправка нужна инварианту,
-                # чтобы отличать округление от необъяснённой мутации.
-                rounding_adjustment += delta-raw_change
-            row = dict(province_id=pid, population_before=population,
-                population_after=sum(self.population(a) for a in households), births=births,
-                deaths=baseline_deaths+hunger_deaths, baseline_deaths=baseline_deaths,
-                hunger_deaths=hunger_deaths, food_stress=stress, market_food_shortfall=market_shortfall,
-                protected_by_subsistence=protected, rounding_adjustment=rounding_adjustment,
-                migration_in=0, migration_out=0)
+        for row in rows:
             self.report['demography'].append(row)
-            by_province[pid] = row
+            by_province[row['province_id']] = row
         self.report['demography_by_province'] = by_province
 
     def _province_population(self, province_id):
-        return sum(self.population(a) for a in self.accounts.values()
-                   if a['kind'] == 'household' and a['province_id'] == province_id)
+        # Компенсированная сумма населения провинции — в settlement_kernel.
+        return _settlement.province_population(list(self.accounts.values()),
+                                               province_id, self.population)
 
     def _split_people(self, total, households):
         """Точное целочисленное деление переселенцев пропорционально группам."""
-        population = sum(self.population(a) for a in households)
-        if total <= 0 or population <= 0:
-            return {}
-        raw = [(a, total*self.population(a)/population) for a in households]
-        result = {a['id']: math.floor(value) for a, value in raw}
-        left = total-sum(result.values())
-        for account, value in sorted(raw, key=lambda row: (-(row[1]-math.floor(row[1])), row[0]['id']))[:left]:
-            result[account['id']] += 1
-        return {account: count for account, count in result.items() if count}
+        # Раскладка остатка по убыванию дробной части и по id — в ядре.
+        return _settlement.split_people(households, total, self.population)
 
     def _migration_targets(self, source, destination):
         category = self.entities[source['group_id']]['properties'].get('category')
@@ -1239,54 +1203,13 @@ class Economy(EconomyServices):
         rows = self.report.get('demography_by_province', {})
         if not cfg.get('enabled') or not rows:
             return
-        incoming = defaultdict(int)
-        sources = sorted(rows.values(), key=lambda row: (-row['food_stress'], row['province_id']))
-        for source_row in sources:
-            source_id = source_row['province_id']
-            # Прибывшие в этом месяце не продолжают путь через полкарты за тот же ход.
-            if incoming[source_id]:
-                continue
-            push = max(0, source_row['food_stress']-cfg['stress_threshold'])
-            if push <= EPS:
-                continue
-            rate = min(cfg['max_monthly_rate'], cfg['pressure_rate']*push/(1-cfg['stress_threshold']))
-            requested = math.floor(self._province_population(source_id)*rate)
-            if requested <= 0:
-                continue
-            source_tile = self.location(source_id)['tile_id']
-            candidates = []
-            for destination_id, destination_row in rows.items():
-                if destination_id == source_id or self.owners[destination_id] != self.owners[source_id]:
-                    continue
-                advantage = source_row['food_stress']-destination_row['food_stress']-cfg['minimum_advantage']
-                distance, _ = self.path(source_tile, self.location(destination_id)['tile_id'])
-                if advantage > EPS and distance is not None:
-                    candidates.append((advantage/(1+distance), destination_id, distance, destination_row))
-            if not candidates:
-                continue
-            _, destination_id, distance, destination_row = max(
-                self.shuffled(candidates, key=lambda row: row[1]), key=lambda row: row[0])
-            room = max(0, math.floor(self._province_population(destination_id)*cfg['destination_max_rate'])
-                       - incoming[destination_id])
-            people = min(requested, room)
-            if people <= 0:
-                continue
-            households = [a for a in self.accounts.values()
-                          if a['kind'] == 'household' and a['province_id'] == source_id]
-            moved_gold, moved_stock = 0.0, defaultdict(float)
-            for account_id, count in self._split_people(people, households).items():
-                moved = self._move_household_share(self.accounts[account_id], destination_id, count)
-                moved_gold += moved['gold']
-                for good, quantity in moved['stock'].items():
-                    moved_stock[good] += quantity
-            source_row['migration_out'] += people
-            destination_row['migration_in'] += people
-            incoming[destination_id] += people
-            self.report['migration'].append(dict(source_province=source_id,
-                destination_province=destination_id, state_id=self.owners[source_id], people=people,
-                source_stress=source_row['food_stress'], destination_stress=destination_row['food_stress'],
-                distance=distance, gold=moved_gold, stock=dict(moved_stock),
-                cause='chronic_food_stress'))
+        # Числовое тело (давление, выбор цели, комната и число людей) — в
+        # settlement_kernel: там же Python-эталон и fallback без собранного
+        # .pyd. RNG перемешивания, маршруты, переводы и склад остаются
+        # Python-хуками границы, поэтому порядок сделок и RNG прежние.
+        moved_rows = _settlement.run_migration(rows, _settlement.MigrationHooks(self),
+                                               cfg, EPS)
+        self.report['migration'].extend(moved_rows)
         for row in rows.values():
             row['population_after'] = self._province_population(row['province_id'])
 
