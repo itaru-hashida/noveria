@@ -1,26 +1,11 @@
-"""Граница дивидендов: одна привязка реализации на импорт.
-
-Ядро считает числа, граница даёт ему доступ к движку через узкий набор хуков и
-превращает числовые записи в строки отчёта. Деньги двигает только прежний
-``Economy.transfer``; собственного ledger у границы нет, второй cash ledger не
-заводится.
-
-Эталонная Python-реализация живёт в этом же модуле: она нужна как образец для
-focused-тестов и как fallback, если расширение не собрано. Имена привязываются
-один раз при импорте, чтобы не платить за диспетчер на каждом предприятии.
-"""
+"""Подготовка условий выплаты и последовательное применение дивидендов."""
 
 import importlib
 import sys
 
 
 class DividendHooks:
-    """Живой доступ ядра к движку: только чтение плюс два side-effect-хука.
-
-    Хуки намеренно узкие. Всё, что говорит с книгой офферов, складом или
-    словарями движка, остаётся в Python: ядру не нужны ни офферы, ни товары,
-    ни пути — только уже посчитанные числа.
-    """
+    """Доступ Python-границы к счетам, рыночным данным и отчёту."""
 
     def __init__(self, engine, sells):
         self.engine = engine
@@ -160,12 +145,17 @@ def cash_after_commitments_python(balance, reserved, protected, project_reserve,
     return max(0, balance-reserved-hold)
 
 
-def pay_dividends_python(hooks):
-    """Эталон числового среза: те же числа, тот же порядок, те же хуки."""
+def calculate_dividend_python(profit, share, available):
+    limit = share*max(0, profit)
+    return limit, min(limit, available)
+
+
+def _pay_dividends(hooks, group_accounts, available_cash, calculate):
+    """Подготовить и провести выплаты последовательно по предприятиям."""
     month = hooks.month()
     revision = hooks.revision()
     owners = hooks.owner_kinds()
-    groups = household_groups_python(hooks.accounts())
+    groups = group_accounts(hooks.accounts())
     records = []
     for enterprise in hooks.enterprises():
         if enterprise.get('dividend_month') == month:
@@ -189,11 +179,10 @@ def pay_dividends_python(hooks):
             total = 0
         working = working_reserve_python(hooks, enterprise)
         project = hooks.project_reserve(sender)
-        available = cash_after_commitments_python(hooks.balance(sender),
+        available = available_cash(hooks.balance(sender),
             hooks.reserved(sender), hooks.protected(sender), project, working)
         share = hooks.share(revision)
-        limit = share*max(0, enterprise['profit'])
-        amount = min(limit, available)
+        limit, amount = calculate(enterprise['profit'], share, available)
         if revision:
             paid = min(amount, hooks.balance(sender))
         else:
@@ -226,23 +215,25 @@ def load_dividend_kernel():
         return None
 
 
-NATIVE_KERNEL = False
+def pay_dividends_python(hooks):
+    return _pay_dividends(hooks, household_groups_python,
+                          cash_after_commitments_python, calculate_dividend_python)
+
+
+def run_pay_dividends(hooks):
+    return _pay_dividends(hooks, household_groups, cash_after_commitments,
+                          calculate_dividend)
 
 _kernel = load_dividend_kernel()
-if _kernel is not None:
-    household_groups = _kernel.household_groups
-    working_reserve = _kernel.working_reserve
-    cash_after_commitments = _kernel.cash_after_commitments
-    run_pay_dividends = _kernel.pay_dividends
-    NATIVE_KERNEL = True
-else:
-    household_groups = household_groups_python
-    working_reserve = working_reserve_python
-    cash_after_commitments = cash_after_commitments_python
-    run_pay_dividends = pay_dividends_python
+household_groups = getattr(_kernel, 'household_groups', household_groups_python)
+working_reserve = working_reserve_python
+cash_after_commitments = getattr(
+    _kernel, 'cash_after_commitments', cash_after_commitments_python)
+calculate_dividend = getattr(_kernel, 'calculate_dividend', calculate_dividend_python)
+NATIVE_KERNEL = calculate_dividend is not calculate_dividend_python
 
 
 def pay_dividends(engine, sells):
-    """Единственная точка входа: ядро поверх хуков, без второй копии цикла."""
+    """Единственная точка входа для выплаты дивидендов."""
     hooks = DividendHooks(engine, sells)
     return run_pay_dividends(hooks)

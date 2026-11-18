@@ -282,6 +282,11 @@ def test_limit_expansion_keeps_zero_working_cash():
 
 def test_fallback_switches_to_the_python_reference(monkeypatch):
     assert boundary.NATIVE_KERNEL is True, 'ожидалось собранное ядро'
+    kernel = boundary.load_project_completion_kernel()
+    assert boundary.materials_ready is kernel.materials_ready
+    assert boundary.cash_ready is kernel.cash_ready
+    assert boundary.capacity_values is kernel.capacity_values
+    assert not hasattr(kernel, 'run_finish')
     accounts = [make_account('a1', project=make_project())]
     enterprises = {'a1': {'id': 'a1', 'good': 'flour', 'capacity': 10,
                           'asset_value': 100.0}}

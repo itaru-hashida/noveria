@@ -644,21 +644,21 @@ def test_reference_equals_native_for_legacy_branch():
 # ---------------------------------------------------------------------------
 
 def test_boundary_exposes_native_when_built():
-    built = dividend_boundary.load_dividend_kernel() is not None
+    built = hasattr(dividend_boundary.load_dividend_kernel(), 'calculate_dividend')
     assert dividend_boundary.NATIVE_KERNEL is built
     if built:
-        assert dividend_boundary.run_pay_dividends.__module__.endswith('dividend_kernel')
+        assert dividend_boundary.calculate_dividend.__module__.endswith('dividend_kernel')
         assert dividend_boundary.pay_dividends.__module__.endswith('dividend_boundary')
     else:
-        assert dividend_boundary.run_pay_dividends is dividend_boundary.pay_dividends_python
+        assert dividend_boundary.calculate_dividend is dividend_boundary.calculate_dividend_python
 
 
 def test_native_entry_points_are_compiled():
     kernel = dividend_boundary.load_dividend_kernel()
-    if kernel is None:
+    if not hasattr(kernel, 'calculate_dividend'):
         pytest.skip('Cython-расширение dividend_kernel не собрано')
-    assert dividend_boundary.run_pay_dividends is kernel.pay_dividends
-    assert dividend_boundary.run_pay_dividends is not dividend_boundary.pay_dividends_python
+    assert dividend_boundary.calculate_dividend is kernel.calculate_dividend
+    assert not hasattr(kernel, 'pay_dividends')
 
 
 def test_load_returns_none_when_extension_absent(monkeypatch):
@@ -694,7 +694,7 @@ def test_fallback_without_extension(monkeypatch):
     importlib.reload(dividend_boundary)
     try:
         assert dividend_boundary.NATIVE_KERNEL is False
-        assert dividend_boundary.run_pay_dividends is dividend_boundary.pay_dividends_python
+        assert dividend_boundary.calculate_dividend is dividend_boundary.calculate_dividend_python
         assert dividend_boundary.pay_dividends.__module__.endswith('dividend_boundary')
         fallback = clone(engine)
         fallback.pay_dividends({})

@@ -1,38 +1,4 @@
-"""Граница завершения проектов: одна привязка реализации на импорт.
-
-В Cython уходят два числовых среза состояния проектов:
-
-  * цикл ``Economy.finish_projects``: проверка сметы и кассы, накопление
-    ``asset`` из доставки и склада, запись ``e['capacity']`` и
-    ``e['asset_value']`` при расширении;
-  * ``Economy.limit_project_capacity``: пересчёт ``requested_capacity``,
-    ``capacity``, ``working_cash``, ``expected_profit``,
-    ``expected_investment`` ещё не начатого проекта.
-
-Что осталось в Python и почему:
-
-  * список счетов, порядок обхода и выбор проектов — в ``v3``: ядро получает
-    готовый список;
-  * снятие проекта со счёта, защита денег и перевод доставки — хуки: деньги
-    двигает прежний ``Economy.transfer`` через ``cash_store``, а ``protected``
-    пишет сам ``CashStore``; второго cash ledger нет;
-  * склад уменьшает прежний ``use_stock`` (через существующую stock
-    boundary) — хук, второй склад не заводится;
-  * создание предприятия, квитанции, отчёты, события и lifecycle — хуки:
-    это выбор/создание и отчётность, а не numeric-записи;
-  * расчёт ``chain_requirements`` — хук движка, ядро лишь передаёт аргументы;
-  * текстовая причина ``capacity_limit`` приходит аргументом из границы:
-    ядро пишет её в тот же момент, что и прежний код, но само строк не
-    содержит.
-
-Арифметика намеренно ``object``: смета и доставка бывают и int, и float,
-и тип результата виден дальше в отчёте. Порядок сложений ``asset`` и порядок
-ключей ``project.update(...)`` сохранены буквально.
-
-Эталонная Python-реализация живёт в этом же модуле: она нужна как образец
-для focused-теста на побитовое совпадение и как fallback, если расширение
-не собрано. Имена привязываются один раз при импорте.
-"""
+"""Проверка готовности проекта и последовательное применение завершения."""
 
 import importlib
 
@@ -122,16 +88,24 @@ class ProjectCompletionHooks(object):
                  enterprise=e['id']))
 
 
-def run_finish_python(engine, accounts, hooks, eps):
-    """Эталон числового цикла finish_projects — буквальный прежний код V3."""
+def materials_ready_python(bill, materials, eps):
+    return not any(materials.get(g, 0)+eps < q for g, q in bill.items())
+
+
+def cash_ready_python(free, protected, needed, eps):
+    return not (free+protected+eps < needed)
+
+
+def _run_finish(engine, accounts, hooks, eps, has_materials, has_cash):
+    """Проверить готовность и применить завершение проекта."""
     for a in accounts:
         p = a.get('project')
         if not p:
             continue
         bill = hooks.construction_bill(p['capacity'])
         need_cash = p['working_cash']+p.get('delivery', 0)
-        if any(p['materials'].get(g, 0)+eps < q for g, q in bill.items()) \
-                or hooks.free_cash(a['id'])+a.get('protected', 0)+eps < need_cash:
+        if (bill and not has_materials(bill, p['materials'], eps)) \
+                or not has_cash(hooks.free_cash(a['id']), a.get('protected', 0), need_cash, eps):
             hooks.pending(a, p)
             continue
         hooks.detach_project(a)
@@ -151,8 +125,11 @@ def run_finish_python(engine, accounts, hooks, eps):
     return None
 
 
-def limit_project_capacity_python(project, capacity, eps, hooks, reason):
-    """Эталон урезания мощности — буквальный прежний код V3."""
+def capacity_values_python(previous, capacity, profit, construction, working):
+    return round(previous, 12), profit*capacity/previous, construction*capacity/previous+working
+
+
+def _limit_capacity(project, capacity, eps, hooks, reason, calculate):
     previous = project['capacity']
     if capacity+eps >= previous:
         return False
@@ -160,10 +137,11 @@ def limit_project_capacity_python(project, capacity, eps, hooks, reason):
     construction = max(0, project['expected_investment']-previous_working)
     working = 0 if project['expansion'] else max(hooks.startup_cash(),
         capacity*project['expected_unit_cost'])
-    project.update(requested_capacity=round(previous, 12), capacity=capacity,
+    requested, profit, investment = calculate(
+        previous, capacity, project['expected_profit'], construction, working)
+    project.update(requested_capacity=requested, capacity=capacity,
         working_cash=working,
-        expected_profit=project['expected_profit']*capacity/previous,
-        expected_investment=construction*capacity/previous+working,
+        expected_profit=profit, expected_investment=investment,
         chain_requirements=hooks.recipe_requirements(project['good'], capacity),
         capacity_limit=reason)
     return True
@@ -182,23 +160,32 @@ def load_project_completion_kernel():
         return None
 
 
-NATIVE_KERNEL = False
+def run_finish_python(engine, accounts, hooks, eps):
+    return _run_finish(engine, accounts, hooks, eps, materials_ready_python, cash_ready_python)
+
+
+def run_finish(engine, accounts, hooks, eps):
+    return _run_finish(engine, accounts, hooks, eps, materials_ready, cash_ready)
+
+
+def limit_project_capacity_python(project, capacity, eps, hooks, reason):
+    return _limit_capacity(project, capacity, eps, hooks, reason, capacity_values_python)
+
+
+def limit_capacity(project, capacity, eps, hooks, reason):
+    return _limit_capacity(project, capacity, eps, hooks, reason, capacity_values)
 
 _kernel = load_project_completion_kernel()
-if _kernel is not None:
-    run_finish = _kernel.run_finish
-    limit_capacity = _kernel.limit_project_capacity
-    NATIVE_KERNEL = True
-else:
-    run_finish = run_finish_python
-    limit_capacity = limit_project_capacity_python
+materials_ready = getattr(_kernel, 'materials_ready', materials_ready_python)
+cash_ready = getattr(_kernel, 'cash_ready', cash_ready_python)
+capacity_values = getattr(_kernel, 'capacity_values', capacity_values_python)
+NATIVE_KERNEL = materials_ready is not materials_ready_python
 
 
 def finish_projects(engine):
     """Единственная точка входа из ``Economy.finish_projects``.
 
-    ``accounts`` — живой словарь счетов: ядро обходит его готовый список
-    значений в прежнем порядке, сам сортировок не делает.
+    Граница обходит снимок списка счетов в порядке вставки.
     """
     run_finish(engine, list(engine.accounts.values()),
         ProjectCompletionHooks(engine), EPS)
