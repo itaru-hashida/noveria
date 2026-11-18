@@ -384,7 +384,7 @@ def reprice_input_order_python(engine, buy, sells):
         store.set_reserved(buy, buy['reserved']+extra)
         buy.setdefault('initial_input_limit', buy['price'])
         store.set_price(buy, price)
-        buy['backing'] = buy['reserved']
+        store.set_metadata(buy, 'backing', buy['reserved'])
         engine._demand_revision[buy['good']] += 1
 
 
@@ -404,7 +404,7 @@ def reprice_input_order(engine, buy, sells):
         store.set_reserved(buy, buy['reserved']+extra)
         buy.setdefault('initial_input_limit', buy['price'])
         store.set_price(buy, price)
-        buy['backing'] = buy['reserved']
+        store.set_metadata(buy, 'backing', buy['reserved'])
         engine._demand_revision[buy['good']] += 1
 
 

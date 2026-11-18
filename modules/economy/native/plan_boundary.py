@@ -151,7 +151,7 @@ class PlanHooks(object):
                                  price, purpose)
 
     def mark_adaptive(self, order):
-        order['adaptive_input_budget'] = True
+        self.engine.order_store.set_metadata(order, 'adaptive_input_budget', True)
 
     def order_ids(self, first_order):
         return [o['id'] for o in self.engine.report['orders'][first_order:]]
@@ -226,7 +226,7 @@ def input_requests_python(engine, e, sells):
         _, price, _ = engine.quoted_cost(a, good, quantity, sells)
         order = engine.order(e['id'], good, quantity, 'buy', price, 'Сырьё')
         if order:
-            order['adaptive_input_budget'] = True
+                    engine.order_store.set_metadata(order, 'adaptive_input_budget', True)
     for good, required in engine.equipment_requirements(recipe, target).items():
         quantity = max(0, required-engine.free_stock(e['id'], good))
         _, price, _ = engine.quoted_cost(a, good, quantity, sells)

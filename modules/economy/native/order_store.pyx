@@ -268,6 +268,14 @@ cdef class OrderStore:
             self.price[slot] = value
         order['price'] = value
 
+    def set_quantity(self, object order, object value):
+        """Set the immutable-order quantity through the owner boundary."""
+        order['quantity'] = value
+
+    def set_metadata(self, object order, object key, object value):
+        """Set non-column order metadata through the owner boundary."""
+        order[key] = value
+
     # --- выдача слотов -----------------------------------------------------
     def iter_live(self):
         """Живая заявка вместе с её стабильным номером слота.

@@ -450,3 +450,11 @@ Planning и production outlook получили именованные calculati
 Пересборка Cython выполнена GCC. Focused production-outlook/plan/parity:
 58 passed. Полный pytest не запускался. Аудит полного ownership stock/orders/
 reservations продолжается отдельным следующим срезом.
+
+## 2026-11-18 — завершение ownership metadata заявок
+
+`OrderStore` получил узкие методы `set_quantity` и `set_metadata`. Записи
+`quantity`, `backing`, `reason` и `adaptive_input_budget` в release, matching,
+repricing и planning теперь проходят через владельца заявки; колоночные поля
+`remaining`, `reserved`, `status`, `price` уже были закрыты ранее. Порядок
+расчёта и применение результата не менялись.

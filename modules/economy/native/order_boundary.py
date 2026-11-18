@@ -128,6 +128,12 @@ class OrderStorePython:
             self.price[slot] = value
         order['price'] = value
 
+    def set_quantity(self, order, value):
+        order['quantity'] = value
+
+    def set_metadata(self, order, key, value):
+        order[key] = value
+
     def is_live(self, order, eps=_EPS):
         slot = self._slot(order)
         if slot < 0:
