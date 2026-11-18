@@ -416,3 +416,20 @@ driver; callbacks и extensions выполняются в прежнем Python-
 
 `match_kernel` и изменённые native extensions пересобраны GCC. Focused
 matcher/driver/monthly parity: 68 passed. Полный pytest не запускался.
+
+## 2026-11-18 — именованные контракты numeric market calculations
+
+Позиционные tuples заменены на именованные Python records
+`TradeCalculationInputs/Result` и `MatchQuantityInputs/Result`. Trade input
+содержит только числа/флаг расчёта (касса, цены, резерв, налог, количество и
+freight); route path/distance, идентификаторы заявок, month/trade number и
+`trade_id` остаются в Python application boundary. Match input содержит только
+live-снятые числовые значения; обход и callbacks по-прежнему Python.
+
+Граница сохраняет Python object ABI: Cython получает именованный Python
+record, читает его атрибуты и возвращает numeric tuple, который boundary
+оборачивает в именованный result. Live objects в kernel не передаются,
+числовые типы и порядок арифметики не меняются.
+
+GCC rebuild выполнен. Focused trade/matcher/driver/monthly parity: 108 passed.
+Полный pytest не запускался.

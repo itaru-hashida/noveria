@@ -13,11 +13,11 @@ _PY_MIN = builtins.min
 
 def calculate_quantity(object prepared, object eps):
     """Pure q/eligibility calculation from explicit numeric inputs."""
-    cdef object buy_remaining = prepared[0]
-    cdef object sell_remaining = prepared[1]
-    cdef object reserved = prepared[2]
-    cdef object price = prepared[3]
-    cdef object purchase = prepared[4]
+    cdef object buy_remaining = prepared.buy_remaining
+    cdef object sell_remaining = prepared.sell_remaining
+    cdef object reserved = prepared.reserved
+    cdef object price = prepared.price
+    cdef object purchase = prepared.purchase_quantity
     cdef object q = _PY_MIN(buy_remaining, sell_remaining,
                             reserved/price, purchase)
     if q <= eps:

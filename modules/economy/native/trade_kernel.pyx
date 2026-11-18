@@ -20,26 +20,20 @@ _PY_MIN = builtins.min
 
 def calculate_trade(object prepared, object eps):
     """Pure numeric calculation over prepared data."""
-    cdef object free_cash = prepared[6]
-    cdef object buy_price = prepared[7]
-    cdef object buy_reserved = prepared[8]
-    cdef object consumption_tax = prepared[9]
-    cdef bint final_consumption = prepared[10]
-    cdef object freight = prepared[3]
-    cdef object distance = prepared[4]
-    cdef object path = prepared[5]
-    cdef object sell_price = prepared[15]
-    cdef object month = prepared[16]
-    cdef object trade_number = prepared[17]
-    cdef object quantity = prepared[18]
-    cdef object price = prepared[19]
+    cdef object free_cash = prepared.free_cash
+    cdef object buy_price = prepared.buy_price
+    cdef object buy_reserved = prepared.buy_reserved
+    cdef object consumption_tax = prepared.consumption_tax
+    cdef bint final_consumption = prepared.final_consumption
+    cdef object quantity = prepared.quantity
+    cdef object price = prepared.landed_price
+    cdef object sell_price = prepared.sell_price
+    cdef object freight = prepared.freight
     cdef object release = quantity*buy_price
     cdef object gross
     cdef object tax
-    cdef object trade_id
     if quantity*price > free_cash+release+eps:
         release = _PY_MIN(buy_reserved, _PY_MAX(release, quantity*price))
     gross = quantity*sell_price
     tax = gross*consumption_tax if final_consumption else 0.0
-    trade_id = f'{month}:trade:{trade_number}'
-    return (release, gross, tax, trade_id, quantity*freight, distance, path)
+    return (release, gross, tax, quantity*freight)

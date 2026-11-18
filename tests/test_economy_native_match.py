@@ -378,7 +378,8 @@ def test_native_and_reference_agree_with_int_quantities():
 
 def test_boundary_binds_compiled_kernel():
     assert match_boundary.NATIVE_MATCH_KERNEL is True
-    assert match_boundary.calculate_quantity is KERNEL.calculate_quantity
+    assert match_boundary.calculate_quantity is not KERNEL.calculate_quantity
+    assert match_boundary.calculate_quantity.__module__.endswith('match_boundary')
     assert match_boundary.run_match is not KERNEL.calculate_quantity
     assert match_boundary.run_match is not match_boundary.run_match_python
     assert match_boundary.run_match.__module__.endswith('match_boundary')

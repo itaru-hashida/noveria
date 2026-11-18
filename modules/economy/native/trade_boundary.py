@@ -15,7 +15,17 @@ focused-теста на побитовое совпадение и как fallba
 
 import builtins
 import importlib
+from collections import namedtuple
 from .stock_store_boundary import get_stock_store
+
+
+TradeCalculationInputs = namedtuple(
+    'TradeCalculationInputs',
+    'free_cash buy_price buy_reserved consumption_tax final_consumption '
+    'quantity landed_price sell_price freight')
+TradeCalculationResult = namedtuple(
+    'TradeCalculationResult',
+    'release gross tax freight_value')
 
 
 class _TradeTransaction(object):
@@ -187,41 +197,38 @@ _PY_MIN = builtins.min
 
 def prepare_trade_inputs(owner, buy, sell, quote, quantity, price):
     """Снять данные сделки до записей для чистого расчёта."""
-    buyer_id = buy['participant']
-    seller_id = sell['participant']
-    good = buy['good']
-    freight, distance, path = quote[1:]
-    seller = owner.accounts[seller_id]
-    return (buyer_id, seller_id, good, freight, distance, path,
-            owner.free_cash(buyer_id), buy['price'], buy['reserved'],
-            owner.cfg['consumption_tax'], buy.get('final_consumption', False),
-            buy['purpose'], seller['state_id'], buy['id'], sell['id'],
-            sell['price'], owner.meta['month'], len(owner.report['trades']),
-            quantity, price)
+    freight = quote[1]
+    return TradeCalculationInputs(
+        owner.free_cash(buy['participant']), buy['price'], buy['reserved'],
+        owner.cfg['consumption_tax'], buy.get('final_consumption', False),
+        quantity, price, sell['price'], freight)
 
 
 def calculate_trade_python(prepared, eps):
     """Независимый Python-эталон чистого расчёта сделки."""
-    (buyer_id, seller_id, good, freight, distance, path, free_cash,
-     buy_price, buy_reserved, consumption_tax,
-     final_consumption, purpose, seller_state, buy_order, sell_order,
-     sell_price, month, trade_number, quantity, price) = prepared
-    release = quantity*buy_price
-    if quantity*price > free_cash+release+eps:
-        release = _PY_MIN(buy_reserved, _PY_MAX(release, quantity*price))
-    gross = quantity*sell_price
-    tax = gross*consumption_tax if final_consumption else 0.0
-    trade_id = f'{month}:trade:{trade_number}'
-    return (release, gross, tax, trade_id, quantity*freight, distance, path)
+    release = prepared.quantity*prepared.buy_price
+    if prepared.quantity*prepared.price > prepared.free_cash+release+eps:
+        release = _PY_MIN(prepared.buy_reserved,
+                          _PY_MAX(release, prepared.quantity*prepared.price))
+    gross = prepared.quantity*prepared.sell_price
+    tax = (gross*prepared.consumption_tax
+           if prepared.final_consumption else 0.0)
+    return TradeCalculationResult(release, gross, tax,
+                                  prepared.quantity*prepared.freight)
 
 
-def apply_trade(owner, buy, sell, prepared, result, eps, cash, store):
+def apply_trade(owner, buy, sell, quote, quantity, price, result, eps, cash, store):
     """Применить расчёт в прежнем порядке через живые владельцы полей."""
-    (buyer_id, seller_id, good, freight, distance, path, _free_cash,
-     _buy_price, _buy_reserved, _consumption_tax,
-     final_consumption, purpose, seller_state, _buy_order, _sell_order,
-     _sell_price, _month, _trade_number, quantity, price) = prepared
-    release, gross, tax, trade_id, freight_value, distance, path = result
+    buyer_id = buy['participant']
+    seller_id = sell['participant']
+    good = buy['good']
+    freight, distance, path = quote[1:]
+    final_consumption = buy.get('final_consumption', False)
+    purpose = buy['purpose']
+    release = result.release
+    gross = result.gross
+    tax = result.tax
+    freight_value = result.freight_value
     seller = owner.accounts[seller_id]
     cash.release_reserved_cash(buyer_id, release)
     store.set_reserved(buy, _PY_MAX(0, buy['reserved']-release))
@@ -229,6 +236,7 @@ def apply_trade(owner, buy, sell, prepared, result, eps, cash, store):
     value = owner.use_stock(seller_id, good, quantity)
     owner.add_stock(buyer_id, good, quantity, quantity*price)
     flow_start = len(owner.report['flows'])
+    trade_id = f'{owner.meta["month"]}:trade:{len(owner.report["trades"])}'
     owner.transfer(buyer_id, seller_id, gross-tax, 'Товар')
     owner.transfer(buyer_id, 'treasury:'+seller['state_id'], tax,
                    'Налог с конечной потребительской продажи')
@@ -332,8 +340,9 @@ if _kernel is not None:
     def commit_trade(owner, buy, sell, quote, quantity, price, eps, cash, store):
         """Prepare/apply in Python; call only the pure native calculation."""
         prepared = prepare_trade_inputs(owner, buy, sell, quote, quantity, price)
-        result = _kernel.calculate_trade(prepared, eps)
-        return apply_trade(owner, buy, sell, prepared, result, eps, cash, store)
+        result = TradeCalculationResult(*_kernel.calculate_trade(prepared, eps))
+        return apply_trade(owner, buy, sell, quote, quantity, price, result,
+                           eps, cash, store)
     NATIVE_TRADE_KERNEL = True
 else:
     commit_trade = commit_trade_python

@@ -18,12 +18,19 @@ focused-тестов на побитовое совпадение и как fall
 import builtins
 import importlib
 import math
+from collections import namedtuple
 
 # Встроенный min сохраняет тип аргумента: ``q`` остаётся целым, если все
 # аргументы целые, — ровно как в прежнем Python-цикле. ``max`` сохраняет тип
 # так же: адаптивная цена household-заявки остаётся целой при целых входах.
 _PY_MAX = builtins.max
 _PY_MIN = builtins.min
+
+
+MatchQuantityInputs = namedtuple(
+    'MatchQuantityInputs',
+    'buy_remaining sell_remaining reserved price purchase_quantity')
+MatchQuantityResult = namedtuple('MatchQuantityResult', 'quantity')
 
 
 def _row_id(row):
@@ -38,9 +45,9 @@ def _same_level(left, right):
 
 def calculate_quantity_python(prepared, eps):
     """Независимый числовой oracle для одной уже разрешённой пары."""
-    buy_remaining, sell_remaining, reserved, price, purchase = prepared
-    q = _PY_MIN(buy_remaining, sell_remaining, reserved/price, purchase)
-    return q if q > eps else 0
+    q = _PY_MIN(prepared.buy_remaining, prepared.sell_remaining,
+                prepared.reserved/prepared.price, prepared.purchase_quantity)
+    return MatchQuantityResult(q if q > eps else 0)
 
 
 def run_match_python(owner, buy, options, sells, eps, cash, store, commit):
@@ -159,9 +166,10 @@ def _run_match_calculated(owner, buy, options, sells, eps, cash, store, commit,
         for price, sell, quote in owner.shuffled(tied, key=_row_id):
             if price > buy['price']+eps:
                 continue
-            prepared = (buy['remaining'], sell['remaining'], buy['reserved'],
-                        price, purchase(buy, sells))
-            q = calculate(prepared, eps)
+            prepared = MatchQuantityInputs(
+                buy['remaining'], sell['remaining'], buy['reserved'],
+                price, purchase(buy, sells))
+            q = calculate(prepared, eps).quantity
             if q <= eps:
                 continue
             commit(owner, buy, sell, quote, q, price, eps, cash, store)
@@ -182,7 +190,9 @@ NATIVE_MATCH_DRIVER = False
 
 _kernel = load_match_kernel()
 if _kernel is not None:
-    calculate_quantity = _kernel.calculate_quantity
+    def calculate_quantity(prepared, eps):
+        """Return the named native result without exposing live state."""
+        return MatchQuantityResult(_kernel.calculate_quantity(prepared, eps))
     NATIVE_MATCH_KERNEL = True
 else:
     calculate_quantity = calculate_quantity_python
