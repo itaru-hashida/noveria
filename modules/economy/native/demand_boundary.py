@@ -340,8 +340,7 @@ def expected_stock_sales(engine, e, sells, reachable=None):
     history = e.get('sales_history', [])[-3:]
     stock = engine.accounts[e['id']]['stock'].get(e['good'], 0)
     result = run_stock_sales(stock, offered, reachable, history)
-    cache[e['id']] = result
-    engine._stock_sales_cache = cache
+    engine.store_stock_sales(e['id'], result)
     return result
 
 
@@ -363,8 +362,7 @@ def expected_stock_sales_python(engine, e, sells, reachable=None):
                     if history else 0.0)
     expected = max(reachable, average_sold)
     result = min(engine.accounts[e['id']]['stock'].get(e['good'], 0), offered, expected)
-    cache[e['id']] = result
-    engine._stock_sales_cache = cache
+    engine.store_stock_sales(e['id'], result)
     return result
 
 

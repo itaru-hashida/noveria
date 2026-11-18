@@ -35,7 +35,7 @@ def monthly_step_python(engine, eps, planning_mode='v3', investment_mode='v3',
     hooks = getattr(engine, 'monthly_hooks', None) or MonthlyHooks(engine)
     engine.__dict__.pop('_planning_orders', None)
     engine.__dict__.pop('_recovery_quotes', None)
-    engine.__dict__.pop('_stock_sales_cache', None)
+    engine.invalidate_stock_sales_cache()
     engine.activate_rules()
     engine.accounts = dict(sorted(engine.accounts.items()))
     engine.enterprises = dict(sorted(engine.enterprises.items()))

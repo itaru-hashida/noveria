@@ -1030,7 +1030,10 @@ def apply_recovery(engine, data, meta, sells):
     # Восстанавливаем именно те cache entries, которые V3 создал во время recovery.
     # Все поля и версии книг взяты из journal: повторный production_outlook здесь
     # увидел бы уже отменённые offers и мог бы вернуть другой план.
-    outlook_cache = getattr(engine, '_production_outlook_cache', {})
+    # Hydrate detached dictionaries and publish them atomically at the end.
+    # Recovery must retain the old whole-cache replacement behavior, while an
+    # injected failure must not partially mutate the live cache.
+    outlook_cache = dict(getattr(engine, '_production_outlook_cache', {}))
     stock_cache = {}
     limits = ('Готовые запасы', 'Нет обеспеченного спроса', 'План',
               'Отрицательная ожидаемая маржа')
@@ -1070,8 +1073,8 @@ def apply_recovery(engine, data, meta, sells):
             planned_price=float(data['recovery_planned_price'][index]),
             expected_fixed_cost=float(data['recovery_fixed_cost'][index]),
             expected_fixed_unit=float(data['recovery_fixed_unit'][index]))
-    engine._production_outlook_cache = outlook_cache
-    engine._stock_sales_cache = stock_cache
+    engine.replace_production_outlook_cache(outlook_cache)
+    engine.replace_stock_sales_cache(stock_cache)
     # defaultdict V3 материализует нулевую ревизию для каждого оценённого товара.
     for index, e in enumerate(enterprises):
         if data['recovery_outlook_valid'][index]:

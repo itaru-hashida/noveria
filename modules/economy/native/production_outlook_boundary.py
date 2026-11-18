@@ -181,8 +181,7 @@ def production_outlook(engine, e, sells=None):
     hooks = OutlookHooks(engine, copy_e, sells)
     result = _compute(engine, copy_e, hooks)
     if key is not None:
-        cache[key] = result
-        engine._production_outlook_cache = cache
+        engine.store_production_outlook(key, result)
     return result
 
 
@@ -199,16 +198,29 @@ def _compute(engine, e, hooks):
     price = run_price(e['price'], base_net, cost,
                       e.get('production_price', e['price']), EPS)
     quote = dict(e, price=price)
-    if (_forecast_from_books is not None and NATIVE_KERNEL
-            and run_outlook is _kernel.outlook
-            and _demand.cover_demand_from_books is not None):
-        return _compute_from_books(engine, e, quote, hooks, cost, base_net)
     snapshot = _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote)
-    return _compute_snapshot(snapshot)
+    result, sales = _compute_snapshot(snapshot)
+    if snapshot.get('stock_cache_owner') is not None:
+        engine.store_stock_sales(snapshot['stock_cache_owner'],
+                                 sales)
+    return result
 
 
-def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote):
-    """Собрать все engine-facing чтения до native calculation."""
+def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote,
+                      *, use_books=None):
+    """Собрать все engine-facing чтения до числового расчёта.
+
+    Both the optimized native path and the Python fallback cross this same
+    boundary.  No engine-facing hook runs after the returned snapshot reaches
+    the calculator.
+    """
+    if use_books is None:
+        use_books = (_forecast_from_books is not None and NATIVE_KERNEL
+                     and run_outlook is _kernel.outlook
+                     and _demand.cover_demand_from_books is not None)
+    if use_books:
+        return _prepare_books_snapshot(engine, e, hooks, cost, base_net, price,
+                                       quote)
     demand = hooks.reachable_demand(quote)
     expected_sales = (
         hooks.expected_stock_sales(demand if price == e['price'] else None)
@@ -235,9 +247,13 @@ def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote):
     }
 
 
-def _compute_snapshot(snapshot):
-    """Единственная native calculation boundary для готового snapshot."""
-    return run_outlook(snapshot['observations'], snapshot['sales_forecast'],
+def _compute_snapshot(snapshot, calculator=None):
+    """Единственная calculation boundary для готового snapshot."""
+    if snapshot.get('book_input') is not None:
+        outlook, sales = _forecast_from_books(*snapshot['book_input'])
+        return outlook, sales
+    calculator = calculator or run_outlook
+    return calculator(snapshot['observations'], snapshot['sales_forecast'],
                        snapshot['trades'], snapshot['seller'], snapshot['good'],
                        snapshot['demand'], snapshot['expected_sales'],
                        snapshot['stock_planning'], snapshot['stock'],
@@ -245,11 +261,11 @@ def _compute_snapshot(snapshot):
                        snapshot['cost'], snapshot['expected_price'],
                        snapshot['overhead'], EPS,
                        snapshot['overstock_factor'], snapshot['decline_rate'],
-                       snapshot['price'])
+                       snapshot['price']), None
 
 
-def _compute_from_books(engine, e, quote, hooks, cost, base_net):
-    """Подготовить живые входы и опубликовать кэш после расчёта."""
+def _prepare_books_snapshot(engine, e, hooks, cost, base_net, price, quote):
+    """Подготовить входы книги без чтений после создания snapshot."""
     sells = hooks.sells
     owner, good, price = e['id'], e['good'], quote['price']
     revision = engine.STOCK_PLANNING_REVISION
@@ -276,11 +292,8 @@ def _compute_from_books(engine, e, quote, hooks, cost, base_net):
         hooks.overhead(), EPS, engine.cfg['output_overstock_factor'],
         engine.cfg['output_decline_rate'], price,
     )
-    outlook, sales = _forecast_from_books(demand_input, stock_input, outlook_input)
-    if cache is not None:
-        cache[owner] = sales
-        engine._stock_sales_cache = cache
-    return outlook
+    return dict(book_input=(demand_input, stock_input, outlook_input),
+                stock_cache_owner=owner if cache is not None else None)
 
 
 def load_production_outlook_kernel():

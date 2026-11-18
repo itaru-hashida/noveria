@@ -126,12 +126,15 @@ class Economy(EconomyServices):
     def reset_report(self):
         # Рыночные кэши живут строго один отчётный месяц. Это также нужно
         # лабораторным сценариям, которые вручную начинают следующий месяц.
-        for key in ('_market_books', '_landed_cache', '_customer_order_index',
-                    '_physical_stock_totals', '_match_observation_count',
-                    '_customer_quotes_cache',
+        self.clear_market_books()
+        self.invalidate_landed_cache()
+        self.invalidate_production_outlook_cache()
+        self.invalidate_stock_sales_cache()
+        for key in ('_customer_order_index', '_physical_stock_totals',
+                    '_match_observation_count', '_customer_quotes_cache',
                     '_customer_demand_rows_cache', '_quoted_cost_cache',
-                    '_reference_price_cache', '_unit_cost_cache', '_production_outlook_cache',
-                    '_market_signal_cache', '_route_order_components', '_market_source_index'):
+                    '_reference_price_cache', '_unit_cost_cache',
+                    '_market_signal_cache', '_route_order_components'):
             self.__dict__.pop(key, None)
         self._market_quote_version = 0
         self._demand_revision = defaultdict(int)
@@ -1702,8 +1705,7 @@ class Economy(EconomyServices):
             # Книга запоминает хранилище, из которого пришли слоты заявок:
             # представление читает колонки по номерам, а не по id(order).
             slot_store=self.order_store, slots=None, slot_version=None)
-        books[key] = entry
-        self._market_books = books
+        self.store_market_book(key, entry)
         if record:
             self._record_market_board(entry, buyer, good)
         return entry
@@ -1741,7 +1743,7 @@ class Economy(EconomyServices):
         sell_orders(). Метод нужен редактору мира и лабораторным сценариям,
         которые вручную меняют уже опубликованный оффер.
         """
-        self.__dict__.pop('_market_books', None)
+        self.clear_market_books()
         self.mark_market_quotes_dirty()
 
     def _record_market_board(self, book, buyer, good):

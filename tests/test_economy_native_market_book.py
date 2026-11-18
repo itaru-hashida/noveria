@@ -351,6 +351,21 @@ def test_route_invalidation_drops_component_index():
     assert ids(engine._market_book(buyer, 'grain', sells)) == ['a']
 
 
+def test_route_invalidation_drops_landed_and_stock_sales_caches():
+    """A route edit invalidates both reachable and unreachable derived reads."""
+    engine = make_engine([tile('t1', 0, 0), tile('t2', 1, 0, passable=False)])
+    assert engine.landed('t1', 't1', 'grain', 0) is not None
+    assert engine.landed('t2', 't1', 'grain', 0) is None
+    engine.store_stock_sales('firm', 3.0)
+    assert engine.__dict__.get('_landed_cache')
+    assert engine.__dict__.get('_stock_sales_cache') == {'firm': 3.0}
+
+    engine.invalidate_routes()
+
+    assert '_landed_cache' not in engine.__dict__
+    assert '_stock_sales_cache' not in engine.__dict__
+
+
 def test_price_change_after_invalidation_is_visible():
     engine = make_engine()
     buyer = engine.accounts['h']

@@ -99,7 +99,7 @@ def monthly_step(object engine, object eps, object planning_mode='v3',
     # --- пролог: месяц, отчёт, счета, склад -------------------------------
     engine.__dict__.pop('_planning_orders', None)
     engine.__dict__.pop('_recovery_quotes', None)
-    engine.__dict__.pop('_stock_sales_cache', None)
+    engine.invalidate_stock_sales_cache()
     engine.activate_rules()
     engine.accounts = dict(sorted(engine.accounts.items()))
     engine.enterprises = dict(sorted(engine.enterprises.items()))

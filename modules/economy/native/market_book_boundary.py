@@ -35,23 +35,18 @@ import importlib
 
 def landed_python(engine, seller_tile, buyer_tile, good, price):
     """Полная цена товара (эталон V3): кэш движка, маршрут и доставка."""
-    cache = engine.__dict__.get('_landed_cache')
-    if cache is None:
-        cache = {}
     key = (seller_tile, buyer_tile, good)
-    quote = cache.get(key)
+    quote = engine.get_landed_cache_entry(key)
     if quote is None:
         distance, path = engine.path(seller_tile, buyer_tile)
         if distance is None:
-            cache[key] = False
-            engine.__dict__['_landed_cache'] = cache
+            engine.store_landed_cache_entry(key, False)
             return None
         weight, rate = engine.freight_factors(good)
         # Произведение считается слева направо: distance*(weight*rate) даёт
         # другой последний бит и разводит траекторию с первого месяца.
         quote = (distance*weight*rate, distance, path)
-        cache[key] = quote
-        engine.__dict__['_landed_cache'] = cache
+        engine.store_landed_cache_entry(key, quote)
     if quote is False:
         return None
     freight, distance, path = quote

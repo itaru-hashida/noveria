@@ -35,6 +35,49 @@ def _identity(value):
 
 
 class EconomyServices:
+    # Cache ownership lives at the engine boundary so route invalidation also
+    # works for lightweight EconomyServices users, not only the V3 subclass.
+    def store_production_outlook(self, key, value):
+        self.__dict__.setdefault('_production_outlook_cache', {})[key] = value
+
+    def replace_production_outlook_cache(self, cache):
+        self.__dict__['_production_outlook_cache'] = cache
+
+    def invalidate_production_outlook_cache(self):
+        self.__dict__.pop('_production_outlook_cache', None)
+
+    def store_stock_sales(self, enterprise_id, value):
+        self.__dict__.setdefault('_stock_sales_cache', {})[enterprise_id] = value
+
+    def replace_stock_sales_cache(self, cache):
+        self.__dict__['_stock_sales_cache'] = cache
+
+    def invalidate_stock_sales_cache(self):
+        self.__dict__.pop('_stock_sales_cache', None)
+
+    def store_market_book(self, key, entry):
+        self.__dict__.setdefault('_market_books', {})[key] = entry
+
+    def clear_market_books(self):
+        self.__dict__.pop('_market_books', None)
+        self.__dict__.pop('_market_source_index', None)
+
+    def get_landed_cache_entry(self, key):
+        return self.__dict__.get('_landed_cache', {}).get(key)
+
+    def store_landed_cache_entry(self, key, value):
+        self.__dict__.setdefault('_landed_cache', {})[key] = value
+
+    def invalidate_landed_cache(self):
+        self.__dict__.pop('_landed_cache', None)
+
+    def invalidate_market_books(self):
+        """Drop route-dependent books for standalone service users too."""
+        self.clear_market_books()
+        marker = getattr(self, 'mark_market_quotes_dirty', None)
+        if marker is not None:
+            marker()
+
     def _initialize_state(self, snapshot, tiles, accounts=None, enterprises=None, meta=None,
                           copy_state=True):
         self.entities = {e['id']: e for e in snapshot['entities']}
@@ -307,7 +350,9 @@ class EconomyServices:
         # Плоские строки спроса держат доставку между площадками, посчитанную
         # по старой сети: построенная дорога обязана их выбросить.
         self.__dict__.pop('_customer_demand_rows_cache', None)
-        self.__dict__.pop('_market_books', None)
+        self.invalidate_stock_sales_cache()
+        self.invalidate_landed_cache()
+        self.invalidate_market_books()
         # Изменённый вручную graph может не совпадать с данными tiles. Нельзя
         # записывать его дерево под ключом исходной карты.
         self._route_cache_key = ('runtime', id(self.graph), self.meta.get('month', 0))
