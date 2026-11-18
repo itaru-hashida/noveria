@@ -88,6 +88,18 @@ class RecordingHooks:
     def pay_overhead(self, e, paid):
         self.journal.append(('pay_overhead', e['id'], paid))
 
+    def prepare_financial_inputs(self, e, due, paid):
+        return boundary.prepare_financial_inputs(e, due, paid)
+
+    def prepare_unviable_inputs(self, e, month, loss_limit):
+        return boundary.prepare_unviable_inputs(e, month, loss_limit)
+
+    def apply_financial_results(self, e, result):
+        boundary.apply_financial_results(e, result)
+
+    def apply_unviable_months(self, e, result):
+        boundary.apply_unviable_months(e, result)
+
     def return_capital(self, e):
         self.journal.append(('return_capital', e['id']))
 

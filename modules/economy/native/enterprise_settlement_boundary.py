@@ -19,8 +19,16 @@
 Арифметика намеренно ``object``: ``cost_of_sales``/``revenue``/``tax`` бывают
 и int, и float, и тип результата виден дальше в отчёте. Cython порождает те
 же ``PyNumber_*``, что и интерпретатор, поэтому значения и типы совпадают
-побитово. Порядок ключей ``e.update(...)`` и порядок присваиваний сохранены
-буквально: dict помнит его, и сравнение отчётов построчно не разойдётся.
+побитово. После оплаты Python готовит неизменяемый tuple входов, ядро
+возвращает tuple результата, а запись владельца выполняется хуками. Порядок
+ключей ``e.update(...)`` и порядок присваиваний сохранены буквально: dict
+помнит его, и сравнение отчётов построчно не разойдётся.
+
+Мульти-store money/lifecycle операции намеренно не входят в этот срез:
+``pay_overhead`` по-прежнему вызывает ``Economy.transfer`` до числовых
+записей, а ``return_capital`` и ``close_enterprise`` по-прежнему вызывают
+движок после них. Эти хуки владеют существующими cash/order/report stores;
+ядро не создаёт и не обновляет их копии.
 
 Эталонная Python-реализация живёт в этом же модуле: она нужна как образец
 для focused-теста на побитовое совпадение и как fallback, если расширение
@@ -62,11 +70,76 @@ class EnterpriseSettlementHooks(object):
         self.engine.transfer(e['id'], 'treasury:'+e['state_id'], paid,
             'Оброк за землю и мастерскую')
 
+    # --- prepared inputs / owner writes -----------------------------------
+    def prepare_financial_inputs(self, e, due, paid):
+        return prepare_financial_inputs(e, due, paid)
+
+    def prepare_unviable_inputs(self, e, month, loss_limit):
+        return prepare_unviable_inputs(e, month, loss_limit)
+
+    def apply_financial_results(self, e, result):
+        apply_financial_results(e, result)
+
+    def apply_unviable_months(self, e, result):
+        apply_unviable_months(e, result)
+
     def return_capital(self, e):
         self.engine.return_capital(e)
 
     def close_enterprise(self, e):
         self.engine.close_enterprise(e)
+
+
+def prepare_financial_inputs(e, due, paid):
+    """Read owner state once for the pure financial-result calculation.
+
+    The tuple is deliberately data-only. In particular, no live enterprise
+    dict is handed to Cython for it to mutate.
+    """
+    return (e['cost_of_sales'], due, paid, e['revenue'], e['tax'],
+        e['loss_months'], e['profitable_months'], e['status'] == 'closed')
+
+
+def prepare_unviable_inputs(e, month, loss_limit):
+    """Preserve old short-circuit reads for the active lifecycle counter."""
+    if e['loss_months'] <= 0:
+        return (0, False, loss_limit)
+    if e['available_from'] > month:
+        return (0, False, loss_limit)
+    return (e.get('unviable_months', 0), True, loss_limit)
+
+
+def calculate_financial_results_python(prepared, eps):
+    """Pure Python reference for the Cython financial-result calculation."""
+    (cost_of_sales, due, paid, revenue, tax, loss_months,
+     profitable_months, closed) = prepared
+    expenses = cost_of_sales+due
+    profit = revenue-tax-expenses
+    loss_months = loss_months+1 if profit < -eps else 0
+    profitable_months = profitable_months+1 if profit > eps else 0
+    return (due, paid, expenses, profit, loss_months, profitable_months,
+        closed)
+
+
+def calculate_unviable_months_python(prepared):
+    previous_unviable, unviable, loss_limit = prepared
+    unviable_months = previous_unviable+1 if unviable else 0
+    return (unviable_months, unviable_months >= loss_limit)
+
+
+def apply_financial_results(e, result):
+    """Apply the ordered fields written before the lifecycle branch."""
+    due, paid, expenses, profit, loss_months, profitable_months = result[:6]
+    e.update(fixed_cost_due=due, fixed_cost_paid=paid)
+    e['expenses'] = expenses
+    e['profit'] = profit
+    e['loss_months'] = loss_months
+    e['profitable_months'] = profitable_months
+
+
+def apply_unviable_months(e, result):
+    """Apply the active-enterprise counter after the closed branch point."""
+    e['unviable_months'] = result[0]
 
 
 def run_settle_python(engine, enterprises, hooks, eps):
@@ -78,17 +151,16 @@ def run_settle_python(engine, enterprises, hooks, eps):
         paid = min(due, hooks.free_cash(e['id']))
         if paid > eps:
             hooks.pay_overhead(e, paid)
-        e.update(fixed_cost_due=due, fixed_cost_paid=paid)
-        e['expenses'] = e['cost_of_sales']+due
-        e['profit'] = e['revenue']-e['tax']-e['expenses']
-        e['loss_months'] = e['loss_months']+1 if e['profit'] < -eps else 0
-        e['profitable_months'] = e['profitable_months']+1 if e['profit'] > eps else 0
-        if e['status'] == 'closed':
+        prepared = hooks.prepare_financial_inputs(e, due, paid)
+        result = calculate_financial_results_python(prepared, eps)
+        hooks.apply_financial_results(e, result)
+        if result[6]:
             hooks.return_capital(e)
             continue
-        unviable = e['loss_months'] > 0 and e['available_from'] <= month
-        e['unviable_months'] = e.get('unviable_months', 0)+1 if unviable else 0
-        if e['unviable_months'] >= loss_limit:
+        unviable = hooks.prepare_unviable_inputs(e, month, loss_limit)
+        unviable_result = calculate_unviable_months_python(unviable)
+        hooks.apply_unviable_months(e, unviable_result)
+        if unviable_result[1]:
             hooks.close_enterprise(e)
     return None
 
@@ -114,6 +186,10 @@ if _kernel is not None:
     NATIVE_KERNEL = True
 else:
     run_settle = run_settle_python
+
+calculate_financial_results = (getattr(_kernel, 'calculate_financial_results',
+    calculate_financial_results_python) if _kernel is not None
+    else calculate_financial_results_python)
 
 
 def settle(engine, enterprises):
