@@ -450,21 +450,21 @@ def test_deepcopy_isolated_from_original():
 
 
 def test_boundary_exposes_native_when_built():
-    built = consumption_boundary.load_consumption_kernel() is not None
+    built = hasattr(consumption_boundary.load_consumption_kernel(), 'calculate_consumption')
     assert consumption_boundary.NATIVE_KERNEL is built
     if built:
-        assert consumption_boundary.run_households.__module__.endswith('consumption_kernel')
+        assert consumption_boundary.calculate_consumption.__module__.endswith('consumption_kernel')
         assert consumption_boundary.consume_households.__module__.endswith('consumption_boundary')
     else:
-        assert consumption_boundary.run_households is consumption_boundary.run_households_python
+        assert consumption_boundary.calculate_consumption is min
 
 
 def test_native_entry_points_are_compiled():
     kernel = consumption_boundary.load_consumption_kernel()
-    if kernel is None:
+    if not hasattr(kernel, 'calculate_consumption'):
         pytest.skip('Cython-расширение consumption_kernel не собрано')
-    assert consumption_boundary.run_households is kernel.run_households
-    assert consumption_boundary.run_households is not consumption_boundary.run_households_python
+    assert consumption_boundary.calculate_consumption is kernel.calculate_consumption
+    assert not hasattr(kernel, 'run_households')
 
 
 def test_load_returns_none_when_extension_absent(monkeypatch):
@@ -500,7 +500,7 @@ def test_fallback_without_extension(monkeypatch):
     importlib.reload(consumption_boundary)
     try:
         assert consumption_boundary.NATIVE_KERNEL is False
-        assert consumption_boundary.run_households is consumption_boundary.run_households_python
+        assert consumption_boundary.calculate_consumption is min
         assert consumption_boundary.consume_households.__module__.endswith('consumption_boundary')
         fallback = copy.deepcopy(engine)
         consumption_boundary.consume_households(fallback, [household(fallback)])

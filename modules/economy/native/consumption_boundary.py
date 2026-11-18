@@ -1,29 +1,11 @@
-"""Граница consumption-ядра: один вызов из V3.step, эталон и fallback.
-
-В Cython уходит только числовой цикл потребления домохозяйств: обход готового
-списка домохозяйств, обход их ``needs`` и расчёт
-``consumed = min(needed, free_stock)``. Всё остальное остаётся Python-хуками:
-
-  * списание со склада — через существующий ``engine.use_stock``, который
-    делегирует в stock boundary; второй копии склада здесь нет;
-  * ``need.update(consumed=..., deficit=...)`` — запись результата в need;
-  * ``report['consumed'][good]`` — накопление отчёта месяца.
-
-Порядок обхода сохраняется буквально: список домохозяйств готовит Python
-(``native_households`` в cython-режиме либо ``engine.shuffled``), порядок
-товаров задаёт порядок вставки в ``needs``. RNG граница не трогает.
-
-Эталонная Python-ветка (``run_households_python``) повторяет прежнее тело
-цикла из ``Economy.step`` и служит образцом для focused-теста на побитовое
-совпадение с ядром, а также fallback, если расширение не собрано.
-"""
+"""Подготовка и применение потребления в порядке домохозяйств и товаров."""
 import importlib
 
 
 class ConsumptionHooks(object):
     """Побочные эффекты consumption, которые обязаны остаться в Python.
 
-    Ядро вызывает ``consume`` в том же порядке, в каком прежний цикл писал
+    Граница вызывает ``consume`` в том же порядке, в каком прежний цикл писал
     склад, need и отчёт. Ни один метод не считает норму потребления — только
     фиксирует уже посчитанное значение.
     """
@@ -43,23 +25,23 @@ class ConsumptionHooks(object):
         report[good] = report.get(good, 0)+consumed
 
 
-def run_households_python(households, engine, hooks):
-    """Эталон числового цикла consumption — буквальный прежний код V3.step."""
+def run_households(households, engine, hooks, calculate):
+    """Считать доступный остаток перед каждым списанием."""
     for a in households:
         for good, need in a.get('needs', {}).items():
             needed = need['needed']
-            consumed = min(needed, engine.free_stock(a['id'], good))
+            consumed = calculate(needed, engine.free_stock(a['id'], good))
             hooks.consume(a, good, need, consumed)
 
 
 def consume_households(engine, households):
-    """Единственный вход из V3.step: native-цикл или эталонный fallback."""
-    run_households(households, engine, ConsumptionHooks(engine))
+    """Единственный вход из V3.step."""
+    run_households(households, engine, ConsumptionHooks(engine), calculate_consumption)
 
 
 def consume_households_python(engine, households):
     """Эталонная Python-ветка целиком: тот же список и те же хуки."""
-    run_households_python(households, engine, ConsumptionHooks(engine))
+    run_households(households, engine, ConsumptionHooks(engine), min)
 
 
 def load_consumption_kernel():
@@ -75,11 +57,6 @@ def load_consumption_kernel():
         return None
 
 
-NATIVE_KERNEL = False
-
 _kernel = load_consumption_kernel()
-if _kernel is not None:
-    run_households = _kernel.run_households
-    NATIVE_KERNEL = True
-else:
-    run_households = run_households_python
+calculate_consumption = getattr(_kernel, 'calculate_consumption', min)
+NATIVE_KERNEL = calculate_consumption is not min
