@@ -26,7 +26,7 @@ from modules.economy.native.offer_view cimport cover_demand_from_books
 from modules.economy.native.demand_kernel cimport expected_stock_sales
 
 
-def forecast_from_books(tuple demand_input, tuple stock_input, tuple outlook_input):
+def forecast_from_books(tuple demand_input, tuple stock_input, object outlook_input):
     """Рассчитать покрытие спроса, продажи склада и выпуск за один вход."""
     cdef object owner, price, groups, eps, demand, sales
     cdef dict books, remaining
@@ -39,7 +39,7 @@ def forecast_from_books(tuple demand_input, tuple stock_input, tuple outlook_inp
             owner, price, groups, books, remaining, eps = alternate
             reachable = cover_demand_from_books(owner, price, groups, books, remaining, eps)
         sales = expected_stock_sales(stock, offered, reachable, history)
-    return outlook(*outlook_input[:5], demand, sales, *outlook_input[5:]), sales
+    return outlook(outlook_input._replace(demand=demand, expected_sales=sales), eps), sales
 
 
 cdef inline object _max0(object value):
@@ -131,12 +131,7 @@ def own_average(object observations, object sales_forecast):
     return _finish(total, comp)/len(observations)
 
 
-def outlook(object observations, object sales_forecast, object trades,
-            object seller, object good,
-            object demand, object expected_sales, object stock_planning,
-            object stock, object capacity, object previous, object cost,
-            object expected_price, object overhead_cost, object eps,
-            object overstock_factor, object decline_rate, object price):
+def outlook(object inputs, object eps):
     """Собрать прогноз выпуска: те же числа, тот же порядок ключей.
 
     ``expected_sales`` приходит уже посчитанным хуком либо ``None``, когда
@@ -145,6 +140,23 @@ def outlook(object observations, object sales_forecast, object trades,
 
     ``overhead_cost`` рассчитан границей.
     """
+    cdef object observations = inputs.observations
+    cdef object sales_forecast = inputs.sales_forecast
+    cdef object trades = inputs.trades
+    cdef object seller = inputs.seller
+    cdef object good = inputs.good
+    cdef object demand = inputs.demand
+    cdef object expected_sales = inputs.expected_sales
+    cdef object stock_planning = inputs.stock_planning
+    cdef object stock = inputs.stock
+    cdef object capacity = inputs.capacity
+    cdef object previous = inputs.previous
+    cdef object cost = inputs.cost
+    cdef object expected_price = inputs.expected_price
+    cdef object overhead_cost = inputs.overhead
+    cdef object overstock_factor = inputs.overstock_factor
+    cdef object decline_rate = inputs.decline_rate
+    cdef object price = inputs.price
     cdef object own
     cdef object forecast
     cdef object projected_stock

@@ -183,6 +183,15 @@ class CashStorePython:
         self.accounts[account_id]['protected'] = value
         return value
 
+    def set_payroll_protected(self, account_id, value):
+        """Записать companion-поле защиты зарплаты через owner API."""
+        self.accounts[account_id]['payroll_protected'] = value
+        return value
+
+    def release_operating_protected(self, account_id):
+        """Снять companion-поле операционной защиты через owner API."""
+        return self.accounts[account_id].pop('operating_protected', 0)
+
     def add_protected_cash(self, account_id, value):
         slot = self._known(account_id)
         total = self.get_protected_cash(account_id)+value

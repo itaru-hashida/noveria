@@ -29,14 +29,23 @@
 """
 
 import importlib
+from collections import namedtuple
 
 from ..support import EPS
 from . import demand_boundary as _demand
+from .stock_store_boundary import get_stock_store
 
 
 # Версия формы ключа и значения кэша прогноза. Меняется вместе с составом
 # ключа или формы результата; записи другой версии не переиспользуются.
 VERSION = 1
+
+OutlookCalculationInputs = namedtuple(
+    'OutlookCalculationInputs',
+    'observations sales_forecast trades seller good demand expected_sales '
+    'stock_planning stock capacity previous cost expected_price overhead '
+    'overstock_factor decline_rate price')
+OutlookCalculationResult = namedtuple('OutlookCalculationResult', 'values')
 
 
 class OutlookHooks(object):
@@ -79,7 +88,7 @@ class OutlookHooks(object):
 
     def stock(self, good):
         """Склад счёта предприятия — прежний ``self.accounts[...]['stock']``."""
-        return self.engine.accounts[self.e['id']]['stock'].get(good, 0)
+        return get_stock_store(self.engine).get_stock(self.e['id'], good)
 
     def observations(self):
         """Три последних наблюдения продаж — прежний срез ``sales_history``."""
@@ -216,7 +225,6 @@ def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote,
     """
     if use_books is None:
         use_books = (_forecast_from_books is not None and NATIVE_KERNEL
-                     and run_outlook is _kernel.outlook
                      and _demand.cover_demand_from_books is not None)
     if use_books:
         return _prepare_books_snapshot(engine, e, hooks, cost, base_net, price,
@@ -253,15 +261,16 @@ def _compute_snapshot(snapshot, calculator=None):
         outlook, sales = _forecast_from_books(*snapshot['book_input'])
         return outlook, sales
     calculator = calculator or run_outlook
-    return calculator(snapshot['observations'], snapshot['sales_forecast'],
-                       snapshot['trades'], snapshot['seller'], snapshot['good'],
-                       snapshot['demand'], snapshot['expected_sales'],
-                       snapshot['stock_planning'], snapshot['stock'],
-                       snapshot['capacity'], snapshot['previous'],
-                       snapshot['cost'], snapshot['expected_price'],
-                       snapshot['overhead'], EPS,
-                       snapshot['overstock_factor'], snapshot['decline_rate'],
-                       snapshot['price']), None
+    inputs = OutlookCalculationInputs(
+        snapshot['observations'], snapshot['sales_forecast'], snapshot['trades'],
+        snapshot['seller'], snapshot['good'], snapshot['demand'],
+        snapshot['expected_sales'], snapshot['stock_planning'], snapshot['stock'],
+        snapshot['capacity'], snapshot['previous'], snapshot['cost'],
+        snapshot['expected_price'], snapshot['overhead'],
+        snapshot['overstock_factor'], snapshot['decline_rate'], snapshot['price'])
+    calculated = calculator(inputs, EPS)
+    return (calculated.values if isinstance(calculated, OutlookCalculationResult)
+            else calculated), None
 
 
 def _prepare_books_snapshot(engine, e, hooks, cost, base_net, price, quote):
@@ -285,11 +294,11 @@ def _prepare_books_snapshot(engine, e, hooks, cost, base_net, price, quote):
                     alternate = _demand.prepare_reachable_demand(engine, e, sells)
     stock = hooks.stock(good)
     stock_input = (sales, offered, stock, history, alternate)
-    outlook_input = (
-        history, e['sales_forecast'], hooks.trades(), owner, good,
+    outlook_input = OutlookCalculationInputs(
+        history, e['sales_forecast'], hooks.trades(), owner, good, None, sales,
         revision, stock, e['capacity'], e.get('planned_output', 0), cost,
         base_net if price == e['price'] else hooks.net_price(quote),
-        hooks.overhead(), EPS, engine.cfg['output_overstock_factor'],
+        hooks.overhead(), engine.cfg['output_overstock_factor'],
         engine.cfg['output_decline_rate'], price,
     )
     return dict(book_input=(demand_input, stock_input, outlook_input),
@@ -323,11 +332,25 @@ def _sold_python(trades, seller, good):
                if row['seller'] == seller and row['good'] == good)
 
 
-def _outlook_python(observations, sales_forecast, trades, seller, good, demand,
-                    expected_sales, stock_planning, stock, capacity, previous,
-                    cost, expected_price, overhead_cost, eps, overstock_factor,
-                    decline_rate, price):
-    """Python-эквивалент ``outlook`` с той же сигнатурой."""
+def _outlook_python(inputs, eps):
+    """Python-эквивалент ``outlook`` по именованному snapshot."""
+    observations = inputs.observations
+    sales_forecast = inputs.sales_forecast
+    trades = inputs.trades
+    seller = inputs.seller
+    good = inputs.good
+    demand = inputs.demand
+    expected_sales = inputs.expected_sales
+    stock_planning = inputs.stock_planning
+    stock = inputs.stock
+    capacity = inputs.capacity
+    previous = inputs.previous
+    cost = inputs.cost
+    expected_price = inputs.expected_price
+    overhead_cost = inputs.overhead
+    overstock_factor = inputs.overstock_factor
+    decline_rate = inputs.decline_rate
+    price = inputs.price
     if observations:
         own = sum(row['sold'] for row in observations)/len(observations)
     else:
@@ -366,9 +389,13 @@ _forecast_from_books = getattr(_kernel, 'forecast_from_books', None)
 if _kernel is not None:
     run_price = _kernel.select_price
     run_sold = _kernel.sold_quantity
-    run_outlook = _kernel.outlook
+
+    def run_outlook(inputs, eps):
+        return OutlookCalculationResult(_kernel.outlook(inputs, eps))
     NATIVE_KERNEL = True
 else:
     run_price = _price_python
     run_sold = _sold_python
-    run_outlook = _outlook_python
+
+    def run_outlook(inputs, eps):
+        return OutlookCalculationResult(_outlook_python(inputs, eps))

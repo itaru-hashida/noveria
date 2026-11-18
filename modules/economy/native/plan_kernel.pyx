@@ -109,10 +109,10 @@ def plan_target(object overhead, object labor, object wage, object target, objec
 
 def calculate_target(object snapshot, object cash, object requested, object eps):
     """Рассчитать выпуск по snapshot без engine и Python hooks."""
-    return plan_target(snapshot['overhead'], snapshot['labor'], snapshot['wage'],
-                      requested, cash, snapshot['input_items'],
-                      snapshot['equipment_rates'], snapshot['stock_values'],
-                      snapshot['quote_contexts'], eps)
+    return plan_target(snapshot.overhead, snapshot.labor, snapshot.wage,
+                      requested, cash, snapshot.input_items,
+                      snapshot.equipment_rates, snapshot.stock_values,
+                      snapshot.quote_contexts, eps)
 
 
 def input_requests(object snapshot, object eps):
@@ -125,14 +125,14 @@ def input_requests(object snapshot, object eps):
     причина предела, ``production_plan``, резерв зарплат, затем заявки на
     сырьё и оборудование и список их ``id``.
     """
-    cdef dict input_ratios = snapshot['input_ratios']
-    cdef list input_items = snapshot['input_items']
-    cdef list equipment_rates = snapshot['equipment_rates']
-    cdef dict stock_values = snapshot['stock_values']
-    cdef dict quote_contexts = snapshot['quote_contexts']
-    cdef object overhead = snapshot['overhead']
-    cdef object labor = snapshot['labor']
-    cdef object wage = snapshot['wage']
+    cdef dict input_ratios = snapshot.input_ratios
+    cdef list input_items = snapshot.input_items
+    cdef list equipment_rates = snapshot.equipment_rates
+    cdef dict stock_values = snapshot.stock_values
+    cdef dict quote_contexts = snapshot.quote_contexts
+    cdef object overhead = snapshot.overhead
+    cdef object labor = snapshot.labor
+    cdef object wage = snapshot.wage
     cdef object good
     cdef object ratio
     cdef object wear
@@ -150,27 +150,27 @@ def input_requests(object snapshot, object eps):
     cdef dict equipment_wear = {}
     cdef dict plan
 
-    target = snapshot['target']
-    cash = snapshot['cash']
-    requested = snapshot['requested']
-    first_order = snapshot['first_order']
-    input_prices = snapshot['input_prices']
+    target = snapshot.target
+    cash = snapshot.cash
+    requested = snapshot.requested
+    first_order = snapshot.first_order
+    input_prices = snapshot.input_prices
     for good, ratio, wear in equipment_rates:
         equipment_required[good] = ratio*target
         equipment_wear[good] = ratio*target*wear
-    plan = dict(month=snapshot['month'], output=target,
-                sale_price=snapshot['sale_price'],
-                expected_net_price=snapshot['expected_net_price'], input_prices=input_prices,
+    plan = dict(month=snapshot.month, output=target,
+                sale_price=snapshot.sale_price,
+                expected_net_price=snapshot.expected_net_price, input_prices=input_prices,
                 input_ratios=dict(input_ratios), wage_unit=labor*wage,
                 equipment_required=equipment_required,
                 equipment_wear=equipment_wear,
-                fixed_unit=snapshot['fixed_unit'],
+                fixed_unit=snapshot.fixed_unit,
                 requested_output=requested, free_cash=cash,
                 known_order_count=first_order,
-                reachable_demand=snapshot['reachable_demand'],
-                sales_forecast=snapshot['sales_forecast'],
-                expected_margin=snapshot['expected_margin'],
-                reason=snapshot['production_limit'])
+                reachable_demand=snapshot.reachable_demand,
+                sales_forecast=snapshot.sales_forecast,
+                expected_margin=snapshot.expected_margin,
+                reason=snapshot.production_limit)
     for good, ratio in input_items:
         quantity = _max0(target*ratio-stock_values[good])
         context = quote_contexts[good]

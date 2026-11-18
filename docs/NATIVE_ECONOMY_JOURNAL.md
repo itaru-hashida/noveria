@@ -433,3 +433,20 @@ record, читает его атрибуты и возвращает numeric tup
 
 GCC rebuild выполнен. Focused trade/matcher/driver/monthly parity: 108 passed.
 Полный pytest не запускался.
+
+## 2026-11-18 — явные контракты planning и owner API payroll
+
+Planning и production outlook получили именованные calculation records:
+`PlanCalculationInputs/Result` и `OutlookCalculationInputs/Result`. В native
+ядро передаются готовые числовые входы; engine/hooks и применение результата
+остаются в Python boundary. Для outlook сохранён единый prepared entrypoint
+для расчёта по книгам, а живой склад читается через `StockStore`.
+
+Операционные и payroll-резервы теперь читаются и меняются через `CashStore`
+(`release_operating_protected`, `set_payroll_protected`), без прямой записи
+этих полей в account dictionary. Исправлен вызов native outlook после
+перехода на именованный контракт; parity и rollback сохранены.
+
+Пересборка Cython выполнена GCC. Focused production-outlook/plan/parity:
+58 passed. Полный pytest не запускался. Аудит полного ownership stock/orders/
+reservations продолжается отдельным следующим срезом.

@@ -360,6 +360,15 @@ cdef class CashStore:
         (<object>self.accounts[account_id])['protected'] = value
         return value
 
+    def set_payroll_protected(self, account_id, value):
+        """Записать companion-поле защиты зарплаты через owner API."""
+        (<object>self.accounts[account_id])['payroll_protected'] = value
+        return value
+
+    def release_operating_protected(self, account_id):
+        """Снять companion-поле операционной защиты через owner API."""
+        return (<object>self.accounts[account_id]).pop('operating_protected', 0)
+
     def add_protected_cash(self, account_id, value):
         """Прибавить к защите: ``protected + value`` без смены типа.
 
