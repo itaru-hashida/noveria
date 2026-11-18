@@ -73,7 +73,7 @@ cdef object _run_buyer(object owner, object buy, object sells, object eps,
             store.set_reserved(buy, buy['reserved']+extra)
             buy.setdefault('initial_limit', buy['price'])
             store.set_price(buy, price)
-            buy['backing'] = buy['reserved']
+            store.set_metadata(buy, 'backing', buy['reserved'])
             owner._demand_revision[buy['good']] += 1
     options = (owner.offers(buyer, buy['good'], sells, local_only=True)
         if local_only else owner.offers(buyer, buy['good'], sells))
@@ -85,7 +85,7 @@ cdef object _run_buyer(object owner, object buy, object sells, object eps,
     store.set_status(buy, 'filled' if buy['remaining'] <= eps else 'partial' if buy['remaining'] < buy['quantity'] else 'unfilled')
     owner.finish_match_observation(buy, sells, observation)
     if buy['remaining'] > eps:
-        buy['reason'] = observation['reason_code']
+        store.set_metadata(buy, 'reason', observation['reason_code'])
     return None
 
 

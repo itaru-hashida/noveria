@@ -96,8 +96,9 @@ class MonthlyHooks(object):
             engine.cancel_order(order, 'Окончание торгов месяца')
             if order['status'] == 'cancelled':
                 store.set_status(order, 'expired')
-                order['execution_status'] = execution_status
-                order['reason'] = execution_reason or 'Окончание торгов месяца'
+                store.set_metadata(order, 'execution_status', execution_status)
+                store.set_metadata(
+                    order, 'reason', execution_reason or 'Окончание торгов месяца')
 
     # --- отчёт ------------------------------------------------------------
     def extend_diagnostics(self, detail):

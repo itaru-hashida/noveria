@@ -65,6 +65,19 @@ def test_writes_go_to_the_same_dict_object():
                         side='sell', province_id='p1', tile_id='t1')
 
 
+def test_owner_writes_quantity_and_metadata_without_bypassing_store():
+    """Фазовые writers меняют дополнительные поля тем же owner API."""
+    live = order('a', remaining=10.0)
+    store = order_boundary.OrderStore([live])
+    store.set_quantity(live, 7.5)
+    store.set_metadata(live, 'backing', 6.25)
+    store.set_metadata(live, 'reason', 'phase')
+    assert live['quantity'] == 7.5
+    assert live['backing'] == 6.25
+    assert live['reason'] == 'phase'
+    assert store.orders[0] is live
+
+
 # 2. OfferView видит мутацию сразу ----------------------------------------
 def test_offer_view_sees_mutation_through_store_immediately():
     live = order('a', remaining=5.0)

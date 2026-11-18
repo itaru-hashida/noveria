@@ -451,6 +451,23 @@ Planning и production outlook получили именованные calculati
 58 passed. Полный pytest не запускался. Аудит полного ownership stock/orders/
 reservations продолжается отдельным следующим срезом.
 
+## 2026-11-18 — аудит writers orders/reservations/stock, узкий phase-срез
+
+От `3a32fd0` проверены native- и phase-пути. Канонические записи склада и
+`stock_reserved` уже проходят через `StockStore`, а `remaining`/`reserved`/
+`status`/`price`/`quantity` и metadata заявки — через `OrderStore`.
+
+В этом срезе исправлены оставшиеся безопасные записи в `monthly_hooks`,
+`match_driver` и `update_prices_boundary`: `reason`, `execution_status`,
+`quantity` и `backing` больше не записываются напрямую в словарь заявки.
+Внутренние записи самих `StockStore`/`OrderStore` оставлены как реализация
+назначенного owner; записи физических агрегатов и valuation `values` не являются
+каноническим складом и не смешивались с ownership stock.
+
+Settlement и performance не менялись. Focused ownership/update/match/monthly
+проверки и пересборка Cython должны подтвердить parity, порядок и отсутствие
+нового writer-а.
+
 ## 2026-11-18 — завершение ownership metadata заявок
 
 `OrderStore` получил узкие методы `set_quantity` и `set_metadata`. Записи

@@ -1101,7 +1101,8 @@ def apply_recovery(engine, data, meta, sells):
                 good = order['good']
                 engine.stock_store.release_reserved(firm['id'], good, order['remaining'])
                 engine.order_store.set_status(order, 'cancelled')
-                order['reason'] = 'Сырьё возвращено в производство'
+                engine.order_store.set_metadata(
+                    order, 'reason', 'Сырьё возвращено в производство')
                 engine.mark_market_quotes_dirty(good)
                 journal.append(('recovery_cancel', i, order_id))
             engine.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'],
@@ -1137,9 +1138,10 @@ def apply_public_projects(engine, data, meta, sells):
             order_id = f'{meta["month"]}-{int(data["sell_order_index"][sell_index])}'
             order = next(o for o in engine.report['orders'] if o['id'] == order_id)
             take = float(data['public_release_quantity'][release_index])
-            order['quantity'] -= take
-            engine.order_store.set_remaining(order, order['remaining']-take)
-            order['backing'] -= take
+            store = engine.order_store
+            store.set_quantity(order, order['quantity']-take)
+            store.set_remaining(order, order['remaining']-take)
+            store.set_metadata(order, 'backing', order['backing']-take)
             engine.stock_store.release_reserved(account['id'], good, take)
             engine.mark_market_quotes_dirty(good)
             if order['remaining'] <= EPS:
