@@ -36,11 +36,14 @@
 диспетчер на каждом шаге.
 """
 
+import copy
 import importlib
 
 # EPS проекта. Импорт из support безопасен: support не импортирует эту
 # границу, поэтому цикла support -> boundary -> support не возникает.
 from ..support import EPS
+
+_MISSING = object()
 
 
 class EnterpriseSettlementHooks(object):
@@ -88,6 +91,90 @@ class EnterpriseSettlementHooks(object):
 
     def close_enterprise(self, e):
         self.engine.close_enterprise(e)
+
+
+class _SettlementTransaction(object):
+    """Checkpoint only the owners touched by enterprise settlement.
+
+    This deliberately does not use ``export_state``: that API replaces the
+    live account/enterprise maps and does not include the runtime store
+    columns or the report object.  Settlement has a small, explicit owner map
+    instead, so rollback writes back through CashStore and OrderStore.
+    """
+
+    def __init__(self, engine, enterprises):
+        self.engine = engine
+        self.enterprises = [(e, copy.deepcopy(e)) for e in enterprises]
+        self.account_ids = {e['id'] for e in enterprises}
+        self.account_ids.update('treasury:'+e['state_id'] for e in enterprises)
+        self.account_ids.update(e.get('owner_id') for e in enterprises
+                                if e.get('owner_id') is not None)
+        self.accounts = {}
+        if hasattr(engine, 'accounts'):
+            for account_id in self.account_ids:
+                if account_id in engine.accounts:
+                    account = engine.accounts[account_id]
+                    cash = engine.cash_store
+                    self.accounts[account_id] = {
+                        'balance': cash.get_balance(account_id),
+                        'reserved': cash.get_reserved_cash(account_id),
+                        'protected': cash.get_protected_cash(account_id),
+                        'project': (copy.deepcopy(account['project'])
+                                    if 'project' in account else _MISSING),
+                    }
+        report = getattr(engine, 'report', None)
+        self.report = report
+        self.flow_count = len(report.get('flows', ())) if report else 0
+        self.lifecycle_count = len(report.get('lifecycle', ())) if report else 0
+        self.orders = {}
+        if report:
+            for order in report.get('orders', ()):
+                if order.get('participant') in self.account_ids:
+                    self.orders[id(order)] = (order, copy.deepcopy(order))
+        self.demand_revision = copy.deepcopy(
+            getattr(engine, '_demand_revision', None))
+        self.has_dirty = hasattr(engine, '_investment_dirty_goods')
+        self.dirty = (copy.deepcopy(engine._investment_dirty_goods)
+                      if self.has_dirty else None)
+
+    def rollback(self):
+        engine = self.engine
+        cash = getattr(engine, 'cash_store', None)
+        for account_id, fields in self.accounts.items():
+            account = engine.accounts[account_id]
+            for field, previous in fields.items():
+                if previous is _MISSING:
+                    account.pop(field, None)
+                elif field == 'balance':
+                    cash.set_balance(account_id, previous)
+                elif field == 'reserved':
+                    cash.set_reserved_cash(account_id, previous)
+                elif field == 'protected':
+                    cash.set_protected_cash(account_id, previous)
+                elif field == 'project':
+                    if previous is _MISSING:
+                        account.pop(field, None)
+                    else:
+                        account[field] = copy.deepcopy(previous)
+        for e, previous in self.enterprises:
+            e.clear()
+            e.update(previous)
+        for order, previous in self.orders.values():
+            order.clear()
+            order.update(previous)
+            if hasattr(engine, 'order_store'):
+                engine.order_store.set_reserved(order, order.get('reserved', 0))
+                engine.order_store.set_status(order, order.get('status'))
+        if self.report is not None:
+            del self.report['flows'][self.flow_count:]
+            del self.report['lifecycle'][self.lifecycle_count:]
+        if self.demand_revision is not None:
+            engine._demand_revision.clear()
+            engine._demand_revision.update(self.demand_revision)
+        if self.has_dirty:
+            engine._investment_dirty_goods = self.dirty
+        else:
+            engine.__dict__.pop('_investment_dirty_goods', None)
 
 
 def prepare_financial_inputs(e, due, paid):
@@ -142,7 +229,7 @@ def apply_unviable_months(e, result):
     e['unviable_months'] = result[0]
 
 
-def run_settle_python(engine, enterprises, hooks, eps):
+def _run_settle_python(engine, enterprises, hooks, eps):
     """Эталон числового цикла settle — буквальный прежний код V3."""
     month = engine.meta['month']
     loss_limit = engine.cfg['loss_months_to_close']
@@ -165,7 +252,7 @@ def run_settle_python(engine, enterprises, hooks, eps):
     return None
 
 
-def run_settle(engine, enterprises, hooks, eps):
+def _run_settle(engine, enterprises, hooks, eps):
     """Run the old settlement traversal in Python around pure calculations.
 
     The list order, owner reads/writes, money calls, and lifecycle short
@@ -218,6 +305,25 @@ calculate_financial_results = (getattr(_kernel, 'calculate_financial_results',
 calculate_unviable_months = (getattr(_kernel, 'calculate_unviable_months',
     calculate_unviable_months_python) if _kernel is not None
     else calculate_unviable_months_python)
+
+
+def _atomic_run(worker, engine, enterprises, hooks, eps):
+    transaction = _SettlementTransaction(engine, enterprises)
+    try:
+        return worker(engine, enterprises, hooks, eps)
+    except Exception:
+        transaction.rollback()
+        raise
+
+
+def run_settle_python(engine, enterprises, hooks, eps):
+    """Reference settlement traversal with the same atomic owner boundary."""
+    return _atomic_run(_run_settle_python, engine, enterprises, hooks, eps)
+
+
+def run_settle(engine, enterprises, hooks, eps):
+    """Native numeric traversal with atomic owner application."""
+    return _atomic_run(_run_settle, engine, enterprises, hooks, eps)
 
 
 def settle(engine, enterprises):

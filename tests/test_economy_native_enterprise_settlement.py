@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / 'tests'))
 import scenario_runner as sr  # noqa: E402
 from audit.profile_run import workdir  # noqa: E402
 from modules.economy.native import enterprise_settlement_boundary as boundary  # noqa: E402
+from modules.economy import Economy  # noqa: E402
 
 EPS = 1e-9
 
@@ -256,6 +257,95 @@ def test_input_rows_are_not_mutated_by_caller_state():
     # Граница работает со своими копиями: исходные строки не тронуты.
     assert rows == before
     assert 'profit' not in rows[0]
+
+
+def actual_engine():
+    entities = [dict(id='s', kind='State', name='S', properties={'capital_id': 'c'}),
+        dict(id='p', kind='Province', name='P', properties={'capital_id': 'c'}),
+        dict(id='c', kind='City', name='C', properties={'province_id': 'p', 'tile_id': 't'}),
+        dict(id='h', kind='SocialGroup', name='H', properties={'owner_id': 'p', 'population': 100000})]
+    tile = dict(id='t', x=0, y=0, passable=True, cost=1, road=True,
+                province_id='p', resources=['зерно', 'лес', 'железо', 'рыба'],
+                terrain='plain')
+    cfg = json.loads((ROOT / 'content/economy.json').read_text(encoding='utf-8'))
+    engine = Economy(dict(entities=entities,
+        links=[dict(source='s', target=i, kind='owns') for i in ('p', 'c')]),
+        [tile], meta=dict(id='game', version=3, month=1, config=cfg))
+    engine.bootstrap()
+    engine.cfg['loss_months_to_close'] = 1
+    return engine
+
+
+def owner_snapshot(engine, enterprise):
+    ids = {enterprise['id'], enterprise['owner_id'], 'treasury:'+enterprise['state_id']}
+    cash = engine.cash_store
+    cash_values = {aid: (cash.get_balance(aid), cash.get_reserved_cash(aid),
+                         cash.get_protected_cash(aid)) for aid in ids}
+    projects = {aid: (('project' in engine.accounts[aid]) and
+                      copy.deepcopy(engine.accounts[aid]['project']))
+                for aid in ids}
+    return (copy.deepcopy(enterprise), cash_values, projects,
+            copy.deepcopy(engine.report), engine.order_store.columns())
+
+
+def test_actual_overhead_failure_rolls_back_authoritative_cash(monkeypatch):
+    engine = actual_engine()
+    enterprise = next(iter(engine.enterprises.values()))
+    engine.cash_store.set_balance(enterprise['id'], 20.0)
+    before = owner_snapshot(engine, enterprise)
+    original = engine.transfer
+
+    def fail_after_payment(*args):
+        original(*args)
+        raise RuntimeError('injected overhead failure')
+
+    monkeypatch.setattr(engine, 'transfer', fail_after_payment)
+    with pytest.raises(RuntimeError, match='injected overhead failure'):
+        boundary.settle(engine, [enterprise])
+    assert owner_snapshot(engine, enterprise) == before
+
+
+def test_actual_return_capital_failure_rolls_back_owner_stores(monkeypatch):
+    engine = actual_engine()
+    enterprise = next(iter(engine.enterprises.values()))
+    enterprise['status'] = 'closed'
+    account = engine.accounts[enterprise['id']]
+    engine.cash_store.set_balance(account['id'], 20.0)
+    before = owner_snapshot(engine, enterprise)
+    original = engine.return_capital
+
+    def fail_after_return(row):
+        original(row)
+        raise RuntimeError('injected return failure')
+
+    monkeypatch.setattr(engine, 'return_capital', fail_after_return)
+    with pytest.raises(RuntimeError, match='injected return failure'):
+        boundary.settle(engine, [enterprise])
+    assert owner_snapshot(engine, enterprise) == before
+
+
+def test_actual_closure_failure_rolls_back_cash_order_and_report(monkeypatch):
+    engine = actual_engine()
+    enterprise = next(iter(engine.enterprises.values()))
+    enterprise.update(revenue=0, cost_of_sales=100, loss_months=0,
+                      available_from=0)
+    engine.cash_store.set_balance(enterprise['id'], 20.0)
+    order = engine.order(enterprise['id'], 'bread', 1, 'buy', 1, 'test')
+    before = owner_snapshot(engine, enterprise)
+    original = engine.close_enterprise
+
+    def fail_after_close(row):
+        original(row)
+        raise RuntimeError('injected closure failure')
+
+    monkeypatch.setattr(engine, 'close_enterprise', fail_after_close)
+    with pytest.raises(RuntimeError, match='injected closure failure'):
+        boundary.settle(engine, [enterprise])
+    assert owner_snapshot(engine, enterprise) == before
+    assert order['status'] == 'active'
+    assert engine.order_store.slot(order) >= 0
+    assert engine.order_store.is_live(order, EPS)
+    assert engine.order_store.columns()['status'][engine.order_store.slot(order)] == 'active'
 
 
 # --- 2. Fallback без .pyd ----------------------------------------------------
