@@ -377,8 +377,45 @@ def test_actual_closure_failure_rolls_back_cash_order_and_report(monkeypatch):
     assert engine.order_store.columns()['status'][engine.order_store.slot(order)] == 'active'
 
 
-# --- 2. Fallback без .pyd ----------------------------------------------------
+def test_closure_writes_order_reason_through_owner(monkeypatch):
+    """Закрытие предприятия отменяет заявки через владельца заявок.
 
+    ``cancel_order`` пишет ``reason``; регресс ловит прямой writer в словарь
+    заявки, который обходил ``OrderStore.set_metadata``.
+    """
+    engine = actual_engine()
+    enterprise = next(iter(engine.enterprises.values()))
+    enterprise.update(revenue=0, cost_of_sales=100, loss_months=0,
+                      available_from=0)
+    engine.cash_store.set_balance(enterprise['id'], 20.0)
+    order = engine.order(enterprise['id'], enterprise['good'], 1, 'buy', 1,
+                         'test')
+    seen = []
+    real = engine.order_store.set_metadata
+
+    class Recording(object):
+        """Прокси владельца: родной Cython-класс не даёт подменить метод."""
+
+        def __init__(self, store):
+            self._store = store
+
+        def __getattr__(self, name):
+            return getattr(self._store, name)
+
+        def set_metadata(self, target, key, value):
+            seen.append((target['id'], key))
+            return real(target, key, value)
+
+    original = engine.order_store
+    monkeypatch.setattr(engine, '_order_store', Recording(original))
+    boundary.settle(engine, [enterprise])
+    assert ('reason' in [key for _, key in seen]), seen
+    assert order['reason'] == 'Предприятие закрыто'
+    column = engine.order_store.columns()['status'][engine.order_store.slot(order)]
+    assert column == 'cancelled'
+
+
+# --- 2. Fallback без .pyd ----------------------------------------------------
 def test_fallback_switches_to_the_python_reference(monkeypatch):
     assert boundary.NATIVE_KERNEL is True, 'ожидалось собранное ядро'
     rows = [make_enterprise('a'), make_enterprise('b', status='closed')]

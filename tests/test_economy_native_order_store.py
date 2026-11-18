@@ -220,6 +220,11 @@ def test_store_ignores_pickle_protocol():
 # 6. Выбранный call path не пишет поля заявки в обход ---------------------
 ORDER_RECEIVERS = {'order', 'o', 'offer', 'buy', 'sell', 'row', 'ask', 'entry'}
 FIELDS = {'remaining', 'reserved', 'status', 'price'}
+# Metadata заявки: у владельца есть set_metadata, поэтому settlement-путь
+# отмены обязан писать их через него. Проверка сужена до функций settlement,
+# потому что release-путь пока пишет quantity/backing напрямую.
+METADATA_FIELDS = {'reason', 'quantity', 'backing', 'execution_status'}
+SETTLEMENT_FUNCTIONS = {'cancel_order', 'close_enterprise', 'return_capital'}
 
 
 def direct_order_writes(source):
@@ -259,6 +264,44 @@ def test_v3_has_no_direct_writes_to_order_fields_in_chosen_path():
     source = (ROOT/'modules/economy/v3.py').read_text(encoding='utf-8')
     writes = direct_order_writes(source)
     assert writes == [], f'Прямые записи в поля заявки: {writes}'
+
+
+def settlement_order_writes(source):
+    """Прямые записи в metadata заявки внутри функций settlement-пути.
+
+    ``cancel_order`` вызывается закрытием предприятия в settlement и пишет
+    ``reason``; у владельца для этого есть ``set_metadata``. Скан ограничен
+    телами settlement-функций, чтобы не смешивать срез с release-путём.
+    """
+    tree = ast.parse(source)
+    found = []
+
+    def scan(body, function):
+        for node in ast.walk(body):
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                if not isinstance(target, ast.Subscript):
+                    continue
+                key = target.slice
+                if not (isinstance(key, ast.Constant)
+                        and key.value in METADATA_FIELDS):
+                    continue
+                name = target.value.id if isinstance(target.value, ast.Name) else None
+                if name in ORDER_RECEIVERS:
+                    found.append((node.lineno, function, name, key.value,
+                                  ast.unparse(node)))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name in SETTLEMENT_FUNCTIONS:
+            scan(node, node.name)
+    return found
+
+
+def test_settlement_path_writes_order_metadata_through_owner():
+    source = (ROOT/'modules/economy/v3.py').read_text(encoding='utf-8')
+    writes = settlement_order_writes(source)
+    assert writes == [], f'Прямые записи metadata заявки: {writes}'
 
 
 def test_v3_mutations_go_through_store_on_real_month():

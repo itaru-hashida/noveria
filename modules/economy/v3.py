@@ -1577,7 +1577,11 @@ class Economy(EconomyServices):
             self.mark_market_quotes_dirty(order['good'])
         if not filled:
             store.set_status(order, 'cancelled')
-            order['reason'] = reason
+            # Причина отмены — metadata заявки, а не колонка: пишется тем же
+            # владельцем, что и в фазовых writers. Закрытие предприятия в
+            # settlement идёт через этот путь, поэтому прямой writer в dict
+            # обходил бы owner boundary.
+            store.set_metadata(order, 'reason', reason)
 
     def freight_factors(self, good):
         """Вес товара и тариф перевозки — пара для расчёта доставки.

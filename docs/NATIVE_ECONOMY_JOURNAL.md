@@ -475,3 +475,48 @@ Settlement и performance не менялись. Focused ownership/update/match/
 repricing и planning теперь проходят через владельца заявки; колоночные поля
 `remaining`, `reserved`, `status`, `price` уже были закрыты ранее. Порядок
 расчёта и применение результата не менялись.
+
+## 2026-11-18 — приёмка settlement как фазы экономики
+
+Проверена существующая реализация, повторный перенос не выполнялся. Точка
+входа одна: `monthly_boundary`/`monthly_driver` зовут `Economy.settle`, а он —
+`enterprise_settlement_boundary.settle_month`, где оба цикла (расчёты с
+предприятиями и распределение доходов) идут под одной транзакцией
+`_SettlementTransaction`. Расчёт отделён: `enterprise_settlement_kernel`
+экспортирует только `calculate_financial_results` и
+`calculate_unviable_months`, получает подготовленный tuple и возвращает tuple;
+живые dict-ы, engine и helpers в ядро не передаются.
+
+Дефект: `cancel_order` писал причину отмены прямо в словарь заявки
+(`order['reason'] = reason`), обходя `OrderStore.set_metadata`. В settlement
+этот путь достигается через `close_enterprise`, то есть закрытие предприятия
+оставляло metadata-запись мимо назначенного владельца. Исправлено минимально:
+запись идёт через `store.set_metadata(order, 'reason', reason)`; порядок
+операций, тексты причин, статусы и колонки не менялись.
+
+Добавлены два регресса: собственный AST-страж по телам settlement-функций
+(`reason`, `quantity`, `backing`, `execution_status`) и поведенческий тест
+реального `close_enterprise`, который требует вызова владельца. Проверено, что
+без правки поведенческий тест падает.
+
+Проверки: расширения пересобраны (прежние `.pyd` не содержали
+`plan_kernel.calculate_target`, поэтому импорт падал); focused
+enterprise_settlement + settlement + order_store + parity baseline — `103
+passed`; отдельно enterprise-settlement `28 passed`, order_store+settlement `69
+passed`, смежные cancel/order_ownership/owners/v3/monthly — `156 passed` при 7
+ошибках setup, вызванных не кодом: `tmp_path` не может создать каталог с
+`mode=0o700`, потому что такой каталог получает явный DACL без гранта песочницы.
+Ошибка воспроизводится минимальным тестом вне репозитория (`_tmp_probe_test.py`),
+к settlement отношения не имеет.
+
+Откат проверен инъекциями: 578 сбоев на каждом `transfer` внутри `settle` на
+двухмесячном мире и отдельные сбои после оплаты оброка, возврата капитала и
+закрытия предприятия, а также на втором переводе второй фазы; состояние
+(предприятия, счета, cash-колонки, склад, заявки, отчёт, RNG, ревизии, кэши)
+возвращается побитово, расхождений нет.
+
+Ограничения, вынесенные отдельно: save/load и durable storage в срез не
+входили; прямой writer `reason` в `cancel_order` закрыт, но release-путь
+(`_claim_public_stock`, `release_kernel`) по-прежнему пишет `quantity`/`backing`
+в обход `OrderStore` — это отдельный срез, не settlement. Оптимизация скорости
+не выполнялась.
