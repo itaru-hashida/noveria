@@ -313,10 +313,16 @@ class EconomyState:
                                  tuple(int(value) for value in row['state'].split()),
                                  row['gauss']))
 
-        state = cls(engine, world_graph)
+        state = cls(engine, world_graph, keep_reports=schema.get('keep_reports'))
         state.checkpoint_path = path
-        state.reports = [_load(row['data']) for row in _read(path / 'reports.parquet', 'reports')]
-        state.last_report = state.reports[-1] if state.reports else None
+        reports = [_load(row['data']) for row in _read(path / 'reports.parquet', 'reports')]
+        # Checkpoint всегда несёт последний отчёт: по нему интерфейс показывает
+        # текущее состояние. Историю ведёт только состояние с `keep_reports`,
+        # иначе загруженный мир копил бы отчёты там, где непрерывный прогон их не
+        # держит, а следующее сохранение записало бы устаревший отчёт и сделки
+        # прошлого месяца вместо последнего.
+        state.reports = reports if state.keep_reports else []
+        state.last_report = reports[-1] if reports else None
         tiles_changed = schema.get('tiles') not in (None, _tiles_signature(world_graph['tiles']))
         if tiles_changed:
             # Дорогу могли построить после checkpoint. Экономика об этом не знает,
@@ -567,6 +573,11 @@ class EconomyState:
             world=world_fingerprint(self.world_graph),
             tiles=_tiles_signature(self.world_graph['tiles']),
             month=self.engine.meta.get('month', 0),
+            # Режим хранения истории отчётов — часть состояния продолжения:
+            # без него загруженный мир начинал бы копить отчёты там, где
+            # непрерывный прогон их не держит (`report_detail='none'`),
+            # и следующий ход вёл бы себя иначе, чем без загрузки.
+            keep_reports=bool(self.keep_reports),
             created_at=time.time(),
             rules_version=getattr(self.engine, 'RULES_VERSION', None),
             counts={name: len(rows) for name, rows in payloads.items()},

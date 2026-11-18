@@ -285,9 +285,15 @@ def live_reports(path):
     Отчёты больше не лежат в Ladybug: вместе с прочей динамикой они пишутся в
     checkpoint по явному сохранению. Поэтому Live World читает их оттуда же,
     откуда их возьмёт новая сессия.
+
+    Checkpoint пишется как ``reports or [last_report]``: мир без истории отчётов
+    всё равно сохраняет последний месяц, и просмотр обязан показать ровно то,
+    что лежит в файле, а не пустой список.
     """
     state = live_state(path)
-    return state.reports if state is not None else []
+    if state is None:
+        return []
+    return state.reports or ([state.last_report] if state.last_report else [])
 
 
 def read_live(path, month=None):
@@ -298,7 +304,12 @@ def read_live(path, month=None):
         if not campaign or campaign.get('status') != 'ready':
             raise ValueError('Нет завершённого состояния кампании')
         state = live_state(path)
+        # Просмотр читает ровно то, что записано в checkpoint: история отчётов
+        # пишется как `reports or [last_report]`, поэтому мир без истории всё
+        # равно показывает последний месяц, а не пустой список.
         reports = state.reports if state is not None else []
+        if state is not None and not reports and state.last_report is not None:
+            reports = [state.last_report]
         ids = [report['month'] for report in reports if report.get('month', 0) > 0]
         chosen = month if month in ids else ids[-1] if ids else None
         report = next((r for r in reports if r.get('month') == chosen), None) if chosen else None
