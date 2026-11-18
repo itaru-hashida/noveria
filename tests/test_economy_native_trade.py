@@ -542,9 +542,9 @@ def test_native_and_reference_agree_on_order_columns():
 
 def test_boundary_binds_compiled_kernel():
     assert trade_boundary.NATIVE_TRADE_KERNEL is True
-    assert trade_boundary.commit_trade is KERNEL.commit_trade
+    assert trade_boundary.commit_trade is not KERNEL.calculate_trade
     assert trade_boundary.commit_trade is not trade_boundary.commit_trade_python
-    assert trade_boundary.commit_trade.__module__.endswith('trade_kernel')
+    assert KERNEL.calculate_trade.__module__.endswith('trade_kernel')
 
 
 def test_fallback_used_when_extension_absent(monkeypatch):

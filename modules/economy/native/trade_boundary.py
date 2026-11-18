@@ -185,18 +185,89 @@ _PY_MAX = builtins.max
 _PY_MIN = builtins.min
 
 
-def commit_trade_python(owner, buy, sell, quote, quantity, price, eps, cash, store):
-    """Эталон прежнего участка ``match``: одна сделка, порядок операций тот же.
-
-    Аргументы повторяют native-ядро один в один, чтобы focused-тест мог
-    прогнать обе реализации на одинаковом состоянии и сравнить побитово.
-    """
+def prepare_trade_inputs(owner, buy, sell, quote, quantity, price):
+    """Снять данные сделки до записей для чистого расчёта."""
     buyer_id = buy['participant']
     seller_id = sell['participant']
     good = buy['good']
     freight, distance, path = quote[1:]
     seller = owner.accounts[seller_id]
-    # Освобождается только резерв исполненной части, остальной остаётся защищён.
+    return (buyer_id, seller_id, good, freight, distance, path,
+            owner.free_cash(buyer_id), buy['price'], buy['reserved'],
+            owner.cfg['consumption_tax'], buy.get('final_consumption', False),
+            buy['purpose'], seller['state_id'], buy['id'], sell['id'],
+            sell['price'], owner.meta['month'], len(owner.report['trades']),
+            quantity, price)
+
+
+def calculate_trade_python(prepared, eps):
+    """Независимый Python-эталон чистого расчёта сделки."""
+    (buyer_id, seller_id, good, freight, distance, path, free_cash,
+     buy_price, buy_reserved, consumption_tax,
+     final_consumption, purpose, seller_state, buy_order, sell_order,
+     sell_price, month, trade_number, quantity, price) = prepared
+    release = quantity*buy_price
+    if quantity*price > free_cash+release+eps:
+        release = _PY_MIN(buy_reserved, _PY_MAX(release, quantity*price))
+    gross = quantity*sell_price
+    tax = gross*consumption_tax if final_consumption else 0.0
+    trade_id = f'{month}:trade:{trade_number}'
+    return (release, gross, tax, trade_id, quantity*freight, distance, path)
+
+
+def apply_trade(owner, buy, sell, prepared, result, eps, cash, store):
+    """Применить расчёт в прежнем порядке через живые владельцы полей."""
+    (buyer_id, seller_id, good, freight, distance, path, _free_cash,
+     _buy_price, _buy_reserved, _consumption_tax,
+     final_consumption, purpose, seller_state, _buy_order, _sell_order,
+     _sell_price, _month, _trade_number, quantity, price) = prepared
+    release, gross, tax, trade_id, freight_value, distance, path = result
+    seller = owner.accounts[seller_id]
+    cash.release_reserved_cash(buyer_id, release)
+    store.set_reserved(buy, _PY_MAX(0, buy['reserved']-release))
+    get_stock_store(owner).release_reserved(seller_id, good, quantity)
+    value = owner.use_stock(seller_id, good, quantity)
+    owner.add_stock(buyer_id, good, quantity, quantity*price)
+    flow_start = len(owner.report['flows'])
+    owner.transfer(buyer_id, seller_id, gross-tax, 'Товар')
+    owner.transfer(buyer_id, 'treasury:'+seller['state_id'], tax,
+                   'Налог с конечной потребительской продажи')
+    owner.transfer(buyer_id, 'carrier:'+seller['state_id'], quantity*freight, 'Перевозка')
+    for flow in owner.report['flows'][flow_start:]:
+        flow.update(buy_order=buy['id'], sell_order=sell['id'], good=good,
+                    quantity=quantity, trade_id=trade_id)
+    firm = owner.enterprises.get(seller_id)
+    if firm:
+        firm['revenue'] += gross
+        firm['tax'] = firm.get('tax', 0)+tax
+        firm['cost_of_sales'] = firm.get('cost_of_sales', 0)+value
+    if purpose == 'Строительные материалы':
+        materials = owner.accounts[buyer_id]['project']['materials']
+        materials[good] = materials.get(good, 0)+quantity
+    store.set_remaining(buy, _PY_MAX(0, buy['remaining']-quantity))
+    store.set_remaining(sell, _PY_MAX(0, sell['remaining']-quantity))
+    owner.report['trades'].append(dict(
+        trade_id=trade_id, good=good, quantity=quantity, price=sell['price'],
+        gold=gross, seller_gold=gross-tax, tax=tax, freight=freight_value,
+        distance=distance, path=path, buyer=buyer_id, seller=seller_id,
+        buy_order=buy['id'], sell_order=sell['id'],
+        buyer_state=buy['state_id'], seller_state=sell['state_id'],
+        buyer_province=buy['province_id'], seller_province=sell['province_id'],
+        purpose=purpose, final_consumption=final_consumption))
+    store.set_status(sell, 'filled' if sell['remaining'] <= eps else 'partial')
+    owner._demand_revision[good] += 1
+    owner._trades_by_seller[seller_id] += 1
+    owner.mark_market_quotes_dirty(good)
+    return owner.report['trades'][-1]
+
+
+def commit_trade_python(owner, buy, sell, quote, quantity, price, eps, cash, store):
+    """Независимый oracle прежнего участка ``match``."""
+    buyer_id = buy['participant']
+    seller_id = sell['participant']
+    good = buy['good']
+    freight, distance, path = quote[1:]
+    seller = owner.accounts[seller_id]
     release = quantity*buy['price']
     if quantity*price > owner.free_cash(buyer_id)+release+eps:
         release = _PY_MIN(buy['reserved'], _PY_MAX(release, quantity*price))
@@ -258,7 +329,11 @@ NATIVE_TRADE_KERNEL = False
 
 _kernel = load_trade_kernel()
 if _kernel is not None:
-    commit_trade = _kernel.commit_trade
+    def commit_trade(owner, buy, sell, quote, quantity, price, eps, cash, store):
+        """Prepare/apply in Python; call only the pure native calculation."""
+        prepared = prepare_trade_inputs(owner, buy, sell, quote, quantity, price)
+        result = _kernel.calculate_trade(prepared, eps)
+        return apply_trade(owner, buy, sell, prepared, result, eps, cash, store)
     NATIVE_TRADE_KERNEL = True
 else:
     commit_trade = commit_trade_python

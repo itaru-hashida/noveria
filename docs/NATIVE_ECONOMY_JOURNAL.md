@@ -388,3 +388,15 @@ trade kernel; `Economy.match` теперь передаёт его через у
 Добавлен focused-регресс: реальный `engine.match` выполняет первый перевод,
 затем получает внедрённый сбой на втором и возвращает состояние сделки к
 исходному. Другие рыночные фазы и полный pytest этим срезом не затрагивались.
+
+## 2026-11-18 — чистый native calculation для market trade
+
+`trade_kernel` теперь экспортирует только расчёт по подготовленному tuple.
+Python-граница владеет подготовкой и применением через прежние CashStore,
+StockStore и OrderStore, а `use_stock` остаётся единственным расчётом живой
+стоимости склада. Производственный `commit_trade` — Python wrapper, который
+вызывает только `_kernel.calculate_trade`; Cython callback с owner удалён.
+Независимый `commit_trade_python` сохранён буквальным oracle прежнего порядка.
+
+GCC build успешен. Focused trade/match/monthly parity: 81 passed. Полный
+pytest не запускался.

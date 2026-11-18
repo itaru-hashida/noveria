@@ -1,21 +1,12 @@
 # cython: language_level=3
 from .stock_store_boundary import get_stock_store
-"""Исполнение одной уже выбранной сделки: заявки, деньги, отчёт.
+"""Чистый расчёт одной уже выбранной сделки.
 
-Ядро не выбирает buyer/seller и не считает ``q``: это делает Python-цикл
-``match``. Сюда приходит готовое решение, и здесь оно исполняется ровно в
-прежнем порядке.
+Ядро не выбирает buyer/seller, не считает ``q`` и не пишет владельцев. Сюда
+приходит подготовленный tuple и возвращается только готовый результат.
 
-Тела ``transfer``/``use_stock``/``add_stock`` намеренно НЕ копируются: они
-вызываются у движка, поэтому переопределение в наследниках, сценариях и
-тестах продолжает работать. Ядро убирает Python-фрейм сделки и держит
-горячие мутации заявок и отчёта в компилированном коде.
-
-Порядок операций и арифметика повторяют прежний Python-код один в один:
-освобождение резервов, списание/зачисление товара, переводы (seller, tax,
-carrier), доходы фирмы, материалы стройки, остатки и статусы заявок,
-flows/trades и ревизии. Никакого rollback и новых транзакционных правил
-здесь нет.
+Все записи (CashStore, StockStore, OrderStore, report и hooks движка)
+остаются в ``trade_boundary.apply_trade`` под существующим rollback.
 """
 
 import builtins
@@ -27,81 +18,28 @@ _PY_MAX = builtins.max
 _PY_MIN = builtins.min
 
 
-def commit_trade(object owner, object buy, object sell, object quote,
-                 object quantity, object price, object eps,
-                 object cash, object store):
-    """Исполнить одну сделку. Возвращает запись ``report['trades']``."""
-    cdef object buyer_id = buy['participant']
-    cdef object seller_id = sell['participant']
-    cdef object good = buy['good']
-    cdef object accounts = owner.accounts
-    cdef object report = owner.report
-    # Счетец продавца читается до освобождения резерва: так было и в Python.
-    cdef object seller = accounts[seller_id]
-    # Связанные методы движка: вызов идёт через объект, поэтому подмена
-    # ``transfer``/``use_stock``/``add_stock`` в наследнике остаётся в силе.
-    cdef object free_cash = owner.free_cash
-    cdef object use_stock = owner.use_stock
-    cdef object add_stock = owner.add_stock
-    cdef object transfer = owner.transfer
-    cdef object mark_dirty = owner.mark_market_quotes_dirty
-    cdef object rest = quote[1:]
-    cdef object freight, distance, path, release, value, gross, tax
-    cdef object trade_id, flow_start, flows, trades, firm, materials
-    cdef object stock_reserved, month
-
-    freight, distance, path = rest
-    # Освобождается только резерв исполненной части, остальной остаётся защищён.
-    release = quantity*buy['price']
-    # Допуск цены задан на единицу. На большой партии разница может превысить
-    # денежный EPS: освобождаем обеспеченную фактическую сумму, не затрагивая
-    # резервы других заявок и не меняя обычные сделки.
-    if quantity*price > free_cash(buyer_id)+release+eps:
-        release = _PY_MIN(buy['reserved'], _PY_MAX(release, quantity*price))
-    # Резерв счёта и резерв заявки — разные поля: первый освобождает
-    # исполненную часть, второй уменьшается на ту же сумму.
-    cash.release_reserved_cash(buyer_id, release)
-    store.set_reserved(buy, _PY_MAX(0, buy['reserved']-release))
-    get_stock_store(owner).release_reserved(seller_id, good, quantity)
-    value = use_stock(seller_id, good, quantity)
-    add_stock(buyer_id, good, quantity, quantity*price)
-    gross = quantity*sell['price']
-    if buy.get('final_consumption', False):
-        tax = gross*owner.cfg['consumption_tax']
-    else:
-        tax = 0.0
-    flows = report['flows']
-    flow_start = len(flows)
-    trades = report['trades']
-    month = owner.meta['month']
-    trade_id = f'{month}:trade:{len(trades)}'
-    transfer(buyer_id, seller_id, gross-tax, 'Товар')
-    transfer(buyer_id, 'treasury:'+seller['state_id'], tax,
-             'Налог с конечной потребительской продажи')
-    transfer(buyer_id, 'carrier:'+seller['state_id'], quantity*freight, 'Перевозка')
-    for flow in flows[flow_start:]:
-        flow.update(buy_order=buy['id'], sell_order=sell['id'], good=good,
-                    quantity=quantity, trade_id=trade_id)
-    firm = owner.enterprises.get(seller_id)
-    if firm:
-        firm['revenue'] = firm['revenue']+gross
-        firm['tax'] = firm.get('tax', 0)+tax
-        firm['cost_of_sales'] = firm.get('cost_of_sales', 0)+value
-    if buy['purpose'] == 'Строительные материалы':
-        materials = accounts[buyer_id]['project']['materials']
-        materials[good] = materials.get(good, 0)+quantity
-    store.set_remaining(buy, _PY_MAX(0, buy['remaining']-quantity))
-    store.set_remaining(sell, _PY_MAX(0, sell['remaining']-quantity))
-    trades.append(dict(trade_id=trade_id, good=good, quantity=quantity,
-        price=sell['price'], gold=gross, seller_gold=gross-tax, tax=tax,
-        freight=quantity*freight, distance=distance, path=path,
-        buyer=buyer_id, seller=seller_id, buy_order=buy['id'], sell_order=sell['id'],
-        buyer_state=buy['state_id'], seller_state=sell['state_id'],
-        buyer_province=buy['province_id'], seller_province=sell['province_id'],
-        purpose=buy['purpose'], final_consumption=buy.get('final_consumption', False)))
-    store.set_status(sell, 'filled' if sell['remaining'] <= eps else 'partial')
-    owner._demand_revision[good] = owner._demand_revision[good]+1
-    # Прогнозу выпуска нужны только свои сделки.
-    owner._trades_by_seller[seller_id] = owner._trades_by_seller[seller_id]+1
-    mark_dirty(good)
-    return trades[len(trades)-1]
+def calculate_trade(object prepared, object eps):
+    """Pure numeric calculation over prepared data."""
+    cdef object free_cash = prepared[6]
+    cdef object buy_price = prepared[7]
+    cdef object buy_reserved = prepared[8]
+    cdef object consumption_tax = prepared[9]
+    cdef bint final_consumption = prepared[10]
+    cdef object freight = prepared[3]
+    cdef object distance = prepared[4]
+    cdef object path = prepared[5]
+    cdef object sell_price = prepared[15]
+    cdef object month = prepared[16]
+    cdef object trade_number = prepared[17]
+    cdef object quantity = prepared[18]
+    cdef object price = prepared[19]
+    cdef object release = quantity*buy_price
+    cdef object gross
+    cdef object tax
+    cdef object trade_id
+    if quantity*price > free_cash+release+eps:
+        release = _PY_MIN(buy_reserved, _PY_MAX(release, quantity*price))
+    gross = quantity*sell_price
+    tax = gross*consumption_tax if final_consumption else 0.0
+    trade_id = f'{month}:trade:{trade_number}'
+    return (release, gross, tax, trade_id, quantity*freight, distance, path)
