@@ -400,3 +400,19 @@ StockStore и OrderStore, а `use_stock` остаётся единственны
 
 GCC build успешен. Focused trade/match/monthly parity: 81 passed. Полный
 pytest не запускался.
+
+## 2026-11-18 — Python orchestration matcher и чистый расчёт q
+
+`match_kernel` больше не обходит книгу и не принимает `owner`: он экспортирует
+только `calculate_quantity` по явным числовым входам. Python сохраняет
+группировку цен, `shuffled`, live-перечитывания `remaining`/`reserved`,
+`purchase_quantity`, остановку после полного исполнения и `commit_trade`.
+Независимый `run_match_python` оставлен полным oracle.
+
+Старый `match_driver` оставлен импортируемым для совместимости диагностики,
+но production bindings `run_buyer`/`run_buyers` намеренно указывают на
+Python-реализации. Поэтому monthly path больше не передаёт owner в Cython
+driver; callbacks и extensions выполняются в прежнем Python-порядке.
+
+`match_kernel` и изменённые native extensions пересобраны GCC. Focused
+matcher/driver/monthly parity: 68 passed. Полный pytest не запускался.

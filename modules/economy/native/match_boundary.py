@@ -36,6 +36,13 @@ def _same_level(left, right):
     return left == right or math.isclose(left, right, rel_tol=1e-12, abs_tol=1e-12)
 
 
+def calculate_quantity_python(prepared, eps):
+    """Независимый числовой oracle для одной уже разрешённой пары."""
+    buy_remaining, sell_remaining, reserved, price, purchase = prepared
+    q = _PY_MIN(buy_remaining, sell_remaining, reserved/price, purchase)
+    return q if q > eps else 0
+
+
 def run_match_python(owner, buy, options, sells, eps, cash, store, commit):
     """Эталон прежнего участка ``match`` после построения ``OfferView``.
 
@@ -136,21 +143,53 @@ def load_match_driver():
         return None
 
 
+def _run_match_calculated(owner, buy, options, sells, eps, cash, store, commit,
+                          calculate):
+    """Python-owned traversal using only the supplied numeric calculation."""
+    purchase = owner.purchase_quantity
+    iterator = iter(options)
+    pending = next(iterator, None)
+    while pending is not None:
+        price_level = pending[0]
+        tied = [pending]
+        pending = next(iterator, None)
+        while pending is not None and _same_level(price_level, pending[0]):
+            tied.append(pending)
+            pending = next(iterator, None)
+        for price, sell, quote in owner.shuffled(tied, key=_row_id):
+            if price > buy['price']+eps:
+                continue
+            prepared = (buy['remaining'], sell['remaining'], buy['reserved'],
+                        price, purchase(buy, sells))
+            q = calculate(prepared, eps)
+            if q <= eps:
+                continue
+            commit(owner, buy, sell, quote, q, price, eps, cash, store)
+            if buy['remaining'] <= eps:
+                break
+        if buy['remaining'] <= eps:
+            break
+
+
+def run_match(owner, buy, options, sells, eps, cash, store, commit):
+    """Native numeric calculation with Python-owned matcher traversal."""
+    return _run_match_calculated(owner, buy, options, sells, eps, cash, store,
+                                 commit, calculate_quantity)
+
+
 NATIVE_MATCH_KERNEL = False
 NATIVE_MATCH_DRIVER = False
 
 _kernel = load_match_kernel()
 if _kernel is not None:
-    run_match = _kernel.run_match
+    calculate_quantity = _kernel.calculate_quantity
     NATIVE_MATCH_KERNEL = True
 else:
-    run_match = run_match_python
+    calculate_quantity = calculate_quantity_python
 
+# ``match_driver`` remains importable for compatibility diagnostics, but it
+# owns the old owner-taking orchestration and is deliberately not a production
+# entry point. Buyer traversal and all callbacks stay in Python.
 _driver = load_match_driver()
-if _driver is not None:
-    run_buyer = _driver.run_buyer
-    run_buyers = _driver.run_buyers
-    NATIVE_MATCH_DRIVER = True
-else:
-    run_buyer = run_buyer_python
-    run_buyers = run_buyers_python
+run_buyer = run_buyer_python
+run_buyers = run_buyers_python

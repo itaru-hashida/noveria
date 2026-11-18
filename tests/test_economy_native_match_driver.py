@@ -284,15 +284,15 @@ def test_hooks_are_called_in_previous_order():
     assert calls == ['reprice', 'offers', 'observe', 'finish']
 
 
-def test_inner_loop_is_the_existing_cython_kernel():
-    """Внутренний цикл приходит аргументом: копии обхода книги нет."""
+def test_inner_loop_is_the_python_match_boundary():
+    """Внешний driver получает Python matcher boundary как callback."""
     engine, buys, sells = scene([('b1', 10.0, 5.0)], [('00008', 10.0, 5.0)])
     calls = []
 
     def inner(owner, buy, options, market_sells, eps, cash, store, commit):
         calls.append(buy['id'])
-        return KERNEL.run_match(owner, buy, options, market_sells, eps, cash,
-                                store, commit)
+        return match_boundary.run_match(owner, buy, options, market_sells, eps,
+                                        cash, store, commit)
 
     run(engine, buys, sells, inner=inner)
     assert calls == ['b1']
@@ -401,12 +401,11 @@ def test_single_buyer_entry_point_matches_reference():
         encoded(run_one(match_boundary.run_buyer_python))
 
 
-def test_boundary_binds_compiled_driver():
-    assert match_boundary.NATIVE_MATCH_DRIVER is True
-    assert match_boundary.run_buyers is DRIVER.run_buyers
-    assert match_boundary.run_buyer is DRIVER.run_buyer
-    assert match_boundary.run_buyers is not match_boundary.run_buyers_python
-    assert match_boundary.run_buyers.__module__.endswith('match_driver')
+def test_boundary_keeps_driver_out_of_production():
+    """Compatibility driver is not bound to the production entry points."""
+    assert match_boundary.NATIVE_MATCH_DRIVER is False
+    assert match_boundary.run_buyers is match_boundary.run_buyers_python
+    assert match_boundary.run_buyer is match_boundary.run_buyer_python
 
 
 def test_fallback_used_when_driver_absent(monkeypatch):

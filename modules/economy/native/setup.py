@@ -24,9 +24,8 @@ setup(
          # Чистый расчёт одной уже выбранной сделки по подготовленному tuple;
          # application, stores и rollback остаются в Python-границе.
          Extension('trade_kernel', ['trade_kernel.pyx']),
-         # Внутренний цикл одного buyer order: обходит готовый OfferView и
-         # вызывает переданный commit_trade. Порядок покупателей и книга
-         # остаются в Python, поэтому ядро не зависит от прочих расширений.
+         # Чистый расчёт eligibility/q по явным числовым входам. Обход книги,
+         # live rechecks, RNG, callbacks и commit_trade остаются в Python.
          Extension('match_kernel', ['match_kernel.pyx']),
          # Внешний цикл покупателей: обходит уже перемешанный список заявок и
          # вызывает прежние хуки движка и внутренний цикл по книге. Порядок
