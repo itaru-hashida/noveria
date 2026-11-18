@@ -198,6 +198,11 @@ class EconomyState:
     def load_checkpoint(cls, path, world_graph, strict=True):
         """Восстановить состояние из Parquet и продолжить игру с того же места."""
         path = Path(path)
+        checkpoint_path = path
+        if not path.exists():
+            backup = path.with_name(path.name + '.previous')
+            if (backup / 'schema.json').is_file():
+                path = backup
         schema_path = path / 'schema.json'
         if not schema_path.is_file():
             raise ValueError(f'Нет checkpoint экономики: {schema_path}')
@@ -314,7 +319,7 @@ class EconomyState:
                                  row['gauss']))
 
         state = cls(engine, world_graph, keep_reports=schema.get('keep_reports'))
-        state.checkpoint_path = path
+        state.checkpoint_path = checkpoint_path
         reports = [_load(row['data']) for row in _read(path / 'reports.parquet', 'reports')]
         # Checkpoint всегда несёт последний отчёт: по нему интерфейс показывает
         # текущее состояние. Историю ведёт только состояние с `keep_reports`,
@@ -548,6 +553,10 @@ class EconomyState:
         """
         path = Path(path)
         staging = path.with_name(path.name + '.staging')
+        backup = path.with_name(path.name + '.previous')
+        # После прерывания публикации единственная сохранённая версия — backup.
+        if not path.exists() and (backup / 'schema.json').is_file():
+            os.replace(backup, path)
         shutil.rmtree(staging, ignore_errors=True)
         staging.mkdir(parents=True, exist_ok=True)
         started = time.perf_counter()
@@ -583,9 +592,19 @@ class EconomyState:
             counts={name: len(rows) for name, rows in payloads.items()},
         )
         (staging / 'schema.json').write_text(_dump(schema), encoding='utf-8')
-        if path.exists():
-            shutil.rmtree(path)
-        os.replace(staging, path)
+        had_checkpoint = path.exists()
+        if had_checkpoint:
+            if backup.exists():
+                shutil.rmtree(backup)
+            os.replace(path, backup)
+        try:
+            os.replace(staging, path)
+        except OSError:
+            if had_checkpoint and not path.exists():
+                os.replace(backup, path)
+            raise
+        if had_checkpoint:
+            shutil.rmtree(backup, ignore_errors=True)
         self.checkpoint_path = path
         self.checkpoint_seconds = time.perf_counter() - started
         return self.checkpoint_path

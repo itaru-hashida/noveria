@@ -175,6 +175,43 @@ def test_checkpoint_round_trip_keeps_state_exactly(tmp_path):
         assert loaded.engine.meta['month'] == state.engine.meta['month'] + 1
 
 
+@pytest.mark.parametrize('interrupted', [False, True])
+def test_checkpoint_publication_preserves_previous_save(tmp_path, monkeypatch, interrupted):
+    import os
+
+    db, service = small_world(tmp_path)
+    checkpoint = tmp_path / 'economy'
+    try:
+        service.advance_turn(command_id='before-save', source='test')
+        service.save_checkpoint(checkpoint)
+        before = state_digest(service.economy_state())
+        service.advance_turn(command_id='next-turn', source='test')
+        expected = state_digest(service.economy_state())
+        replace = os.replace
+        error = KeyboardInterrupt if interrupted else OSError
+
+        def fail_publication(source, destination):
+            if source == checkpoint.with_suffix('.staging') and destination == checkpoint:
+                raise error('publication failed')
+            return replace(source, destination)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(os, 'replace', fail_publication)
+            with pytest.raises(error, match='publication failed'):
+                service.save_checkpoint(checkpoint)
+    finally:
+        db.close()
+
+    with WorldDB(tmp_path / 'world.lbug') as db:
+        service = WorldService(db, EventBus())
+        loaded = service.load_checkpoint(checkpoint)
+        assert state_digest(loaded) == before
+        service.advance_turn(command_id='retry-next-turn', source='test')
+        assert state_digest(loaded) == expected
+        service.save_checkpoint(checkpoint)
+        assert state_digest(service.load_checkpoint(checkpoint)) == expected
+
+
 def test_money_goods_and_reserves_converge_after_restore(tmp_path):
     db, service = small_world(tmp_path)
     try:
