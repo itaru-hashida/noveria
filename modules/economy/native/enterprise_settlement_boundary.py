@@ -165,6 +165,34 @@ def run_settle_python(engine, enterprises, hooks, eps):
     return None
 
 
+def run_settle(engine, enterprises, hooks, eps):
+    """Run the old settlement traversal in Python around pure calculations.
+
+    The list order, owner reads/writes, money calls, and lifecycle short
+    circuits are deliberately visible here.  The native extension is used
+    only for the two data-only calculations below.
+    """
+    month = engine.meta['month']
+    loss_limit = engine.cfg['loss_months_to_close']
+    for e in enterprises:
+        due = hooks.overhead(e)
+        paid = min(due, hooks.free_cash(e['id']))
+        if paid > eps:
+            hooks.pay_overhead(e, paid)
+        prepared = hooks.prepare_financial_inputs(e, due, paid)
+        result = calculate_financial_results(prepared, eps)
+        hooks.apply_financial_results(e, result)
+        if result[6]:
+            hooks.return_capital(e)
+            continue
+        unviable = hooks.prepare_unviable_inputs(e, month, loss_limit)
+        unviable_result = calculate_unviable_months(unviable)
+        hooks.apply_unviable_months(e, unviable_result)
+        if unviable_result[1]:
+            hooks.close_enterprise(e)
+    return None
+
+
 def load_enterprise_settlement_kernel():
     """Вернуть native-модуль enterprise_settlement_kernel или None.
 
@@ -182,14 +210,14 @@ NATIVE_KERNEL = False
 
 _kernel = load_enterprise_settlement_kernel()
 if _kernel is not None:
-    run_settle = _kernel.run_settle
     NATIVE_KERNEL = True
-else:
-    run_settle = run_settle_python
 
 calculate_financial_results = (getattr(_kernel, 'calculate_financial_results',
     calculate_financial_results_python) if _kernel is not None
     else calculate_financial_results_python)
+calculate_unviable_months = (getattr(_kernel, 'calculate_unviable_months',
+    calculate_unviable_months_python) if _kernel is not None
+    else calculate_unviable_months_python)
 
 
 def settle(engine, enterprises):

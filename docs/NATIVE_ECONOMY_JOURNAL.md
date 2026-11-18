@@ -342,3 +342,15 @@ market book и production outlook. Это закрывает структурн�
 Попытка изменить формат recovery-ключа нарушила побитовую parity Cython.
 Прежний формат восстановлен. Cython-драйвер пересобран, 142 focused-теста
 прошли, включая проверку эталонных траекторий.
+
+## 2026-11-18 — перенос orchestration enterprise settlement в Python
+
+Убран `run_settle` из `enterprise_settlement_kernel.pyx`. Обход предприятий,
+порядок чтений и записей, short-circuit после возврата капитала, оплата оброка
+и lifecycle-вызовы теперь выполняются в `enterprise_settlement_boundary`.
+Cython оставляет только чистые расчёты финансового результата и счётчика
+нежизнеспособности; Python-эталон сохранён независимо. Денежные транзакции не
+рефакторились.
+
+Пересборка и focused enterprise_settlement/settlement/parity baseline
+выполнены после обновления тестов на native-only calculation exports.

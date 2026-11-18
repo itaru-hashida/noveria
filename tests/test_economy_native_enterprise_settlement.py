@@ -292,8 +292,17 @@ def test_load_kernel_returns_none_when_extension_is_missing(monkeypatch):
 
 def test_boundary_exposes_both_implementations():
     for name in ('settle', 'run_settle', 'run_settle_python',
+                 'calculate_financial_results', 'calculate_unviable_months',
                  'load_enterprise_settlement_kernel', 'EnterpriseSettlementHooks'):
         assert callable(getattr(boundary, name)), name
+
+
+def test_native_kernel_exports_calculations_only():
+    kernel = boundary.load_enterprise_settlement_kernel()
+    assert kernel is not None
+    assert callable(kernel.calculate_financial_results)
+    assert callable(kernel.calculate_unviable_months)
+    assert not hasattr(kernel, 'run_settle')
 
 
 # --- 3. Реальный мир: exact траектории --------------------------------------
