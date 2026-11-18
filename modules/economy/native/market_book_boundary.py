@@ -128,6 +128,13 @@ def market_book_is_fresh_python(entry, sell_list, engine):
         '_market_quotes_epoch', 0)
 
 
+def market_book_is_fresh_epoch(entry, sell_list, epoch):
+    """Чистая проверка книги по явно подготовленной эпохе."""
+    if entry is None or entry.get('source') is not sell_list:
+        return False
+    return entry.get('quote_epoch', 0) == epoch
+
+
 def load_market_book():
     """Вернуть native-модуль market_book_kernel или None, если он не собран.
 
@@ -145,15 +152,17 @@ NATIVE_MARKET_BOOK = False
 
 _kernel = load_market_book()
 if _kernel is not None:
-    landed = _kernel.landed
-    build_options = _kernel.build_options
-    market_book_is_fresh = _kernel.market_book_is_fresh
+    # Engine-facing operations remain in this boundary. Native receives only
+    # prepared freight values through build_options_batch.
+    landed = landed_python
+    build_options = build_options_python
+    market_book_is_fresh = market_book_is_fresh_epoch
     option_key = _kernel.option_key
-    stream_key = _kernel.stream_key
+    stream_key = stream_key_python
     NATIVE_MARKET_BOOK = True
 else:
     landed = landed_python
     build_options = build_options_python
-    market_book_is_fresh = market_book_is_fresh_python
+    market_book_is_fresh = market_book_is_fresh_epoch
     option_key = option_key_python
     stream_key = stream_key_python

@@ -203,25 +203,49 @@ def _compute(engine, e, hooks):
             and run_outlook is _kernel.outlook
             and _demand.cover_demand_from_books is not None):
         return _compute_from_books(engine, e, quote, hooks, cost, base_net)
+    snapshot = _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote)
+    return _compute_snapshot(snapshot)
+
+
+def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote):
+    """Собрать все engine-facing чтения до native calculation."""
     demand = hooks.reachable_demand(quote)
-    trades = hooks.trades()
-    # Короткое замыкание прежнего выражения: при выключенной ревизии склада
-    # хук не вызывается вовсе, ядро получает None и подставляет 0.0.
-    if engine.STOCK_PLANNING_REVISION:
-        expected_sales = hooks.expected_stock_sales(
-            demand if price == e['price'] else None)
-    else:
-        expected_sales = None
-    return run_outlook(hooks.observations(), e['sales_forecast'], trades,
-                       e['id'], e['good'],
-                       demand, expected_sales, engine.STOCK_PLANNING_REVISION,
-                       hooks.stock(e['good']), e['capacity'],
-                       e.get('planned_output', 0), cost,
-                       (base_net if price == e['price']
-                        else hooks.net_price(quote)),
-                       hooks.overhead(), EPS,
-                       engine.cfg['output_overstock_factor'],
-                       engine.cfg['output_decline_rate'], price)
+    expected_sales = (
+        hooks.expected_stock_sales(demand if price == e['price'] else None)
+        if engine.STOCK_PLANNING_REVISION else None)
+    return {
+        'observations': hooks.observations(),
+        'sales_forecast': e['sales_forecast'],
+        'trades': hooks.trades(),
+        'seller': e['id'],
+        'good': e['good'],
+        'demand': demand,
+        'expected_sales': expected_sales,
+        'stock_planning': engine.STOCK_PLANNING_REVISION,
+        'stock': hooks.stock(e['good']),
+        'capacity': e['capacity'],
+        'previous': e.get('planned_output', 0),
+        'cost': cost,
+        'expected_price': (base_net if price == e['price']
+                           else hooks.net_price(quote)),
+        'overhead': hooks.overhead(),
+        'overstock_factor': engine.cfg['output_overstock_factor'],
+        'decline_rate': engine.cfg['output_decline_rate'],
+        'price': price,
+    }
+
+
+def _compute_snapshot(snapshot):
+    """Единственная native calculation boundary для готового snapshot."""
+    return run_outlook(snapshot['observations'], snapshot['sales_forecast'],
+                       snapshot['trades'], snapshot['seller'], snapshot['good'],
+                       snapshot['demand'], snapshot['expected_sales'],
+                       snapshot['stock_planning'], snapshot['stock'],
+                       snapshot['capacity'], snapshot['previous'],
+                       snapshot['cost'], snapshot['expected_price'],
+                       snapshot['overhead'], EPS,
+                       snapshot['overstock_factor'], snapshot['decline_rate'],
+                       snapshot['price'])
 
 
 def _compute_from_books(engine, e, quote, hooks, cost, base_net):

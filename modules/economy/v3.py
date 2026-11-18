@@ -1669,7 +1669,8 @@ class Economy(EconomyServices):
         sell_list = sells.get(good, [])
         key = (id(sell_list), self.market_tile(buyer), good)
         entry = books.get(key)
-        if _market_book_native.market_book_is_fresh(entry, sell_list, self):
+        if _market_book_native.market_book_is_fresh(
+                entry, sell_list, self.__dict__.get('_market_quotes_epoch', 0)):
             # Книга переживает замену хранилища (например, отчёт заменили), а
             # номера слотов принадлежат конкретному OrderStore. Ссылка берётся
             # прямо из __dict__, без property: попадание книги бывает десятки

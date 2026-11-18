@@ -304,3 +304,20 @@ Cython быстрее полного прогона примерно на 2.2%, 
 набор прошёл `26 passed`, `git diff --check` чистый. Устранена одна граница;
 production outlook hooks, cache ownership и market-book legacy fallback ещё
 остаются следующими архитектурными задачами.
+
+## 2026-11-18 — закрытие границ production outlook и market book
+
+Production outlook теперь сначала собирает полный `snapshot` всех чтений
+движка (`demand`, stock, trades, cost, overhead, revisions и параметры
+снижения), после чего native calculation вызывается отдельной функцией
+`_compute_snapshot`. Hooks больше не перемешаны с вычислительной частью.
+
+Market-book kernel очищен от `engine`, route helpers, cache mutation и
+freshness lookup. В нём осталась только сборка options из готовых заявок и
+числовых freight-значений. `landed`, route lookup, cache и invalidation
+остаются в `market_book_boundary`; freshness получает эпоху явно.
+
+Пересборка Cython успешна. Focused-набор прошёл `231 passed`, включая parity,
+market book и production outlook. Это закрывает структурные пункты 1–3 в
+текущем planning/market-book срезе; общий ownership settlement/ledger ещё не
+закрыт.

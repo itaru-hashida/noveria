@@ -625,7 +625,8 @@ def test_fallback_switches_to_python_reference(monkeypatch):
     # Подмена локальна для теста: движок снова получает ядро.
     monkeypatch.undo()
     assert boundary.NATIVE_MARKET_BOOK is True
-    assert boundary.landed is not boundary.landed_python
+    # Native kernel is pure; engine-facing landed remains in the boundary.
+    assert boundary.landed is boundary.landed_python
 
 
 def test_python_fallback_builds_the_same_book():
