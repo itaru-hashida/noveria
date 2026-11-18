@@ -287,22 +287,23 @@ def test_construction_bill_zero_capacity():
 
 
 def test_boundary_exposes_native_when_built():
-    built = material_boundary.load_material_kernel() is not None
+    built = hasattr(material_boundary.load_material_kernel(), 'assignable_stock')
     assert material_boundary.NATIVE_MATERIAL_KERNEL is built
     if built:
-        assert material_boundary.reserve_materials.__module__.endswith('material_kernel')
+        assert material_boundary.assignable_stock.__module__.endswith('material_kernel')
     else:
-        assert material_boundary.reserve_materials is material_boundary.reserve_materials_python
+        assert material_boundary.assignable_stock is material_boundary.assignable_stock_python
 
 
 def test_native_entry_points_are_the_compiled_ones():
     """Граница обязана привязать именно скомпилированные функции, а не эталон."""
     kernel = material_boundary.load_material_kernel()
-    if kernel is None:
+    if not hasattr(kernel, 'assignable_stock'):
         pytest.skip('Cython-расширение material_kernel не собрано')
-    assert material_boundary.reserve_materials is kernel.reserve_materials
+    assert material_boundary.assignable_stock is kernel.assignable_stock
+    assert material_boundary.assign_from_free_stock is kernel.assign_from_free_stock
     assert material_boundary.construction_bill is kernel.construction_bill
-    assert material_boundary.reserve_materials is not material_boundary.reserve_materials_python
+    assert not hasattr(kernel, 'reserve_materials')
 
 
 def test_load_returns_none_when_extension_absent(monkeypatch):

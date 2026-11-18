@@ -1,41 +1,4 @@
-"""Граница резерва строительных материалов: одна привязка реализации на импорт.
-
-Модуль не хранит состояние движка и не создаёт второго склада: ``account`` —
-живой словарь счёта, поэтому ``stock_reserved`` и ``project['materials']``,
-которые меняет ядро, — те же вложенные словари, что читает остальной движок.
-Копий заявок и счетов нет, а ``store`` — существующая граница мутаций заявок
-(``order_boundary``), переданная вызовом, а не пересозданная здесь.
-
-Что перенесено в ядро: расчёт сметы, проверка доступного склада, закрепление
-материалов за проектом и обновление ``stock_reserved``.
-
-Что осталось в Python и почему:
-
-  * выбор проекта и порядок проектов — цикл ``v3.project_material_requests``
-    по перемешанному списку инвесторов; ядро получает уже выбранный проект;
-  * отмена по простою и по марже/спросу живёт целиком в v3 до этого вызова;
-  * доставка и защита денег (``project['delivery']``, ``account['protected']``)
-    живут в отдельной границе ``delivery_boundary``: она обязана выполниться
-    **до** строительных закупок, потому что ``free_cash`` читает
-    ``protected`` и без него ``order`` урезал бы заявку по деньгам;
-  * мутации заявок (``quantity``/``remaining``/``backing``), отмена опустевшего
-    оффера и выставление строительной закупки остаются хуками движка: ядро
-    задаёт только их порядок и аргументы;
-  * отчёт, dirty goods, очередь и RNG не затрагиваются вовсе.
-
-Смета считается здесь же, в ``construction_bill``: это чистая функция от
-``cfg['construction']``, мощности и ``minimum_capacity``. Готовый словарь
-передаётся ядру, поэтому у доставки и у резерва один и тот же источник чисел.
-
-Эталонная Python-реализация живёт в этом же модуле: она нужна как образец для
-focused-теста на побитовое совпадение и как fallback, если расширение не
-собрано. Реализации принимают одни и те же аргументы, поэтому тест гоняет обе
-на одинаковом состоянии и сравнивает словари, типы и порядок вызовов хуков.
-
-Имена привязываются один раз при импорте, чтобы не платить за диспетчер на
-каждом проекте. Модуль не импортирует ``modules.economy.support``: EPS
-приходит аргументом, поэтому циклического импорта нет.
-"""
+"""Подготовка и применение резервов стройки по живым остаткам и офферам."""
 
 import builtins
 import importlib
@@ -96,13 +59,18 @@ def place_order_hook(owner, account, good, missing, sells):
     owner.order(account['id'], good, missing, 'buy', price, MATERIAL_PURPOSE)
 
 
-def reserve_materials_python(owner, account, project, bill, sells, eps, store,
-                             free_stock, detach_offer, settle_release, place_order):
-    """Эталон прежнего участка ``project_material_requests``.
+def assignable_stock_python(needed, stock, held):
+    return _PY_MIN(needed, _PY_MAX(0, stock-held))
 
-    Аргументы повторяют native-ядро один в один, чтобы focused-тест мог
-    прогнать обе реализации на одинаковом состоянии и сравнить побитово.
-    """
+
+def assign_from_free_stock_python(needed, free, held):
+    return held+_PY_MIN(needed, free)
+
+
+def _reserve_materials(owner, account, project, bill, sells, eps, store,
+                       free_stock, detach_offer, settle_release, place_order,
+                       assignable, assign_final):
+    """Зарезервировать материалы и разместить заявки в порядке сметы."""
     materials = project['materials']
     stock = account['stock']
     stock_store = get_stock_store(owner)
@@ -110,7 +78,7 @@ def reserve_materials_python(owner, account, project, bill, sells, eps, store,
     for good, quantity in bill.items():
         held = materials.get(good, 0)
         # Прежний порядок: сначала физический склад, затем свободный остаток.
-        assign = _PY_MIN(_PY_MAX(0, quantity-held), _PY_MAX(0, stock.get(good, 0)-held))
+        assign = assignable(_PY_MAX(0, quantity-held), stock.get(good, 0), held)
         release = _PY_MAX(0, assign-free_stock(owner, account_id, good))
         for offer in sells.get(good, []):
             if offer['participant'] != account_id or offer['status'] in ('cancelled', 'expired'):
@@ -121,12 +89,12 @@ def reserve_materials_python(owner, account, project, bill, sells, eps, store,
             # С рынка снимается только закреплённая часть, свободный остаток
             # остаётся в продаже.
             detach_offer(owner, store, offer, take)
-            stock_store.release_reserved(account['id'], good, take)
+            stock_store.release_reserved(account_id, good, take)
             release = release-take
             settle_release(owner, offer, good, eps)
         # Пересчёт по свободному остатку после освобождения собственных офферов.
-        assign = _PY_MIN(_PY_MAX(0, quantity-held), free_stock(owner, account_id, good))
-        materials[good] = held+assign
+        materials[good] = assign_final(
+            _PY_MAX(0, quantity-held), free_stock(owner, account_id, good), held)
         missing = _PY_MAX(0, quantity-materials[good])
         place_order(owner, account, good, missing, sells)
     return None
@@ -145,13 +113,23 @@ def load_material_kernel():
         return None
 
 
-NATIVE_MATERIAL_KERNEL = False
+def reserve_materials_python(owner, account, project, bill, sells, eps, store,
+                             free_stock, detach_offer, settle_release, place_order):
+    return _reserve_materials(owner, account, project, bill, sells, eps, store,
+                              free_stock, detach_offer, settle_release, place_order,
+                              assignable_stock_python, assign_from_free_stock_python)
+
+
+def reserve_materials(owner, account, project, bill, sells, eps, store,
+                      free_stock, detach_offer, settle_release, place_order):
+    return _reserve_materials(owner, account, project, bill, sells, eps, store,
+                              free_stock, detach_offer, settle_release, place_order,
+                              assignable_stock, assign_from_free_stock)
+
 
 _kernel = load_material_kernel()
-if _kernel is not None:
-    construction_bill = _kernel.construction_bill
-    reserve_materials = _kernel.reserve_materials
-    NATIVE_MATERIAL_KERNEL = True
-else:
-    construction_bill = construction_bill_python
-    reserve_materials = reserve_materials_python
+construction_bill = getattr(_kernel, 'construction_bill', construction_bill_python)
+assignable_stock = getattr(_kernel, 'assignable_stock', assignable_stock_python)
+assign_from_free_stock = getattr(
+    _kernel, 'assign_from_free_stock', assign_from_free_stock_python)
+NATIVE_MATERIAL_KERNEL = assignable_stock is not assignable_stock_python
