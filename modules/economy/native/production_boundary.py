@@ -1,19 +1,4 @@
-"""Граница production-ядра: один вызов из V3.produce, эталон и fallback.
-
-Разведочный вертикальный срез production: в Cython уходит только числовой
-цикл по предприятиям. Пролог (труд по домохозяйствам, природные ресурсы,
-глубокое наблюдение), побочные эффекты (transfer через distribute, report,
-dirty-поля и обновление записи предприятия) остаются в Python-хуках.
-
-Порядок обхода сохраняется буквально: список предприятий перемешивает
-``engine.shuffled`` в Python, RNG ядро не трогает. Склад меняется только
-через существующие методы движка, которые делегируют в stock boundary, —
-второй копии склада нет.
-
-Эталонная Python-ветка (``produce_python``) повторяет прежнее тело
-``Economy.produce`` и служит образцом для focused-теста на побитовое
-совпадение с ядром, а также fallback, если расширение не собрано.
-"""
+"""Подготовка ограничений выпуска и последовательное применение результата."""
 import copy
 import importlib
 from collections import defaultdict
@@ -27,9 +12,7 @@ from ..support import EPS
 class ProductionHooks(object):
     """Побочные эффекты production, которые обязаны остаться в Python.
 
-    Ядро вызывает эти методы в том же порядке, в каком прежний код писал
-    report и поля предприятия. Ни один метод не считает физику выпуска —
-    только фиксирует уже посчитанные значения.
+    Граница вызывает их при подготовке наблюдения и применении выпуска.
     """
 
     __slots__ = ('engine',)
@@ -63,8 +46,16 @@ class ProductionHooks(object):
         report[good] = report.get(good, 0)+quantity
 
 
-def run_enterprises_python(order, engine, labor, resources, observe, hooks, eps):
-    """Эталон числового цикла production — буквальный прежний код V3."""
+def calculate_output_python(constraints, planned, eps):
+    reason = min(constraints, key=constraints.get)
+    quantity = max(0, constraints[reason])
+    input_limited = any(k.startswith('Сырьё') and v+eps < planned
+                        for k, v in constraints.items())
+    return quantity, reason, input_limited
+
+
+def run_enterprises(order, engine, labor, resources, observe, hooks, eps, calculate):
+    """Подготовить и применить выпуск каждого предприятия по порядку."""
     month = engine.meta['month']
     for e in order:
         if e['status'] == 'closed' or e.get('suspended') or e['available_from'] > month:
@@ -87,9 +78,8 @@ def run_enterprises_python(order, engine, labor, resources, observe, hooks, eps)
             constraints['Оборудование: '+g] = engine.free_stock(e['id'], g)/ratio
         if observe:
             hooks.observe(e, a, constraints, plan, month)
-        reason = min(constraints, key=constraints.get)
-        q = max(0, constraints[reason])
-        e['input_limited'] = any(k.startswith('Сырьё') and v+eps < planned for k, v in constraints.items())
+        q, reason, input_limited = calculate(constraints, planned, eps)
+        e['input_limited'] = input_limited
         if planned > eps:
             e['production_limit'] = reason
         e['reason'] = e['production_limit']
@@ -139,8 +129,8 @@ def _resources(engine):
     return resources
 
 
-def _run(engine, existing, loop):
-    """Общий пролог, один вызов цикла и фиксация труда для строительства."""
+def _run(engine, existing, calculate):
+    """Общий пролог и фиксация остатка труда для строительства."""
     observe = engine.report_detail() == 'deep'
     labor, resources = _labor(engine), _resources(engine)
     if observe:
@@ -148,18 +138,19 @@ def _run(engine, existing, loop):
             for (s, p), q in labor.items()]
     hooks = ProductionHooks(engine, observe)
     # Перемешивание и расход RNG остаются в Python: ядро получает готовый порядок.
-    loop(engine.shuffled(existing), engine, labor, resources, observe, hooks, EPS)
+    run_enterprises(engine.shuffled(existing), engine, labor, resources,
+                    observe, hooks, EPS, calculate)
     engine._construction_labor = labor
 
 
 def produce(engine, existing):
-    """Единственный вход из V3.produce: native-цикл или эталонный fallback."""
-    _run(engine, existing, run_enterprises)
+    """Единственный вход из V3.produce."""
+    _run(engine, existing, calculate_output)
 
 
 def produce_python(engine, existing):
-    """Эталонная Python-ветка целиком: пролог и числовой цикл."""
-    _run(engine, existing, run_enterprises_python)
+    """Общий порядок применения с эталонным Python-расчётом."""
+    _run(engine, existing, calculate_output_python)
 
 
 def load_production_kernel():
@@ -175,11 +166,6 @@ def load_production_kernel():
         return None
 
 
-NATIVE_KERNEL = False
-
 _kernel = load_production_kernel()
-if _kernel is not None:
-    run_enterprises = _kernel.run_enterprises
-    NATIVE_KERNEL = True
-else:
-    run_enterprises = run_enterprises_python
+calculate_output = getattr(_kernel, 'calculate_output', calculate_output_python)
+NATIVE_KERNEL = calculate_output is not calculate_output_python

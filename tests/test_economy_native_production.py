@@ -542,21 +542,21 @@ def test_deepcopy_isolated_from_original():
 
 
 def test_boundary_exposes_native_when_built():
-    built = production_boundary.load_production_kernel() is not None
+    built = hasattr(production_boundary.load_production_kernel(), 'calculate_output')
     assert production_boundary.NATIVE_KERNEL is built
     if built:
-        assert production_boundary.run_enterprises.__module__.endswith('production_kernel')
+        assert production_boundary.calculate_output.__module__.endswith('production_kernel')
         assert production_boundary.produce.__module__.endswith('production_boundary')
     else:
-        assert production_boundary.run_enterprises is production_boundary.run_enterprises_python
+        assert production_boundary.calculate_output is production_boundary.calculate_output_python
 
 
 def test_native_entry_points_are_compiled():
     kernel = production_boundary.load_production_kernel()
-    if kernel is None:
+    if not hasattr(kernel, 'calculate_output'):
         pytest.skip('Cython-расширение production_kernel не собрано')
-    assert production_boundary.run_enterprises is kernel.run_enterprises
-    assert production_boundary.run_enterprises is not production_boundary.run_enterprises_python
+    assert production_boundary.calculate_output is kernel.calculate_output
+    assert not hasattr(kernel, 'run_enterprises')
 
 
 def test_load_returns_none_when_extension_absent(monkeypatch):
@@ -588,7 +588,7 @@ def test_fallback_without_extension(monkeypatch):
     importlib.reload(production_boundary)
     try:
         assert production_boundary.NATIVE_KERNEL is False
-        assert production_boundary.run_enterprises is production_boundary.run_enterprises_python
+        assert production_boundary.calculate_output is production_boundary.calculate_output_python
         assert production_boundary.produce.__module__.endswith('production_boundary')
         fallback = copy.deepcopy(engine)
         production_boundary.produce(fallback, list(fallback.enterprises.values()))
