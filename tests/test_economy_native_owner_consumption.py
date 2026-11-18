@@ -8,7 +8,7 @@ Python 3.12 компенсирует погрешность только при 
 
 Заявки создаются настоящим ``engine.order``: ``OrderStore`` при deepcopy
 требует полный набор полей, поэтому самодельные словари здесь не годятся.
-Эталон — ``owner_consumption_boundary.run_rows_python``, fallback — та же
+Эталон — ``owner_consumption_boundary.calculate_consumption_python``, fallback — та же
 функция при отсутствии собранного расширения.
 """
 import copy
@@ -454,22 +454,25 @@ def test_deepcopy_isolated_from_original():
 
 
 def test_boundary_exposes_native_when_built():
-    built = owner_consumption_boundary.load_owner_consumption_kernel() is not None
+    built = hasattr(owner_consumption_boundary.load_owner_consumption_kernel(),
+                    'calculate_consumption')
     assert owner_consumption_boundary.NATIVE_KERNEL is built
     if built:
-        assert owner_consumption_boundary.run_rows.__module__.endswith('owner_consumption_kernel')
+        assert owner_consumption_boundary.calculate_consumption.__module__.endswith(
+            'owner_consumption_kernel')
         assert owner_consumption_boundary.consume_owner_purchases.__module__.endswith(
             'owner_consumption_boundary')
     else:
-        assert owner_consumption_boundary.run_rows is owner_consumption_boundary.run_rows_python
+        assert owner_consumption_boundary.calculate_consumption is (
+            owner_consumption_boundary.calculate_consumption_python)
 
 
 def test_native_entry_points_are_compiled():
     kernel = owner_consumption_boundary.load_owner_consumption_kernel()
-    if kernel is None:
+    if not hasattr(kernel, 'calculate_consumption'):
         pytest.skip('Cython-расширение owner_consumption_kernel не собрано')
-    assert owner_consumption_boundary.run_rows is kernel.run
-    assert owner_consumption_boundary.run_rows is not owner_consumption_boundary.run_rows_python
+    assert owner_consumption_boundary.calculate_consumption is kernel.calculate_consumption
+    assert not hasattr(kernel, 'run')
 
 
 def test_load_returns_none_when_extension_absent(monkeypatch):
@@ -508,7 +511,8 @@ def test_fallback_without_extension(monkeypatch):
     importlib.reload(owner_consumption_boundary)
     try:
         assert owner_consumption_boundary.NATIVE_KERNEL is False
-        assert owner_consumption_boundary.run_rows is owner_consumption_boundary.run_rows_python
+        assert owner_consumption_boundary.calculate_consumption is (
+            owner_consumption_boundary.calculate_consumption_python)
         fallback = copy.deepcopy(engine)
         owner_consumption_boundary.consume_owner_purchases(fallback, EPS)
         assert_same(expected, snapshot(fallback))
