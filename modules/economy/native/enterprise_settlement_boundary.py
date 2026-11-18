@@ -327,9 +327,26 @@ def run_settle(engine, enterprises, hooks, eps):
 
 
 def settle(engine, enterprises):
-    """Единственная точка входа из ``Economy.settle``: ядро поверх хуков.
-
-    ``enterprises`` — уже готовый список из ``v3.settle``: порядок и RNG
-    остаются там. Второй цикл (carrier/treasury distribute) границу не зовёт.
-    """
+    """Выполнить только расчёты с предприятиями."""
     run_settle(engine, enterprises, EnterpriseSettlementHooks(engine), EPS)
+
+
+def settle_month(engine, enterprises, households):
+    """Применить расчёты с предприятиями и распределение доходов вместе."""
+    from . import money_boundary
+
+    transaction = _SettlementTransaction(engine, enterprises)
+    cash = engine.cash_store
+    balances = {account: cash.get_balance(account) for account in engine.accounts
+                if account not in transaction.accounts}
+    rng_state = engine.rng.getstate()
+    try:
+        _run_settle(engine, enterprises, EnterpriseSettlementHooks(engine), EPS)
+        money_boundary.settle(engine, enterprises, households)
+    except Exception:
+        transaction.rollback()
+        for account, balance in balances.items():
+            if cash.get_balance(account) != balance:
+                cash.set_balance(account, balance)
+        engine.rng.setstate(rng_state)
+        raise

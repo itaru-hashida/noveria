@@ -2732,16 +2732,7 @@ class Economy(EconomyServices):
         self.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'], action='closed', reason=e['reason']))
 
     def settle(self, enterprises, households):
-        # Числовой срез settlement (оброк, expenses, profit, месяцы убыточности)
-        # вынесен в enterprise_settlement_boundary: она же держит Python-эталон
-        # и fallback без собранного .pyd. Список enterprises готов, перевод
-        # оброка идёт прежним transfer, закрытие и возврат капитала остаются
-        # Python-хуками границы.
-        _enterprise_settlement.settle(self, enterprises)
-        # Второй цикл (распределение доходов carrier/treasury) считает
-        # money_boundary: ставка, получатели, сумма и причина — в ядре;
-        # перемешивание счетов (RNG) и переводы остаются здесь.
-        _money.settle(self, enterprises, households)
+        _enterprise_settlement.settle_month(self, enterprises, households)
 
     def record_market(self):
         # Числовую агрегацию книги заявок и сделок (requested, limit_value,

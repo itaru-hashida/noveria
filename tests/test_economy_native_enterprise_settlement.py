@@ -288,6 +288,35 @@ def owner_snapshot(engine, enterprise):
             copy.deepcopy(engine.report), engine.order_store.columns())
 
 
+def test_distribution_failure_rolls_back_both_settlement_phases(monkeypatch):
+    engine = actual_engine()
+    enterprise = next(iter(engine.enterprises.values()))
+    household = engine.accounts['h']
+    treasury = 'treasury:'+enterprise['state_id']
+    cash = engine.cash_store
+    cash.set_balance(enterprise['id'], 20.0)
+    cash.set_balance(treasury, 100.0)
+    engine.cfg['public_spending'] = 0.5
+    before = owner_snapshot(engine, enterprise)
+    household_balance = cash.get_balance(household['id'])
+    rng = engine.rng.getstate()
+    transfer = engine.transfer
+
+    def fail_after_distribution(sender, recipient, amount, reason):
+        transfer(sender, recipient, amount, reason)
+        if recipient == household['id'] and amount > 0:
+            assert 'profit' in enterprise
+            assert cash.get_balance(recipient) != household_balance
+            raise RuntimeError('distribution failed')
+
+    monkeypatch.setattr(engine, 'transfer', fail_after_distribution)
+    with pytest.raises(RuntimeError, match='distribution failed'):
+        engine.settle([enterprise], [household])
+    assert owner_snapshot(engine, enterprise) == before
+    assert cash.get_balance(household['id']) == household_balance
+    assert engine.rng.getstate() == rng
+
+
 def test_actual_overhead_failure_rolls_back_authoritative_cash(monkeypatch):
     engine = actual_engine()
     enterprise = next(iter(engine.enterprises.values()))
