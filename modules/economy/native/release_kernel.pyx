@@ -50,10 +50,14 @@ def detach_offer(object owner, object store, object offer, object take):
     потому что прежнее тело читало поле из того же словаря, а не из локальной
     переменной. ``store.set_remaining`` пишет и колонку, и dict: второго
     источника остатка не появляется.
+
+    Все три записи идут через владельца заявки: ``quantity`` и ``backing`` —
+    его metadata-поля, ``remaining`` — колонка. Прямой записи в dict оффера
+    здесь нет, иначе ядро обходило бы ``OrderStore``.
     """
-    offer['quantity'] -= take
+    store.set_quantity(offer, offer['quantity']-take)
     store.set_remaining(offer, offer['remaining']-take)
-    offer['backing'] -= take
+    store.set_metadata(offer, 'backing', offer['backing']-take)
     return None
 
 

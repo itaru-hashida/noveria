@@ -39,6 +39,14 @@ class FakeStore:
         self.journal.append(('set_remaining', offer['id'], value))
         offer['remaining'] = value
 
+    def set_quantity(self, offer, value):
+        self.journal.append(('set_quantity', offer['id'], value))
+        offer['quantity'] = value
+
+    def set_metadata(self, offer, key, value):
+        self.journal.append(('set_metadata', offer['id'], key, value))
+        offer[key] = value
+
 
 class FakeOwner:
     """Минимальный носитель хуков: ядру нужны только они и ``cfg``/``goods``."""

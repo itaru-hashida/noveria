@@ -46,6 +46,14 @@ class FakeStore:
         self.journal.append(('set_remaining', offer['id'], value))
         offer['remaining'] = value
 
+    def set_quantity(self, offer, value):
+        self.journal.append(('set_quantity', offer['id'], value))
+        offer['quantity'] = value
+
+    def set_metadata(self, offer, key, value):
+        self.journal.append(('set_metadata', offer['id'], key, value))
+        offer[key] = value
+
 
 class FakeOwner:
     """Минимальный носитель хуков: ``meta``/``cfg``/``report`` и тела хуков.
@@ -254,9 +262,11 @@ def test_release_hook_called_once():
     native = run_slice(cancel_boundary.cancel_stalled_project, case, with_delivery=True)
     assert_same(snapshot(reference), snapshot(native))
     kinds = [row[0] for row in case['owner'].journal]
-    # Release идёт через границу заявок: одна мутация remaining на весь срез.
-    assert len(case['store'].journal) == 1
-    assert case['store'].journal[0][0] == 'set_remaining'
+    # Release идёт через границу заявок: три записи на весь срез — quantity,
+    # remaining и backing, в прежнем порядке.
+    assert [row[0] for row in case['store'].journal] == [
+        'set_quantity', 'set_remaining', 'set_metadata']
+    assert case['store'].journal[1][0] == 'set_remaining'
     assert kinds.count('dirty') == 1
     assert case['sells']['wood'][0]['remaining'] == 6
 

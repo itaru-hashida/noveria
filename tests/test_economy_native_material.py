@@ -37,6 +37,14 @@ class FakeStore:
         self.journal.append(('set_remaining', offer['id'], value))
         offer['remaining'] = value
 
+    def set_quantity(self, offer, value):
+        self.journal.append(('set_quantity', offer['id'], value))
+        offer['quantity'] = value
+
+    def set_metadata(self, offer, key, value):
+        self.journal.append(('set_metadata', offer['id'], key, value))
+        offer[key] = value
+
 
 class FakeOwner:
     """Минимальный носитель хуков: ядру нужны только они и ``cfg``/``goods``.
@@ -190,7 +198,9 @@ def test_release_takes_only_reserved_part_and_keeps_mode():
     assert offer['backing'] == 6
     assert result['account']['stock_reserved']['wood'] == 6
     assert result['project']['materials']['wood'] == 4
+    assert ('set_quantity', 'o1', 6) in result['store'].journal
     assert ('set_remaining', 'o1', 6) in result['store'].journal
+    assert ('set_metadata', 'o1', 'backing', 6) in result['store'].journal
     assert ('dirty', 'wood') in result['owner'].journal
 
 
@@ -221,7 +231,8 @@ def test_foreign_and_closed_offers_are_skipped():
     assert_same(reference, native)
     assert native['sells']['wood'][0]['remaining'] == 9
     assert native['sells']['wood'][1]['remaining'] == 9
-    assert not [row for row in native['store'].journal if row[0] == 'set_remaining']
+    assert not [row for row in native['store'].journal
+                if row[0] in ('set_remaining', 'set_quantity', 'set_metadata')]
 
 
 def test_release_is_not_taken_twice_for_one_material():

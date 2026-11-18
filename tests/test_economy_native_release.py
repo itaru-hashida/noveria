@@ -45,6 +45,14 @@ class FakeStore:
         self.journal.append(('set_remaining', offer['id'], value))
         offer['remaining'] = value
 
+    def set_quantity(self, offer, value):
+        self.journal.append(('set_quantity', offer['id'], value))
+        offer['quantity'] = value
+
+    def set_metadata(self, offer, key, value):
+        self.journal.append(('set_metadata', offer['id'], key, value))
+        offer[key] = value
+
 
 class FakeOwner:
     """Минимальный носитель хуков release: журнал и тела хуков движка.
@@ -222,16 +230,39 @@ def test_detach_offer_keeps_field_order():
     assert list(offer) == ['id', 'participant', 'good', 'quantity', 'remaining',
                            'backing', 'side', 'status', 'reason']
     assert (offer['quantity'], offer['remaining'], offer['backing']) == (6, 6, 6)
-    assert store.journal == [('set_remaining', 'o1', 6)]
+    # Все три записи идут через владельца заявки, в прежнем порядке.
+    assert store.journal == [('set_quantity', 'o1', 6),
+                             ('set_remaining', 'o1', 6),
+                             ('set_metadata', 'o1', 'backing', 6)]
 
 
-def test_detach_offer_writes_remaining_through_store():
-    """``remaining`` идёт через границу заявок: колонка и dict не расходятся."""
+def test_detach_offer_writes_all_fields_through_store():
+    """``quantity``/``remaining``/``backing`` идут через границу заявок.
+
+    Прямая запись в dict оставила бы владельца без изменения: колонка и
+    metadata разошлись бы с заявкой, а fallback обходил бы ``OrderStore``.
+    """
     offer = make_offer(quantity=10, backing=10)
     store = FakeStore()
     release_boundary.detach_offer(None, store, offer, 4)
-    assert store.journal == [('set_remaining', 'o1', 6)]
+    assert [row[0] for row in store.journal] == ['set_quantity', 'set_remaining',
+                                                 'set_metadata']
     assert offer['remaining'] == 6
+
+
+def test_python_reference_also_writes_through_store():
+    """Fallback и эталон проходят через владельца так же, как ядро.
+
+    Прежний эталон писал ``quantity``/``backing`` напрямую, потому что владелец
+    тогда не имел этих сеттеров. Теперь обход недопустим и в Python-ветке,
+    иначе штатный запуск без собранного ``.pyd`` снова писал бы мимо границы.
+    """
+    offer = make_offer(quantity=10, backing=10)
+    store = FakeStore()
+    release_boundary.detach_offer_python(None, store, offer, 4)
+    assert [row[0] for row in store.journal] == ['set_quantity', 'set_remaining',
+                                                 'set_metadata']
+    assert (offer['quantity'], offer['remaining'], offer['backing']) == (6, 6, 6)
 
 
 def test_settle_release_marks_dirty_on_partial_release():
@@ -332,7 +363,9 @@ def test_normal_release_of_sell_order():
     run_release(material_boundary.reserve_materials, case)
     offer = case['sells']['wood'][0]
     assert (offer['quantity'], offer['remaining'], offer['backing']) == (6, 6, 6)
-    assert case['store'].journal == [('set_remaining', 'o1', 6)]
+    assert case['store'].journal == [('set_quantity', 'o1', 6),
+                                     ('set_remaining', 'o1', 6),
+                                     ('set_metadata', 'o1', 'backing', 6)]
     assert [row[0] for row in case['owner'].journal if row[0] == 'dirty'] == ['dirty']
 
 
@@ -437,8 +470,12 @@ def test_several_orders_keep_their_order():
     # Смета wood=4: o1 отдаёт 3, o2 — оставшийся 1, o3 не трогается.
     assert [row['remaining'] for row in rows] == [0, 2, 3]
     assert [row['id'] for row in rows] == ['o1', 'o2', 'o3']
-    assert case['store'].journal == [('set_remaining', 'o1', 0),
-                                     ('set_remaining', 'o2', 2)]
+    assert case['store'].journal == [('set_quantity', 'o1', 0),
+                                     ('set_remaining', 'o1', 0),
+                                     ('set_metadata', 'o1', 'backing', 0),
+                                     ('set_quantity', 'o2', 2),
+                                     ('set_remaining', 'o2', 2),
+                                     ('set_metadata', 'o2', 'backing', 2)]
     assert [row[1] for row in case['owner'].journal if row[0] == 'cancel'] == ['o1']
 
 
@@ -470,7 +507,9 @@ def test_release_does_not_touch_other_goods_or_accounts():
     assert case['sells']['wood'][0]['remaining'] == 6
     assert case['sells']['stone'][0]['remaining'] == 10
     assert case['sells']['stone'][0]['status'] == 'active'
-    assert case['store'].journal == [('set_remaining', 'w', 6)]
+    assert case['store'].journal == [('set_quantity', 'w', 6),
+                                     ('set_remaining', 'w', 6),
+                                     ('set_metadata', 'w', 'backing', 6)]
     assert case['account']['stock_reserved'] == {'wood': 6, 'stone': 8}
 
 
@@ -517,7 +556,9 @@ def test_material_boundary_binds_release_hooks_to_release_boundary():
     offer = make_offer(quantity=10, backing=10)
     material_boundary.detach_offer_hook(owner, store, offer, 4)
     assert (offer['quantity'], offer['remaining'], offer['backing']) == (6, 6, 6)
-    assert store.journal == [('set_remaining', 'o1', 6)]
+    assert store.journal == [('set_quantity', 'o1', 6),
+                             ('set_remaining', 'o1', 6),
+                             ('set_metadata', 'o1', 'backing', 6)]
 
 
 def test_load_returns_none_when_extension_absent(monkeypatch):

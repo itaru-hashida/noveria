@@ -221,8 +221,7 @@ def test_store_ignores_pickle_protocol():
 ORDER_RECEIVERS = {'order', 'o', 'offer', 'buy', 'sell', 'row', 'ask', 'entry'}
 FIELDS = {'remaining', 'reserved', 'status', 'price'}
 # Metadata заявки: у владельца есть set_metadata, поэтому settlement-путь
-# отмены обязан писать их через него. Проверка сужена до функций settlement,
-# потому что release-путь пока пишет quantity/backing напрямую.
+# отмены обязан писать их через него. Проверка сужена до функций settlement.
 METADATA_FIELDS = {'reason', 'quantity', 'backing', 'execution_status'}
 SETTLEMENT_FUNCTIONS = {'cancel_order', 'close_enterprise', 'return_capital'}
 
@@ -340,6 +339,70 @@ def test_v3_mutations_go_through_store_on_real_month():
     # Сделки и закрытие рынка трогают все четыре поля через границу.
     assert {'remaining', 'reserved', 'status'} <= fields
     assert all(order_id for _, order_id in calls)
+
+
+def test_public_stock_release_writes_all_fields_through_owner():
+    """Освобождение оффера городской стройкой идёт через ``OrderStore``.
+
+    Реальная точка входа — ``V3.public_project_requests``: внутри неё
+    ``_claim_public_stock`` снимает закреплённую часть собственного sell-оффера.
+    Прежний код писал ``quantity`` и ``backing`` прямо в dict мимо владельца,
+    поэтому проверяется не только итог, но и сами вызовы ``set_quantity``/
+    ``set_remaining``/``set_metadata`` в прежнем порядке полей.
+    """
+    engine = build_engine()
+    engine.cfg['institutions'] = {
+        'academy': dict(name='Академия', materials={'planks': 6}, equipment={},
+                        equipment_wear={}, work_required=10, max_workers=10)}
+    engine.cfg['construction_modes'] = {
+        'normal': dict(wage_multiplier=1, lodging_allowance=0, support_goods={})}
+    engine.start_public_project('c', 'academy')
+    municipal = engine.accounts['municipal:c']
+    # Склад задаётся тестом: иначе начальные ресурсы перекроют смету.
+    municipal['stock'].pop('planks', None)
+    municipal['stock_reserved'].pop('planks', None)
+    engine.add_stock(municipal['id'], 'planks', 9, 4)
+    sells = engine.sell_orders()
+    offers = {offer['id']: offer for rows in sells.values() for offer in rows}
+    own = {offer['id']: offer for offer in sells['planks']
+           if offer['participant'] == municipal['id']}
+    assert len(own) == 1
+    offer_id, offer = next(iter(own.items()))
+    assert (offer['quantity'], offer['remaining'], offer['backing']) == (9, 9, 9)
+
+    calls = []
+    original = order_boundary.OrderStore
+
+    class Counting(original):
+        def set_quantity(self, order, value):
+            calls.append(('set_quantity', order['id'], value))
+            return original.set_quantity(self, order, value)
+
+        def set_remaining(self, order, value):
+            calls.append(('set_remaining', order['id'], value))
+            return original.set_remaining(self, order, value)
+
+        def set_metadata(self, order, key, value):
+            calls.append(('set_metadata', order['id'], key, value))
+            return original.set_metadata(self, order, key, value)
+
+    import modules.economy.v3 as v3
+    saved = v3._order.OrderStore
+    v3._order.OrderStore = Counting
+    engine.__dict__.pop('_order_store', None)
+    try:
+        engine.public_project_requests(sells)
+    finally:
+        v3._order.OrderStore = saved
+
+    # Частичное освобождение: смета planks=6, поэтому снимается три единицы.
+    released = [row for row in calls if row[1] == offer_id]
+    assert released == [('set_quantity', offer_id, 3),
+                        ('set_remaining', offer_id, 3),
+                        ('set_metadata', offer_id, 'backing', 3)]
+    assert offers[offer_id] is offer
+    assert (offer['quantity'], offer['remaining'], offer['backing']) == (3, 3, 3)
+    assert offer['status'] == 'active'
 
 
 # 7. Привязка в движке: хранилище берётся из v3 --------------------------

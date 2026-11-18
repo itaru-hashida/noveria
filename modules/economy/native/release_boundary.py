@@ -45,28 +45,16 @@ import importlib
 RELEASE_REASON = 'Материалы закреплены за собственной стройкой'
 
 
-def _store_metadata(store, order, key, value):
-    """Keep lightweight test doubles compatible with the owner boundary."""
-    setter = getattr(store, 'set_metadata', None)
-    if setter is None:
-        order[key] = value
-    else:
-        setter(order, key, value)
-
-
-def _store_quantity(store, order, value):
-    setter = getattr(store, 'set_quantity', None)
-    if setter is None:
-        order['quantity'] = value
-    else:
-        setter(order, value)
-
-
 def detach_offer_python(owner, store, offer, take):
-    """Эталон снятия закреплённой части: те же поля в том же порядке."""
-    _store_quantity(store, offer, offer['quantity']-take)
+    """Эталон снятия закреплённой части: те же поля в том же порядке.
+
+    Все три записи идут через владельца заявки: ``quantity`` и ``backing`` —
+    metadata, ``remaining`` — своя колонка. Прямых записей в dict оффера нет
+    ни в ядре, ни в эталоне, иначе fallback обходил бы ``OrderStore``.
+    """
+    store.set_quantity(offer, offer['quantity']-take)
     store.set_remaining(offer, offer['remaining']-take)
-    _store_metadata(store, offer, 'backing', offer['backing']-take)
+    store.set_metadata(offer, 'backing', offer['backing']-take)
     return None
 
 

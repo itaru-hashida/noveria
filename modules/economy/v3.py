@@ -1352,9 +1352,11 @@ class Economy(EconomyServices):
             if offer['participant'] != account['id'] or offer['status'] in ('cancelled', 'expired'):
                 continue
             take = min(release, offer['remaining'])
-            offer['quantity'] -= take
+            # Порядок полей прежний: quantity, remaining, backing. Все три
+            # записи идут через владельца заявки, прямых writers нет.
+            store.set_quantity(offer, offer['quantity']-take)
             store.set_remaining(offer, offer['remaining']-take)
-            offer['backing'] -= take
+            store.set_metadata(offer, 'backing', offer['backing']-take)
             self.stock_store.release_reserved(account['id'], good, take)
             release -= take
             self.mark_market_quotes_dirty(good)

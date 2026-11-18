@@ -520,3 +520,46 @@ passed`, смежные cancel/order_ownership/owners/v3/monthly — `156 passed
 (`_claim_public_stock`, `release_kernel`) по-прежнему пишет `quantity`/`backing`
 в обход `OrderStore` — это отдельный срез, не settlement. Оптимизация скорости
 не выполнялась.
+
+## 2026-11-18 — освобождение офферов через OrderStore
+
+База `46ca0bc`. Закрыты два оставшихся обхода владельца заявок в release-пути:
+
+* `V3._claim_public_stock` (`modules/economy/v3.py`) — единственная реальная
+  точка вызова, из `public_project_requests` для материалов, оснащения и
+  поддержки городской стройки. Прежнее тело писало
+  `offer['quantity'] -= take` и `offer['backing'] -= take` прямо в dict;
+  теперь это `store.set_quantity` и `store.set_metadata`, `remaining` идёт
+  прежним `set_remaining`, склад — через `stock_store.release_reserved`.
+* `release_kernel.detach_offer` и его Python-эталон
+  `release_boundary.detach_offer_python` — срез освобождения собственного
+  sell-оффера в `project_material_requests`. Обе ветки пишут `quantity`,
+  `remaining`, `backing` через владельца; временные переходники
+  `_store_quantity`/`_store_metadata`, которые при отсутствии сеттера писали
+  в dict, удалены — именно они и были скрытым fallback-обходом.
+
+Порядок записей прежний (`quantity` → `remaining` → `backing`), арифметика
+`offer[...]-take` не менялась, тип int/float сохраняется. Отмена исчерпанного
+оффера, причина отмены, `mark_market_quotes_dirty` и порядок RNG/заявок не
+затронуты. Заглушки `FakeStore` в focused-тестах material/release/delivery/
+cancel/construction_buy дополнены `set_quantity`/`set_metadata` — рабочий код
+вместо этого прямых записей не получил.
+
+Новые регрессы: `test_public_stock_release_writes_all_fields_through_owner`
+(реальная точка входа `public_project_requests`, частичное освобождение 9 → 3,
+проверяет фактические вызовы владельца) и
+`test_python_reference_also_writes_through_store` (fallback-ветка). Первый
+проверен на падении по прежнему коду: журнал владельца содержал только
+`('set_remaining', '0-5', 3)`.
+
+Проверки: расширения пересобраны (`setup.py build_ext --inplace --force`,
+`release_kernel` пересобран, импорт грузит свежий `.pyd`). Focused
+release/material/cancel/construction_buy/delivery/order_store/order_ownership/
+order_columns + `tests/test_native_parity_baseline.py` — `241 passed`; отдельно
+order_store/ownership/columns и parity до добавления регрессов — `80 passed`.
+Полный pytest не запускался.
+
+Осталось: settlement, save/load и ускорение в срез не входили; артефакты
+сборки (`*.pyd`, `build/`, сгенерированные `.c`) в коммит не включались.
+Неотслеживаемые `demand_kernel_api.h`, `offer_view_api.h`, `quote_kernel_api.h`
+оставлены как есть — они не относятся к задаче.
