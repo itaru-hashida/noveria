@@ -17,6 +17,168 @@ import builtins
 import importlib
 from .stock_store_boundary import get_stock_store
 
+
+class _TradeTransaction(object):
+    """Checkpoint the owners touched by one trade application.
+
+    The calculation and the normal writes stay in ``commit_trade``.  This
+    checkpoint only records the small owner surface needed to undo a failed
+    application; it does not replace CashStore, StockStore or OrderStore.
+    """
+
+    def __init__(self, owner, buy, sell):
+        self.owner = owner
+        self.buy = buy
+        self.sell = sell
+        buyer_id = buy['participant']
+        seller_id = sell['participant']
+        good = buy['good']
+        seller = owner.accounts[seller_id]
+        state_id = seller['state_id']
+        self.account_ids = (buyer_id, seller_id, 'treasury:'+state_id,
+                            'carrier:'+state_id)
+        self.cash = {}
+        self.stock = {}
+        self.values = {}
+        self.projects = {}
+        stock_store = get_stock_store(owner)
+        for account_id in (buyer_id, seller_id):
+            if account_id not in owner.accounts:
+                continue
+            account = owner.accounts[account_id]
+            self.cash[account_id] = (owner.cash_store.get_balance(account_id),
+                                     owner.cash_store.get_reserved_cash(account_id))
+            stock_values = account['stock']
+            reserved_field_present = 'stock_reserved' in account
+            reserved_values = account.get('stock_reserved', {})
+            self.stock[account_id] = (stock_values, good in stock_values,
+                                      stock_values.get(good), reserved_values,
+                                      good in reserved_values,
+                                      reserved_values.get(good),
+                                      reserved_field_present)
+            values = account.get('values', {})
+            self.values[account_id] = (values, good in values, values.get(good))
+            if account_id == buyer_id and buy['purpose'] == 'Строительные материалы':
+                materials = account['project']['materials']
+                self.projects = (materials, good in materials, materials.get(good))
+        self.enterprise = None
+        if seller_id in owner.enterprises:
+            enterprise = owner.enterprises[seller_id]
+            self.enterprise = {key: (key in enterprise, enterprise.get(key))
+                               for key in ('revenue', 'tax', 'cost_of_sales')}
+        self.orders = {id(order): (order, order.get('reserved'),
+                                    order.get('remaining'), order.get('status'))
+                       for order in (buy, sell)}
+        report = owner.report
+        self.flow_count = len(report['flows'])
+        self.trade_count = len(report['trades'])
+        demand = owner._demand_revision
+        self.demand_revision = (demand, good in demand, demand.get(good))
+        trades_by_seller = owner._trades_by_seller
+        self.trades_by_seller = (trades_by_seller, seller_id in trades_by_seller,
+                                 trades_by_seller.get(seller_id))
+        self.quote_version_present = '_market_quote_version' in owner.__dict__
+        self.quote_version = owner.__dict__.get('_market_quote_version', 0)
+        versions_present = '_market_quote_versions' in owner.__dict__
+        versions = owner.__dict__.get('_market_quote_versions')
+        self.quote_versions_present = versions_present
+        self.quote_versions = (versions, good in versions, versions.get(good)) \
+            if versions is not None else None
+        self.quote_caches = tuple(
+            (key, owner.__dict__[key])
+            for key in ('_quoted_cost_cache', '_reference_price_cache')
+            if key in owner.__dict__)
+        totals = owner.__dict__.get('_physical_stock_totals')
+        row = totals.get(buy['good']) if totals is not None else None
+        self.physical_totals = ((totals, row, row['quantity'], row['count'])
+                                if row is not None else None)
+
+    def rollback(self):
+        owner = self.owner
+        cash = owner.cash_store
+        stock = get_stock_store(owner)
+        for account_id, (balance, reserved) in self.cash.items():
+            cash.set_balance(account_id, balance)
+            cash.set_reserved_cash(account_id, reserved)
+        for account_id, saved in self.stock.items():
+            (stock_values, stock_present, quantity, reserved_values,
+             reserved_present, reserved, reserved_field_present) = saved
+            stock.set_stock(account_id, self.buy['good'], quantity)
+            stock.set_reserved(account_id, self.buy['good'], reserved)
+            if stock_present:
+                stock_values[self.buy['good']] = quantity
+            else:
+                stock_values.pop(self.buy['good'], None)
+            if reserved_present:
+                reserved_values[self.buy['good']] = reserved
+            else:
+                reserved_values.pop(self.buy['good'], None)
+            if not reserved_field_present:
+                owner.accounts[account_id].pop('stock_reserved', None)
+            values, had_value, previous = self.values[account_id]
+            if had_value:
+                values[ self.buy['good']] = previous
+            else:
+                values.pop(self.buy['good'], None)
+        if self.projects:
+            materials, had_value, previous = self.projects
+            if had_value:
+                materials[self.buy['good']] = previous
+            else:
+                materials.pop(self.buy['good'], None)
+        for order, reserved, remaining, status in self.orders.values():
+            owner.order_store.set_reserved(order, reserved)
+            owner.order_store.set_remaining(order, remaining)
+            owner.order_store.set_status(order, status)
+        if self.enterprise is not None:
+            enterprise = owner.enterprises[self.sell['participant']]
+            for key, (present, previous) in self.enterprise.items():
+                if present:
+                    enterprise[key] = previous
+                else:
+                    enterprise.pop(key, None)
+        del owner.report['flows'][self.flow_count:]
+        del owner.report['trades'][self.trade_count:]
+        demand, present, previous = self.demand_revision
+        if present:
+            demand[self.buy['good']] = previous
+        else:
+            demand.pop(self.buy['good'], None)
+        trades_by_seller, present, previous = self.trades_by_seller
+        if present:
+            trades_by_seller[self.sell['participant']] = previous
+        else:
+            trades_by_seller.pop(self.sell['participant'], None)
+        if self.quote_version_present:
+            owner._market_quote_version = self.quote_version
+        else:
+            owner.__dict__.pop('_market_quote_version', None)
+        if self.quote_versions is not None:
+            versions, present, previous = self.quote_versions
+            if present:
+                versions[self.buy['good']] = previous
+            else:
+                versions.pop(self.buy['good'], None)
+        elif not self.quote_versions_present:
+            owner.__dict__.pop('_market_quote_versions', None)
+        for key, value in self.quote_caches:
+            owner.__dict__[key] = value
+        if self.physical_totals is not None:
+            totals, row, quantity, count = self.physical_totals
+            row['quantity'], row['count'] = quantity, count
+
+
+def commit_trade_atomic(owner, buy, sell, quote, quantity, price, eps,
+                        cash, store):
+    """Apply one selected trade atomically through the existing owners."""
+    transaction = _TradeTransaction(owner, buy, sell)
+    try:
+        return commit_trade(owner, buy, sell, quote, quantity, price, eps,
+                            cash, store)
+    except Exception:
+        transaction.rollback()
+        raise
+
 # Встроенные max/min: на границе ``max(0, x)`` они сохраняют тип аргумента,
 # поэтому целый 0 остаётся целым, как в прежнем Python-коде.
 _PY_MAX = builtins.max

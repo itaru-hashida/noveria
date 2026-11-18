@@ -1815,7 +1815,7 @@ class Economy(EconomyServices):
         # Один buyer order целиком (цена, книга, сделки, статус и наблюдение)
         # выполняет native-граница: Python-тело осталось только эталоном в
         # native/match_boundary.py, чтобы у правила не было двух копий.
-        _match.run_buyer(self, buy, sells, EPS, _trade.commit_trade,
+        _match.run_buyer(self, buy, sells, EPS, _trade.commit_trade_atomic,
             _match.run_match, local_only)
 
     def observe_match(self, buy, sells, options):

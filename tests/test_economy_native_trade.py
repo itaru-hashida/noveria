@@ -372,6 +372,50 @@ def test_revisions_are_bumped_once_per_trade():
     assert engine._market_quotes_epoch > 0 or True  # сброс котировок вызван
 
 
+def test_actual_match_rolls_back_after_partial_trade_write(monkeypatch):
+    """Сбой после первого перевода не оставляет частичную сделку."""
+    engine, buy, sell, quote = trade_engine(freight=1.0)
+    before = snapshot(engine, buy, sell)
+    order_columns = engine.order_store.columns()
+    engine.cash_store.get_balance(buy['participant'])
+    engine.cash_store.get_reserved_cash(buy['participant'])
+    cash_columns = engine.cash_store.columns()
+    stock_store = engine.stock_store
+    stock_store.get_stock(buy['participant'], GOOD)
+    stock_store.get_reserved(buy['participant'], GOOD)
+    stock_ref = stock_store.stock['merchant:s']
+    reserved_stock_ref = stock_store.reserved['merchant:s']
+    engine._quoted_cost_cache = {}
+    engine._reference_price_cache = {}
+    quote_cache_ref = engine._quoted_cost_cache
+    reference_cache_ref = engine._reference_price_cache
+    quote_versions_ref = engine.__dict__.get('_market_quote_versions')
+    original = engine.transfer
+    calls = []
+
+    def fail_after_first(sender, recipient, amount, reason):
+        calls.append(reason)
+        if len(calls) == 2:
+            raise RuntimeError('injected trade failure')
+        return original(sender, recipient, amount, reason)
+
+    monkeypatch.setattr(engine, 'transfer', fail_after_first)
+    with pytest.raises(RuntimeError, match='injected trade failure'):
+        engine.match(buy, {GOOD: [sell]})
+    assert len(calls) == 2
+    assert snapshot(engine, buy, sell) == before
+    assert engine.order_store.columns() == order_columns
+    assert engine.cash_store.columns() == cash_columns
+    assert engine.accounts['merchant:s']['stock'] == {}
+    assert 'planks' not in engine.accounts['merchant:s']['stock']
+    assert stock_store.stock['merchant:s'] is stock_ref
+    assert stock_store.reserved['merchant:s'] is reserved_stock_ref
+    assert engine._quoted_cost_cache is quote_cache_ref
+    assert engine._reference_price_cache is reference_cache_ref
+    if quote_versions_ref is not None:
+        assert engine._market_quote_versions is quote_versions_ref
+
+
 # --- 10. статус и remaining заявок ---------------------------------------
 def test_buy_remaining_zero_stays_int_when_fully_filled():
     """``max(0, 0.0)`` возвращает целый 0 — тип сохраняется, как в Python."""
