@@ -104,9 +104,10 @@ def build_options_python(engine, sell_list, buyer_tile, good, landed_hook):
                                                      key=stream_key_python)]
 
 
-def build_options_batch(engine, sell_list, buyer_tile, good, landed_hook):
+def build_options_batch(engine, sell_list, buyer_tile, good, landed_hook,
+                        *, additive_freight=False):
     """Построить малую книгу, вызывая landed один раз на площадку."""
-    if len(sell_list) >= 1000 or _kernel is None or not hasattr(
+    if not additive_freight or len(sell_list) >= 1000 or _kernel is None or not hasattr(
             _kernel, 'build_options_from_freight'):
         return build_options(engine, sell_list, buyer_tile, good, landed_hook)
     reachable = engine._orders_in_route_component(sell_list, buyer_tile)

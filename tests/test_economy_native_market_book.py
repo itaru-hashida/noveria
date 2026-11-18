@@ -629,6 +629,15 @@ def test_fallback_switches_to_python_reference(monkeypatch):
     assert boundary.landed is boundary.landed_python
 
 
+def test_small_book_preserves_price_dependent_landed_override(monkeypatch):
+    engine = make_engine([tile('t1', 0, 0)])
+    orders = [sell('a', 't1', 5.0), sell('b', 't1', 8.0)]
+    monkeypatch.setattr(engine, 'landed',
+                        lambda source, buyer, good, price: (price * 2, 0, 0, []))
+    book = engine._market_book(engine.accounts['h'], 'grain', sells_for(*orders))
+    assert [price for price, _, _ in book['options']] == [10.0, 16.0]
+
+
 def test_python_fallback_builds_the_same_book():
     """Эталон как fallback: v3 с ним даёт ту же книгу."""
     engine = make_engine([tile('t1', 0, 0), tile('t2', 1, 0)])

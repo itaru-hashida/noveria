@@ -1689,8 +1689,10 @@ class Economy(EconomyServices):
         # достижимости, потоки площадок и расчёт landed остаются хуками
         # движка (метод передаётся привязанным, чтобы наследники сохраняли
         # собственное переопределение landed).
+        landed = self.landed
         options = _market_book_native.build_options_batch(
-            self, sell_list, buyer_tile, good, self.landed)
+            self, sell_list, buyer_tile, good, landed,
+            additive_freight=getattr(landed, '__func__', None) is Economy.landed)
         entry = dict(source=sell_list, options=options,
             quotes={sell['id']: quote for _, sell, quote in options},
             board_id=None, first_live=0,
