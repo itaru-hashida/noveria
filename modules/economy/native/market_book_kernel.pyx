@@ -68,6 +68,22 @@ def option_key(object item):
     return (item[0], item[1]['id'])
 
 
+def build_options_from_freight(object sells, dict freight_by_tile):
+    """Собрать малую книгу по одному freight на площадку продавца."""
+    cdef list options = []
+    cdef object sell
+    cdef object freight
+    cdef object quote
+    for sell in sells:
+        freight = freight_by_tile.get(sell['tile_id'])
+        if freight is None:
+            continue
+        quote = (sell['price']+freight[1], freight[1], freight[2], freight[3])
+        options.append((quote[0], sell, quote))
+    options.sort(key=option_key)
+    return options
+
+
 def stream_key(object item):
     """Ключ слияния потоков площадок: та же пара ``(price, id)``."""
     return item[0]

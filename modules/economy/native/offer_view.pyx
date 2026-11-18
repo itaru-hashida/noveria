@@ -186,6 +186,42 @@ cdef class _OfferIterator:
         raise StopIteration
 
 
+cpdef api object cover_demand_from_books(object owner, object price, object groups,
+                           dict books, dict remaining, object eps):
+    """Покрыть спрос по готовым книгам с локальными остатками прогноза."""
+    cdef dict cursors = {}
+    cdef _OfferIterator cursor
+    cdef object demand = 0.0
+    cdef object participant, tile, order_price, limit, freight, volume
+    cdef object landed, row, sell, sell_id, covered
+    cdef Py_ssize_t index
+    for participant, tile, order_price, limit, freight, volume in groups:
+        if participant == owner or limit+eps < price:
+            continue
+        cursor = cursors.get(participant)
+        if cursor is None:
+            cursor = _OfferIterator(books[participant], participant, None, False)
+            cursor._begin()
+            cursors[participant] = cursor
+        landed = price+freight
+        for index in range(cursor._index, cursor._stop):
+            row = cursor._options[index]
+            sell = row[1]
+            if sell['participant'] == participant or not _is_live(
+                    sell, cursor._slot_at(index), cursor._remaining, cursor._status):
+                continue
+            if row[0] > order_price+eps or row[0] >= landed-eps:
+                break
+            if sell['participant'] == owner:
+                continue
+            sell_id = sell['id']
+            covered = min(volume, remaining[sell_id])
+            volume -= covered
+            remaining[sell_id] -= covered
+        demand += volume
+    return demand
+
+
 cdef class OfferView:
     """Ленивое представление единой книги без копирования её офферов.
 

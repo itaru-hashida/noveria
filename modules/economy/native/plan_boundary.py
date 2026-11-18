@@ -28,9 +28,11 @@
 если расширение не собрано. Имена привязываются один раз при импорте.
 """
 
+import copy
 import importlib
 
 from ..support import EPS
+from . import quote_boundary as _quote
 
 
 class PlanHooks(object):
@@ -41,24 +43,47 @@ class PlanHooks(object):
     граница фиксирует их там, где это делал прежний код.
     """
 
-    __slots__ = ('engine', 'enterprise', 'sells')
+    __slots__ = ('engine', 'enterprise', 'sells', '_reference_cache',
+                 '_stock_cache', '_quote_cache', '_quote_contexts')
 
     def __init__(self, engine, enterprise, sells):
         self.engine = engine
         self.enterprise = enterprise
         self.sells = sells
+        self._reference_cache = {}
+        self._stock_cache = {}
+        self._quote_cache = {}
+        self._quote_contexts = {}
 
     # --- чтение чисел ------------------------------------------------------
     def reference_price(self, good):
-        return self.engine.reference_price(self.engine.accounts[self.enterprise['id']],
-                                           good, self.sells)
+        value = self._reference_cache.get(good)
+        if value is None:
+            value = self.engine.reference_price(
+                self.engine.accounts[self.enterprise['id']], good, self.sells)
+            self._reference_cache[good] = value
+        return value
 
     def stock(self, good):
-        return self.engine.free_stock(self.enterprise['id'], good)
+        value = self._stock_cache.get(good)
+        if value is None:
+            value = self.engine.free_stock(self.enterprise['id'], good)
+            self._stock_cache[good] = value
+        return value
 
     def quote(self, good, quantity):
-        return self.engine.quoted_cost(self.engine.accounts[self.enterprise['id']],
-                                       good, quantity, self.sells)
+        key = (good, quantity)
+        value = self._quote_cache.get(key)
+        if value is None:
+            context = self._quote_contexts.get(good)
+            if context is None:
+                context = _quote.prepare_quote_context(
+                    self.engine, self.engine.accounts[self.enterprise['id']],
+                    good, self.sells)
+                self._quote_contexts[good] = context
+            value = _quote.quoted_cost_prepared(context, quantity)
+            self._quote_cache[key] = value
+        return value
 
     def free_cash(self):
         return self.engine.free_cash(self.enterprise['id'])
@@ -211,8 +236,134 @@ def plan_enterprises_python(engine, existing, sells):
 # ---------------------------------------------------------------------------
 
 def input_requests(engine, e, sells):
-    """Единственный вход из ``V3.input_requests``: ядро поверх хуков."""
-    return run_input_requests(engine, e, sells, PlanHooks(engine, e, sells), EPS)
+    """Единственный вход из ``V3.input_requests``: snapshot → расчёт → apply."""
+    hooks = PlanHooks(engine, e, sells)
+    recipe = engine.goods[e['good']]
+    account = engine.accounts[e['id']]
+    previous_full = copy.deepcopy(e)
+    previous_account = copy.deepcopy(account)
+    previous_demand = copy.deepcopy(getattr(engine, '_demand_revision', {}))
+    protected = engine.cash_store.get_protected_cash(e['id'])
+    try:
+        snapshot, result = _calculate_input_requests(engine, e, sells, hooks, recipe)
+    except Exception:
+        engine.cash_store.set_protected_cash(e['id'], protected)
+        account.clear()
+        account.update(previous_account)
+        e.clear()
+        e.update(previous_full)
+        engine._demand_revision.clear()
+        engine._demand_revision.update(previous_demand)
+        raise
+    return apply_input_request_result(
+        hooks, snapshot, result, EPS, previous_full, previous_account,
+        previous_demand)
+
+
+def _calculate_input_requests(engine, e, sells, hooks, recipe):
+    hooks.reset_protected()
+    requested = hooks.plan()
+    cash = hooks.free_cash()
+    first_order = hooks.begin_orders()
+    snapshot = {
+        'month': engine.meta['month'],
+        'input_items': list(recipe['inputs'].items()),
+        'input_ratios': dict(recipe['inputs']),
+        'equipment_rates': [
+            (good, ratio,
+             engine.goods[good].get('durable', {}).get('wear_rate', 0))
+            for good, ratio in recipe.get('equipment', {}).items()
+        ],
+        'stock_values': {
+            good: hooks.stock(good)
+            for good in list(recipe['inputs']) + [
+                good for good in recipe.get('equipment', {})
+                if good not in recipe['inputs']
+            ]
+        },
+        'labor': recipe['labor'],
+        'wage': engine.cfg['wage'],
+        'overhead': engine.enterprise_overhead(e),
+    }
+    maximum_missing = {}
+    for good, ratio in (*snapshot['input_items'],
+                        *((good, ratio) for good, ratio, _ in snapshot['equipment_rates'])):
+        missing = max(0, requested*ratio-snapshot['stock_values'][good])
+        maximum_missing[good] = max(maximum_missing.get(good, 0), missing)
+    snapshot['quote_contexts'] = {
+        good: _quote.prepare_native_quote_context(
+            engine, engine.accounts[e['id']], good, sells, missing,
+            needs_reference=good in recipe['inputs'])
+        for good, missing in maximum_missing.items()
+    }
+    snapshot['requested'] = requested
+    snapshot.update(
+        sale_price=e['planned_price'], expected_net_price=e['expected_price'],
+        reachable_demand=e['reachable_demand'], sales_forecast=e['sales_forecast'],
+        expected_margin=e['expected_margin'], production_limit=e['production_limit'],
+        fixed_unit=e.get('expected_fixed_unit', 0),
+    )
+    snapshot['cash'] = cash
+    snapshot['first_order'] = first_order
+    snapshot['target'] = run_target(snapshot, snapshot['cash'],
+                                     snapshot['requested'], EPS)
+    snapshot['input_prices'] = {}
+    for good, ratio in snapshot['input_items']:
+        missing = max(0, snapshot['target']*ratio-
+                      snapshot['stock_values'][good])
+        if missing > EPS:
+            snapshot['input_prices'][good] = _quote.quoted_cost_native_prepared(
+                snapshot['quote_contexts'][good], missing)[0]/missing
+        else:
+            snapshot['input_prices'][good] = snapshot['quote_contexts'][good][1]
+    result = run_input_requests(snapshot, EPS)
+    return snapshot, result
+
+
+def apply_input_request_result(hooks, snapshot, result, eps=EPS,
+                               enterprise_before=None, account_before=None,
+                               demand_before=None):
+    """Применить immutable planning result через владельцев состояния."""
+    plan, orders = result
+    target = snapshot['target']
+    engine = hooks.engine
+    enterprise = hooks.enterprise
+    account = engine.accounts[enterprise['id']]
+    enterprise_before = (copy.deepcopy(enterprise)
+                         if enterprise_before is None else enterprise_before)
+    account_before = (copy.deepcopy(account)
+                      if account_before is None else account_before)
+    demand_before = (copy.deepcopy(getattr(engine, '_demand_revision', {}))
+                     if demand_before is None else demand_before)
+    created = []
+    try:
+        hooks.commit_target(target, snapshot['requested'], eps)
+        plan['reason'] = enterprise['production_limit']
+        hooks.commit_plan(plan, target)
+        for good, quantity, price, purpose, adaptive in orders:
+            order = hooks.order(good, quantity, price, purpose)
+            if order:
+                created.append(order)
+                if adaptive:
+                    hooks.mark_adaptive(order)
+        hooks.commit_input_orders(hooks.order_ids(snapshot['first_order']))
+    except Exception:
+        for order in reversed(created):
+            if order['status'] not in ('cancelled', 'expired'):
+                engine.cancel_order(order, 'Откат неудачного планирования')
+            engine.order_store.remove(order)
+        enterprise.clear()
+        enterprise.update(enterprise_before)
+        account.clear()
+        account.update(account_before)
+        engine._demand_revision.clear()
+        engine._demand_revision.update(demand_before)
+        engine.cash_store.set_reserved_cash(
+            enterprise['id'], account_before.get('reserved', 0))
+        engine.cash_store.set_protected_cash(
+            enterprise['id'], account_before.get('protected', 0))
+        raise
+    return plan
 
 
 def plan_enterprises(engine, existing, sells):
@@ -221,7 +372,9 @@ def plan_enterprises(engine, existing, sells):
     Перемешивание остаётся здесь: ``engine.shuffled`` — это RNG месяца, и
     порядок расхода случайных чисел не должен переехать в ядро.
     """
-    return run_plan(engine, engine.shuffled(existing), sells, EPS)
+    # Orchestration остаётся у владельца engine: здесь сохраняются RNG,
+    # recovery, порядок предприятий и переход к следующему snapshot.
+    return _plan_enterprises_python(engine, engine.shuffled(existing), sells, EPS)
 
 
 def load_plan_kernel():
@@ -240,28 +393,30 @@ def load_plan_kernel():
 # --- Python-эквиваленты ядра с теми же сигнатурами -------------------------
 
 def _cash_needed_python(overhead, labor, wage, quantity, input_items,
-                        equipment_rates, hooks):
+                        equipment_rates, stock_values, quote_contexts, hooks):
     """Python-эквивалент ``cash_needed``."""
     needed = overhead+quantity*labor*wage
     for good, ratio in input_items:
-        missing = max(0, quantity*ratio-hooks.stock(good))
-        needed += missing*hooks.quote(good, missing)[1]
+        missing = max(0, quantity*ratio-stock_values[good])
+        needed += missing*_quote.quoted_cost_native_prepared(
+            quote_contexts[good], missing)[1]
     for good, ratio, wear in equipment_rates:
-        missing = max(0, ratio*quantity-hooks.stock(good))
-        needed += missing*hooks.quote(good, missing)[1]
+        missing = max(0, ratio*quantity-stock_values[good])
+        needed += missing*_quote.quoted_cost_native_prepared(
+            quote_contexts[good], missing)[1]
     return needed
 
 
 def _target_python(overhead, labor, wage, target, cash, input_items,
-                   equipment_rates, hooks):
+                   equipment_rates, stock_values, quote_contexts, hooks):
     """Python-эквивалент ``plan_target``: те же 40 итераций."""
     if _cash_needed_python(overhead, labor, wage, target, input_items,
-                           equipment_rates, hooks) > cash:
+                           equipment_rates, stock_values, quote_contexts, hooks) > cash:
         low, high = 0.0, target
         for _ in range(40):
             middle = (low+high)/2
             if _cash_needed_python(overhead, labor, wage, middle, input_items,
-                                   equipment_rates, hooks) <= cash:
+                                   equipment_rates, stock_values, quote_contexts, hooks) <= cash:
                 low = middle
             else:
                 high = middle
@@ -269,58 +424,48 @@ def _target_python(overhead, labor, wage, target, cash, input_items,
     return target
 
 
-def _input_requests_python(engine, e, sells, hooks=None, eps=EPS):
+def _input_requests_python(snapshot, eps=EPS):
     """Python-эквивалент ``input_requests`` с тем же порядком шагов."""
-    hooks = hooks or PlanHooks(engine, e, sells)
-    recipe = engine.goods[e['good']]
-    input_items = list(recipe['inputs'].items())
-    equipment_rates = [(good, ratio,
-                        engine.goods[good].get('durable', {}).get('wear_rate', 0))
-                       for good, ratio in recipe.get('equipment', {}).items()]
-    for good, _ in input_items:
-        hooks.reference_price(good)
-    hooks.reset_protected()
-    target = hooks.plan()
-    cash = hooks.free_cash()
-    requested = target
-    first_order = hooks.begin_orders()
-    target = _target_python(engine.enterprise_overhead(e), recipe['labor'],
-                            engine.cfg['wage'], target, cash, input_items,
-                            equipment_rates, hooks)
-    input_prices = hooks.volume_prices(target)
-    hooks.commit_target(target, requested, eps)
+    input_items = snapshot['input_items']
+    equipment_rates = snapshot['equipment_rates']
+    stock_values = snapshot['stock_values']
+    quote_contexts = snapshot['quote_contexts']
+    target = snapshot['target']
+    cash = snapshot['cash']
+    requested = snapshot['requested']
+    first_order = snapshot['first_order']
+    input_prices = snapshot['input_prices']
     equipment_required = {}
     equipment_wear = {}
     for good, ratio, wear in equipment_rates:
         equipment_required[good] = ratio*target
         equipment_wear[good] = ratio*target*wear
-    plan = dict(month=engine.meta['month'], output=target,
-                sale_price=e['planned_price'],
-                expected_net_price=e['expected_price'], input_prices=input_prices,
-                input_ratios=dict(recipe['inputs']),
-                wage_unit=recipe['labor']*engine.cfg['wage'],
+    plan = dict(month=snapshot['month'], output=target,
+                sale_price=snapshot['sale_price'],
+                expected_net_price=snapshot['expected_net_price'], input_prices=input_prices,
+                input_ratios=dict(snapshot['input_ratios']),
+                wage_unit=snapshot['labor']*snapshot['wage'],
                 equipment_required=equipment_required,
                 equipment_wear=equipment_wear,
-                fixed_unit=e.get('expected_fixed_unit', 0),
+                fixed_unit=snapshot['fixed_unit'],
                 requested_output=requested, free_cash=cash,
                 known_order_count=first_order,
-                reachable_demand=e['reachable_demand'],
-                sales_forecast=e['sales_forecast'],
-                expected_margin=e['expected_margin'],
-                reason=e['production_limit'])
-    hooks.commit_plan(plan, target)
+                reachable_demand=snapshot['reachable_demand'],
+                sales_forecast=snapshot['sales_forecast'],
+                expected_margin=snapshot['expected_margin'],
+                reason=snapshot['production_limit'])
+    orders = []
     for good, ratio in input_items:
-        quantity = max(0, target*ratio-hooks.stock(good))
-        price = hooks.quote(good, quantity)[1]
-        order = hooks.order(good, quantity, price, 'Сырьё')
-        if order:
-            hooks.mark_adaptive(order)
+        quantity = max(0, target*ratio-stock_values[good])
+        price = _quote.quoted_cost_native_prepared(
+            quote_contexts[good], quantity)[1]
+        orders.append((good, quantity, price, 'Сырьё', True))
     for good, ratio, wear in equipment_rates:
-        quantity = max(0, ratio*target-hooks.stock(good))
-        price = hooks.quote(good, quantity)[1]
-        hooks.order(good, quantity, price, 'Оборудование')
-    hooks.commit_input_orders(hooks.order_ids(first_order))
-    return plan
+        quantity = max(0, ratio*target-stock_values[good])
+        price = _quote.quoted_cost_native_prepared(
+            quote_contexts[good], quantity)[1]
+        orders.append((good, quantity, price, 'Оборудование', False))
+    return plan, orders
 
 
 def _plan_enterprises_python(engine, enterprises, sells, eps):
@@ -344,8 +489,11 @@ NATIVE_KERNEL = False
 _kernel = load_plan_kernel()
 if _kernel is not None:
     run_input_requests = _kernel.input_requests
-    run_plan = _kernel.plan_enterprises
+    run_target = _kernel.calculate_target
     NATIVE_KERNEL = True
 else:
     run_input_requests = _input_requests_python
-    run_plan = _plan_enterprises_python
+    run_target = lambda snapshot, cash, target, eps: _target_python(
+        snapshot['overhead'], snapshot['labor'], snapshot['wage'], target, cash,
+        snapshot['input_items'], snapshot['equipment_rates'],
+        snapshot['stock_values'], snapshot['quote_contexts'], None)

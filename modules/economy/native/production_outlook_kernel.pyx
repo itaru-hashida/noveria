@@ -18,10 +18,28 @@
 встроенного ``sum`` в CPython 3.12 (Neumaier): иначе последний бит расходится
 и траектория уходит уже на первом месяце.
 
-Единственный Python-хук внутри ядра — ``overhead_hook``: прежний код звал
-``enterprise_overhead`` дважды (в ``fixed_unit`` и в ``expected_fixed_cost``),
-и оба вызова сохранены в том же порядке.
+Постоянный оброк передаётся как готовое число.
 """
+
+
+from modules.economy.native.offer_view cimport cover_demand_from_books
+from modules.economy.native.demand_kernel cimport expected_stock_sales
+
+
+def forecast_from_books(tuple demand_input, tuple stock_input, tuple outlook_input):
+    """Рассчитать покрытие спроса, продажи склада и выпуск за один вход."""
+    cdef object owner, price, groups, eps, demand, sales
+    cdef dict books, remaining
+    owner, price, groups, books, remaining, eps = demand_input
+    demand = cover_demand_from_books(owner, price, groups, books, remaining, eps)
+    sales, offered, stock, history, alternate = stock_input
+    if offered is not None:
+        reachable = demand
+        if alternate is not None:
+            owner, price, groups, books, remaining, eps = alternate
+            reachable = cover_demand_from_books(owner, price, groups, books, remaining, eps)
+        sales = expected_stock_sales(stock, offered, reachable, history)
+    return outlook(*outlook_input[:5], demand, sales, *outlook_input[5:]), sales
 
 
 cdef inline object _max0(object value):
@@ -85,7 +103,7 @@ def select_price(object price, object base_net, object cost,
     return production_price
 
 
-def sold_quantity(object trades, object seller, object good):
+cpdef object sold_quantity(object trades, object seller, object good):
     """Проданное этим продавцом по этому товару за месяц.
 
     Прежний код — ``sum(t['quantity'] for t in trades if ...)``. Сумма идёт
@@ -113,10 +131,11 @@ def own_average(object observations, object sales_forecast):
     return _finish(total, comp)/len(observations)
 
 
-def outlook(object observations, object sales_forecast, object sold_now,
+def outlook(object observations, object sales_forecast, object trades,
+            object seller, object good,
             object demand, object expected_sales, object stock_planning,
             object stock, object capacity, object previous, object cost,
-            object expected_price, object overhead_hook, object eps,
+            object expected_price, object overhead_cost, object eps,
             object overstock_factor, object decline_rate, object price):
     """Собрать прогноз выпуска: те же числа, тот же порядок ключей.
 
@@ -124,20 +143,17 @@ def outlook(object observations, object sales_forecast, object sold_now,
     ``STOCK_PLANNING_REVISION`` выключена: короткое замыкание сохраняет
     граница, ядро только подставляет ``0.0``.
 
-    ``overhead_hook`` вызывается один раз для ``fixed_unit`` (только при
-    положительном выпуске) и второй раз для ``expected_fixed_cost`` — ровно
-    как два прежних обращения к ``enterprise_overhead``.
+    ``overhead_cost`` рассчитан границей.
     """
     cdef object own
     cdef object forecast
     cdef object projected_stock
     cdef object target
     cdef object fixed_unit
-    cdef object overhead_cost
     cdef object margin
     cdef object limit
     own = own_average(observations, sales_forecast)
-    forecast = _max2(own, sold_now+demand)
+    forecast = _max2(own, sold_quantity(trades, seller, good)+demand)
     if not stock_planning:
         expected_sales = 0.0
     # Начальный склад сначала торгуется в этом месяце; восполняем остаток,
@@ -151,10 +167,9 @@ def outlook(object observations, object sales_forecast, object sold_now,
         target = previous-decline_rate*(previous-target)
         target = _max0(_min2(capacity, target))
     if target > eps:
-        fixed_unit = overhead_hook()/target
+        fixed_unit = overhead_cost/target
     else:
         fixed_unit = 0.0
-    overhead_cost = overhead_hook()
     margin = expected_price-cost-fixed_unit
     if projected_stock >= forecast and forecast > eps:
         limit = 'Готовые запасы'

@@ -272,7 +272,7 @@ def stock_offers(object offers, object participant, object eps):
     return _finish(total, comp)
 
 
-def expected_stock_sales(object stock, object offered, object reachable,
+cpdef api object expected_stock_sales(object stock, object offered, object reachable,
                          object history):
     """Продажа старого склада: ``min(stock, offered, max(demand, average))``.
 

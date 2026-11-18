@@ -76,6 +76,75 @@ class QuoteHooks(object):
                                   self.good, price)
 
 
+def prepare_quote_context(engine, buyer, good, sells):
+    """Подготовить неизменяемую часть серии котировок одного товара."""
+    hooks = QuoteHooks(engine, buyer, good, sells)
+    return (hooks.offers(), hooks.recovery_rows(), hooks.reference,
+            hooks.landed, buyer['id'])
+
+
+def prepare_native_quote_context(engine, buyer, good, sells, maximum_missing,
+                                 *, needs_reference):
+    """Подготовить quote context без reference/landed callbacks."""
+    hooks = QuoteHooks(engine, buyer, good, sells)
+    offers = tuple((price, sell['remaining']) for price, sell, _ in hooks.offers())
+    left = maximum_missing
+    for _, remaining in offers:
+        left -= min(left, remaining)
+        if left <= EPS:
+            break
+    if needs_reference or left > EPS:
+        reference = offers[0][0] if offers else hooks.reference()
+    else:
+        reference = None
+    if left <= EPS:
+        return offers, reference, ()
+    recovery_rows = hooks.recovery_rows()
+    recovery_cache = engine.__dict__.setdefault(
+        '_native_recovery_price_cache', {})
+    recovery_key = (
+        buyer.get('tile_id'), good, id(recovery_rows),
+        getattr(engine, '_market_quote_version', 0))
+    recovery_prices = recovery_cache.get(recovery_key)
+    if recovery_prices is None:
+        values = []
+        for firm, price in recovery_rows:
+            if firm['id'] == buyer['id']:
+                continue
+            landed = hooks.landed(firm['tile_id'], price)
+            if landed:
+                values.append(landed[0])
+        recovery_prices = tuple(values)
+        recovery_cache[recovery_key] = recovery_prices
+    return offers, reference, tuple(recovery_prices)
+
+
+def quoted_cost_prepared(context, quantity, eps=EPS):
+    """Посчитать котировку по уже подготовленной книге и hooks."""
+    offers, recovery_rows, reference, landed, owner_id = context
+    return run_quoted(offers, quantity, reference, recovery_rows, owner_id,
+                      landed, eps)
+
+
+def quoted_cost_native_prepared(context, quantity, eps=EPS):
+    """Python fallback для native quote context без callbacks."""
+    offers, reference, recovery_prices = context
+    left, value, ceiling = quantity, 0.0, 0.0
+    for price, remaining in offers:
+        q = min(left, remaining)
+        value += q*price
+        ceiling = max(ceiling, price)
+        left -= q
+        if left <= eps:
+            break
+    if left > eps:
+        if recovery_prices:
+            reference = max(reference, min(recovery_prices))
+        value += left*reference
+        ceiling = max(ceiling, reference)
+    return value, max(ceiling, eps), left <= eps
+
+
 # --- reference_price -------------------------------------------------------
 
 def reference_price_python(engine, buyer, good, sells):
@@ -204,9 +273,12 @@ def unit_cost(engine, e, sells):
     if cached is not None:
         return cached
     recipe = engine.goods[e['good']]
-    hook = lambda good: engine.reference_price(e, good, sells)  # noqa: E731
-    raw = run_sum(list(recipe['inputs'].items()), hook)
-    wear = run_sum(list(engine.equipment_wear(recipe, 1).items()), hook)
+    raw = run_prepared_cost_sum([
+        (ratio, engine.reference_price(e, good, sells))
+        for good, ratio in recipe['inputs'].items()])
+    wear = run_prepared_cost_sum([
+        (quantity, engine.reference_price(e, good, sells))
+        for good, quantity in engine.equipment_wear(recipe, 1).items()])
     result = recipe['labor']*engine.cfg['wage']+raw+wear
     cache[key] = result
     engine._unit_cost_cache = cache
@@ -381,6 +453,10 @@ def _sum_python(items, hook):
     return sum(ratio*hook(good) for good, ratio in items)
 
 
+def _prepared_cost_sum_python(items):
+    return sum(ratio*price for ratio, price in items)
+
+
 def _volume_python(items, quantity, stock_hook, quoted_hook, reference_hook,
                    account, eps):
     """Python-эквивалент ``volume_input_prices``."""
@@ -435,3 +511,5 @@ else:
     run_volume = _volume_python
     run_ceiling = _ceiling_python
     run_reprice = _reprice_python
+
+run_prepared_cost_sum = getattr(_kernel, 'prepared_cost_sum', _prepared_cost_sum_python)

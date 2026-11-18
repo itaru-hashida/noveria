@@ -191,6 +191,7 @@ setup(
          # второго WorldState/ledger'а нет и ядро не зависит от прочих
          # расширений: фазы остаются их собственными границами.
          Extension('monthly_driver', ['monthly_driver.pyx'])],
+        include_path=['../../..'],
         compiler_directives={'language_level': 3},
     ),
 )

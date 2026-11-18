@@ -340,8 +340,8 @@ def test_plan_enterprises_matches_reference_order_and_state():
     assert native_state == state(reference)
 
 
-def test_plan_enterprises_shuffles_before_order_inside_native():
-    """RNG остаётся в Python: перемешивание расходуется до вызова ядра."""
+def test_plan_enterprises_shuffles_before_python_orchestration():
+    """RNG и обход предприятий остаются в Python boundary."""
     engine = build_engine()
     clear(engine)
     existing = list(engine.enterprises.values())
@@ -349,8 +349,9 @@ def test_plan_enterprises_shuffles_before_order_inside_native():
     engine.shuffled(existing)
     after = repr(engine.rng.getstate())
     assert before != after
-    # Ядро перемешивание не повторяет: прямой вызов ядра RNG не тратит.
-    boundary.run_plan(engine, existing, {}, EPS)
+    # Native kernel получает только snapshot одного предприятия; orchestration
+    # не является частью его публичного контракта.
+    boundary._plan_enterprises_python(engine, existing, {}, EPS)
     assert repr(engine.rng.getstate()) == after
 
 
@@ -366,7 +367,7 @@ def test_fallback_switches_to_the_python_reference(monkeypatch):
     engine.input_requests(bakery, {})
     native_state = state(engine)
 
-    monkeypatch.setattr(boundary, 'input_requests', boundary._input_requests_python)
+    monkeypatch.setattr(boundary, 'run_input_requests', boundary._input_requests_python)
     monkeypatch.setattr(boundary, 'plan_enterprises',
                         boundary._plan_enterprises_python)
     monkeypatch.setattr(boundary, 'NATIVE_KERNEL', False)
@@ -418,3 +419,48 @@ def test_native_kernel_is_used_on_the_standard_path():
     finally:
         boundary.run_input_requests = real
     assert seen, 'штатный путь обязан звать ядро plan_kernel'
+
+
+def test_calculation_failure_restores_forecast_and_protected_cash(monkeypatch):
+    engine = build_engine()
+    clear(engine)
+    bakery = firm(engine)
+    account = engine.accounts[bakery['id']]
+    account['operating_protected'] = 3
+    engine.cash_store.set_protected_cash(bakery['id'], 5)
+    previous = bakery.copy()
+    orders = list(engine.report['orders'])
+
+    def fail(*args):
+        raise RuntimeError('calculation failed')
+
+    monkeypatch.setattr(boundary, 'run_target', fail)
+    with pytest.raises(RuntimeError, match='calculation failed'):
+        engine.input_requests(bakery, {})
+
+    assert bakery == previous
+    assert account['operating_protected'] == 3
+    assert engine.cash_store.get_protected_cash(bakery['id']) == 5
+    assert engine.report['orders'] == orders
+
+
+def test_apply_failure_restores_plan_and_orders(monkeypatch):
+    engine = build_engine()
+    clear(engine)
+    bakery = firm(engine)
+    account = engine.accounts[bakery['id']]
+    account['operating_protected'] = 3
+    previous_enterprise = copy.deepcopy(bakery)
+    previous_account = copy.deepcopy(account)
+    previous_orders = list(engine.report['orders'])
+
+    def fail_order(self, *args):
+        raise RuntimeError('apply failed')
+
+    monkeypatch.setattr(boundary.PlanHooks, 'order', fail_order)
+    with pytest.raises(RuntimeError, match='apply failed'):
+        engine.input_requests(bakery, {})
+
+    assert bakery == previous_enterprise
+    assert account == previous_account
+    assert engine.report['orders'] == previous_orders

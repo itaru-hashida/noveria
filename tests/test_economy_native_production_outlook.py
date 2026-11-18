@@ -392,6 +392,22 @@ def test_fallback_switches_to_the_python_reference(monkeypatch):
     assert boundary.run_outlook is not boundary._outlook_python
 
 
+def test_native_forecast_uses_one_prepared_entrypoint(monkeypatch):
+    engine = make_engine()
+    firm = firms(engine)[0]
+    original = boundary._forecast_from_books
+    assert original is not None
+    calls = []
+
+    def record(*inputs):
+        calls.append(inputs)
+        return original(*inputs)
+
+    monkeypatch.setattr(boundary, '_forecast_from_books', record)
+    assert shape(native(engine, firm, {})) == shape(reference(engine, firm, {}))
+    assert len(calls) == 1
+
+
 def test_load_kernel_returns_none_when_extension_is_missing(monkeypatch):
     """Отсутствие расширения — это ImportError, а не падение границы."""
     monkeypatch.setattr(boundary, 'load_production_outlook_kernel',

@@ -14,8 +14,7 @@
   * ``reachable_demand`` — достижимый спрос: читает ``sells`` и заявки;
   * ``expected_stock_sales`` — продажа старого склада: свой кэш движка
     ``_stock_sales_cache``;
-  * ``enterprise_overhead`` — оброк за площадку: остаётся хуком внутри ядра
-    и вызывается ровно дважды, как в прежнем коде;
+  * ``enterprise_overhead`` — постоянный оброк, рассчитанный на границе;
   * ``report['trades']`` и ``accounts[...]['stock']`` — чтение живого
     состояния месяца;
   * кэш прогноза ``_production_outlook_cache`` и его ключ.
@@ -32,6 +31,7 @@
 import importlib
 
 from ..support import EPS
+from . import demand_boundary as _demand
 
 
 # Версия формы ключа и значения кэша прогноза. Меняется вместе с составом
@@ -179,14 +179,14 @@ def production_outlook(engine, e, sells=None):
     # внешний словарь не должен увидеть промежуточные поля.
     copy_e = dict(e)
     hooks = OutlookHooks(engine, copy_e, sells)
-    result = _compute(engine, copy_e, sells, hooks, key is not None)
+    result = _compute(engine, copy_e, hooks)
     if key is not None:
         cache[key] = result
         engine._production_outlook_cache = cache
     return result
 
 
-def _compute(engine, e, sells, hooks, cacheable):
+def _compute(engine, e, hooks):
     """Единственный путь расчёта: хуки зовёт граница, числа — ``run_*``.
 
     При собранном ядре ``run_price``/``run_sold``/``run_outlook`` — Cython, при
@@ -199,8 +199,12 @@ def _compute(engine, e, sells, hooks, cacheable):
     price = run_price(e['price'], base_net, cost,
                       e.get('production_price', e['price']), EPS)
     quote = dict(e, price=price)
+    if (_forecast_from_books is not None and NATIVE_KERNEL
+            and run_outlook is _kernel.outlook
+            and _demand.cover_demand_from_books is not None):
+        return _compute_from_books(engine, e, quote, hooks, cost, base_net)
     demand = hooks.reachable_demand(quote)
-    sold_now = run_sold(hooks.trades(), e['id'], e['good'])
+    trades = hooks.trades()
     # Короткое замыкание прежнего выражения: при выключенной ревизии склада
     # хук не вызывается вовсе, ядро получает None и подставляет 0.0.
     if engine.STOCK_PLANNING_REVISION:
@@ -208,15 +212,51 @@ def _compute(engine, e, sells, hooks, cacheable):
             demand if price == e['price'] else None)
     else:
         expected_sales = None
-    return run_outlook(hooks.observations(), e['sales_forecast'], sold_now,
+    return run_outlook(hooks.observations(), e['sales_forecast'], trades,
+                       e['id'], e['good'],
                        demand, expected_sales, engine.STOCK_PLANNING_REVISION,
                        hooks.stock(e['good']), e['capacity'],
                        e.get('planned_output', 0), cost,
                        (base_net if price == e['price']
                         else hooks.net_price(quote)),
-                       hooks.overhead, EPS,
+                       hooks.overhead(), EPS,
                        engine.cfg['output_overstock_factor'],
                        engine.cfg['output_decline_rate'], price)
+
+
+def _compute_from_books(engine, e, quote, hooks, cost, base_net):
+    """Подготовить живые входы и опубликовать кэш после расчёта."""
+    sells = hooks.sells
+    owner, good, price = e['id'], e['good'], quote['price']
+    revision = engine.STOCK_PLANNING_REVISION
+    demand_input = _demand.prepare_reachable_demand(engine, quote, sells)
+    history = hooks.observations()
+    sales = offered = alternate = None
+    cache = None
+    if revision:
+        sales = 0.0
+        available = _demand.run_offered(sells.get(good, []), owner, EPS)
+        if available > EPS:
+            stock_cache = getattr(engine, '_stock_sales_cache', {})
+            sales = stock_cache.get(owner)
+            if sales is None:
+                cache, offered = stock_cache, available
+                if price != e['price']:
+                    alternate = _demand.prepare_reachable_demand(engine, e, sells)
+    stock = hooks.stock(good)
+    stock_input = (sales, offered, stock, history, alternate)
+    outlook_input = (
+        history, e['sales_forecast'], hooks.trades(), owner, good,
+        revision, stock, e['capacity'], e.get('planned_output', 0), cost,
+        base_net if price == e['price'] else hooks.net_price(quote),
+        hooks.overhead(), EPS, engine.cfg['output_overstock_factor'],
+        engine.cfg['output_decline_rate'], price,
+    )
+    outlook, sales = _forecast_from_books(demand_input, stock_input, outlook_input)
+    if cache is not None:
+        cache[owner] = sales
+        engine._stock_sales_cache = cache
+    return outlook
 
 
 def load_production_outlook_kernel():
@@ -246,16 +286,16 @@ def _sold_python(trades, seller, good):
                if row['seller'] == seller and row['good'] == good)
 
 
-def _outlook_python(observations, sales_forecast, sold_now, demand,
+def _outlook_python(observations, sales_forecast, trades, seller, good, demand,
                     expected_sales, stock_planning, stock, capacity, previous,
-                    cost, expected_price, overhead_hook, eps, overstock_factor,
+                    cost, expected_price, overhead_cost, eps, overstock_factor,
                     decline_rate, price):
     """Python-эквивалент ``outlook`` с той же сигнатурой."""
     if observations:
         own = sum(row['sold'] for row in observations)/len(observations)
     else:
         own = sales_forecast
-    forecast = max(own, sold_now+demand)
+    forecast = max(own, _sold_python(trades, seller, good)+demand)
     if not stock_planning:
         expected_sales = 0.0
     projected_stock = max(0, stock-expected_sales)
@@ -264,8 +304,7 @@ def _outlook_python(observations, sales_forecast, sold_now, demand,
             and not (stock > forecast*overstock_factor)):
         target = previous-decline_rate*(previous-target)
         target = max(0, min(capacity, target))
-    fixed_unit = overhead_hook()/target if target > eps else 0.0
-    overhead_cost = overhead_hook()
+    fixed_unit = overhead_cost/target if target > eps else 0.0
     margin = expected_price-cost-fixed_unit
     if projected_stock >= forecast and forecast > eps:
         limit = 'Готовые запасы'
@@ -286,6 +325,7 @@ def _outlook_python(observations, sales_forecast, sold_now, demand,
 NATIVE_KERNEL = False
 
 _kernel = load_production_outlook_kernel()
+_forecast_from_books = getattr(_kernel, 'forecast_from_books', None)
 if _kernel is not None:
     run_price = _kernel.select_price
     run_sold = _kernel.sold_quantity

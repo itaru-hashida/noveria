@@ -16,8 +16,8 @@ stores через хуки границы ``plan_boundary``. Сюда прихо
 
   * ``reference_price(good)`` — прежний ``reference_price`` (книга и кэш);
   * ``stock(good)`` — прежний ``free_stock`` (склад минус резервы);
-  * ``quote(good, missing)`` — прежний ``quoted_cost(...)`` целиком: ядру
-    нужен только его потолок ``[1]``, а книга и кэш остаются за котировками;
+  * подготовленные ``quote_contexts`` — прежний ``quoted_cost(...)`` по книге
+    и recovery-контексту; ядру нужен только его потолок ``[1]``;
   * ``plan()`` — прежний ``plan(e, sells=sells)`` (прогноз выпуска);
   * ``volume_prices(target)`` — прежний ``volume_input_prices``;
   * ``reset_protected()``/``set_payroll(value)`` — прежние поля счёта;
@@ -40,6 +40,8 @@ RNG ядро не трогает: перемешивание делает Python
 ``(-depth, index)`` воспроизводят тот же порядок без сравнения словарей.
 """
 
+from modules.economy.native.quote_kernel cimport quoted_cost_values
+
 
 cdef inline object _max0(object value):
     """``max(0, value)``: при равенстве и для отрицательных побеждает ``0``."""
@@ -50,7 +52,8 @@ cdef inline object _max0(object value):
 
 cdef inline object _cash_needed(object overhead, object labor, object wage, object quantity,
                                 object input_items, object equipment_rates,
-                                object hooks):
+                                object stock_values, object quote_contexts,
+                                object eps):
     """Прежний ``cash_needed(quantity)``: оброк, труд, сырьё и оборудование.
 
     ``needed`` накапливается наивным ``+=``, как в прежнем коде, а не
@@ -64,18 +67,24 @@ cdef inline object _cash_needed(object overhead, object labor, object wage, obje
     cdef object wear
     cdef object missing
     cdef object required
+    cdef object context
     for good, ratio in input_items:
-        missing = _max0(quantity*ratio-hooks.stock(good))
-        needed += missing*hooks.quote(good, missing)[1]
+        missing = _max0(quantity*ratio-stock_values[good])
+        context = quote_contexts[good]
+        needed += missing*quoted_cost_values(
+            context[0], missing, context[1], context[2], eps)[1]
     for good, ratio, wear in equipment_rates:
         required = ratio*quantity
-        missing = _max0(required-hooks.stock(good))
-        needed += missing*hooks.quote(good, missing)[1]
+        missing = _max0(required-stock_values[good])
+        context = quote_contexts[good]
+        needed += missing*quoted_cost_values(
+            context[0], missing, context[1], context[2], eps)[1]
     return needed
 
 
 def plan_target(object overhead, object labor, object wage, object target, object cash,
-                object input_items, object equipment_rates, object hooks):
+                object input_items, object equipment_rates, object stock_values,
+                object quote_contexts, object eps):
     """Итоговый выпуск: бисекция по кассе, ровно 40 итераций.
 
     Прежний код сначала считал ``cash_needed(target)`` и только при нехватке
@@ -84,13 +93,13 @@ def plan_target(object overhead, object labor, object wage, object target, objec
     результат — ``low``, то есть наибольшее проверенное доступное значение.
     """
     if _cash_needed(overhead, labor, wage, target, input_items, equipment_rates,
-                    hooks) > cash:
+                    stock_values, quote_contexts, eps) > cash:
         low = 0.0
         high = target
         for _ in range(40):
             middle = (low+high)/2
             if _cash_needed(overhead, labor, wage, middle, input_items,
-                            equipment_rates, hooks) <= cash:
+                            equipment_rates, stock_values, quote_contexts, eps) <= cash:
                 low = middle
             else:
                 high = middle
@@ -98,7 +107,15 @@ def plan_target(object overhead, object labor, object wage, object target, objec
     return target
 
 
-def input_requests(object engine, object e, object sells, object hooks, object eps):
+def calculate_target(object snapshot, object cash, object requested, object eps):
+    """Рассчитать выпуск по snapshot без engine и Python hooks."""
+    return plan_target(snapshot['overhead'], snapshot['labor'], snapshot['wage'],
+                      requested, cash, snapshot['input_items'],
+                      snapshot['equipment_rates'], snapshot['stock_values'],
+                      snapshot['quote_contexts'], eps)
+
+
+def input_requests(object snapshot, object eps):
     """Прежний ``V3.input_requests``: числа в ядре, мутации через хуки.
 
     Порядок шагов сохранён буквально: цены входов (прежний код присваивал
@@ -108,14 +125,14 @@ def input_requests(object engine, object e, object sells, object hooks, object e
     причина предела, ``production_plan``, резерв зарплат, затем заявки на
     сырьё и оборудование и список их ``id``.
     """
-    cdef object recipe = engine.goods[e['good']]
-    cdef dict input_ratios = recipe['inputs']
-    cdef dict equipment = recipe.get('equipment', {})
-    cdef object overhead = engine.enterprise_overhead(e)
-    cdef object labor = recipe['labor']
-    cdef object wage = engine.cfg['wage']
-    cdef list input_items = list(input_ratios.items())
-    cdef list equipment_rates = []
+    cdef dict input_ratios = snapshot['input_ratios']
+    cdef list input_items = snapshot['input_items']
+    cdef list equipment_rates = snapshot['equipment_rates']
+    cdef dict stock_values = snapshot['stock_values']
+    cdef dict quote_contexts = snapshot['quote_contexts']
+    cdef object overhead = snapshot['overhead']
+    cdef object labor = snapshot['labor']
+    cdef object wage = snapshot['wage']
     cdef object good
     cdef object ratio
     cdef object wear
@@ -126,84 +143,44 @@ def input_requests(object engine, object e, object sells, object hooks, object e
     cdef object quantity
     cdef object price
     cdef object order
+    cdef object context
     cdef object input_prices
+    cdef list orders = []
     cdef dict equipment_required = {}
     cdef dict equipment_wear = {}
     cdef dict plan
 
-    for good, ratio in equipment.items():
-        equipment_rates.append((good, ratio,
-                                engine.goods[good].get('durable', {}).get('wear_rate', 0)))
-    for good, ratio in input_items:
-        hooks.reference_price(good)
-    hooks.reset_protected()
-    target = hooks.plan()
-    cash = hooks.free_cash()
-    requested = target
-    first_order = hooks.begin_orders()
-    target = plan_target(overhead, labor, wage, target, cash, input_items,
-                         equipment_rates, hooks)
-    input_prices = hooks.volume_prices(target)
-    hooks.commit_target(target, requested, eps)
+    target = snapshot['target']
+    cash = snapshot['cash']
+    requested = snapshot['requested']
+    first_order = snapshot['first_order']
+    input_prices = snapshot['input_prices']
     for good, ratio, wear in equipment_rates:
         equipment_required[good] = ratio*target
         equipment_wear[good] = ratio*target*wear
-    plan = dict(month=engine.meta['month'], output=target,
-                sale_price=e['planned_price'],
-                expected_net_price=e['expected_price'], input_prices=input_prices,
+    plan = dict(month=snapshot['month'], output=target,
+                sale_price=snapshot['sale_price'],
+                expected_net_price=snapshot['expected_net_price'], input_prices=input_prices,
                 input_ratios=dict(input_ratios), wage_unit=labor*wage,
                 equipment_required=equipment_required,
                 equipment_wear=equipment_wear,
-                fixed_unit=e.get('expected_fixed_unit', 0),
+                fixed_unit=snapshot['fixed_unit'],
                 requested_output=requested, free_cash=cash,
                 known_order_count=first_order,
-                reachable_demand=e['reachable_demand'],
-                sales_forecast=e['sales_forecast'],
-                expected_margin=e['expected_margin'],
-                reason=e['production_limit'])
-    hooks.commit_plan(plan, target)
+                reachable_demand=snapshot['reachable_demand'],
+                sales_forecast=snapshot['sales_forecast'],
+                expected_margin=snapshot['expected_margin'],
+                reason=snapshot['production_limit'])
     for good, ratio in input_items:
-        quantity = _max0(target*ratio-hooks.stock(good))
-        price = hooks.quote(good, quantity)[1]
-        order = hooks.order(good, quantity, price, 'Сырьё')
-        if order:
-            hooks.mark_adaptive(order)
+        quantity = _max0(target*ratio-stock_values[good])
+        context = quote_contexts[good]
+        price = quoted_cost_values(
+            context[0], quantity, context[1], context[2], eps)[1]
+        orders.append((good, quantity, price, 'Сырьё', True))
     for good, ratio, wear in equipment_rates:
-        quantity = _max0(ratio*target-hooks.stock(good))
-        price = hooks.quote(good, quantity)[1]
-        hooks.order(good, quantity, price, 'Оборудование')
-    hooks.commit_input_orders(hooks.order_ids(first_order))
-    return plan
-
-
-def plan_enterprises(object engine, object enterprises, object sells, object eps):
-    """Штатный обход ``plan_enterprises``: порядок, условия и RNG прежние.
-
-    ``enterprises`` — уже перемешанный Python-стороной список: ядро лишь
-    устойчиво сортирует его по убыванию глубины товара, как прежний
-    ``sorted(..., key=lambda e: -depth(e['good']))``. Глубина считается один
-    раз на предприятие, затем сортировка идёт по готовым парам без вызова
-    Python-ключа на каждом сравнении.
-    """
-    cdef list rows = enterprises
-    cdef Py_ssize_t index, count = len(rows)
-    cdef list keyed = []
-    cdef object enterprise
-    cdef object a
-    cdef object month = engine.meta['month']
-    for index in range(count):
-        enterprise = rows[index]
-        keyed.append((-engine.depth(enterprise['good']), index, enterprise))
-    keyed.sort()
-    for _, _, enterprise in keyed:
-        a = engine.accounts[enterprise['id']]
-        # ``free_cash`` зовётся только когда предприятие не закрыто: прежний
-        # короткий цикл ``or`` не вычислял его для закрытых.
-        if enterprise['status'] == 'closed' or (
-                engine.free_cash(enterprise['id']) <= eps
-                and a.get('operating_protected', 0) <= eps):
-            engine.recover_enterprises(sells, [enterprise])
-        if (enterprise['status'] != 'closed' and not enterprise.get('suspended')
-                and enterprise['available_from'] <= month):
-            engine.input_requests(enterprise, sells)
-    return None
+        quantity = _max0(ratio*target-stock_values[good])
+        context = quote_contexts[good]
+        price = quoted_cost_values(
+            context[0], quantity, context[1], context[2], eps)[1]
+        orders.append((good, quantity, price, 'Оборудование', False))
+    return plan, orders

@@ -28,6 +28,30 @@ pytest.importorskip('modules.economy.native.quote_kernel')
 EPS = support.EPS
 
 
+def test_covered_equipment_quote_skips_reference_and_recovery(monkeypatch):
+    def unexpected(*args):
+        pytest.fail('Книга покрывает весь диапазон закупки')
+
+    monkeypatch.setattr(boundary.QuoteHooks, 'offers',
+                        lambda self: [(3, {'remaining': 4}, None)])
+    monkeypatch.setattr(boundary.QuoteHooks, 'reference', unexpected)
+    monkeypatch.setattr(boundary.QuoteHooks, 'recovery_rows', unexpected)
+    context = boundary.prepare_native_quote_context(
+        None, {'id': 'buyer'}, 'equipment', {}, 4, needs_reference=False)
+    assert boundary.quoted_cost_native_prepared(context, 4) == (12, 3, True)
+
+
+@pytest.mark.parametrize('recovery, expected', [((2, 4), 5), ((8, 7), 7)])
+def test_prepared_quote_preserves_reference_floor(recovery, expected):
+    from modules.economy.native.quote_kernel import quoted_cost_values
+
+    context = (((3, 1),), 5, recovery)
+    assert quoted_cost_values(context[0], 2, 5, recovery, EPS) == (
+        3 + expected, expected, False)
+    assert boundary.quoted_cost_native_prepared(context, 2) == (
+        3 + expected, expected, False)
+
+
 # ---------------------------------------------------------------------------
 # Маленький движок и книга заявок
 # ---------------------------------------------------------------------------

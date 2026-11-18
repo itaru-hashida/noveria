@@ -133,6 +133,32 @@ def quoted_cost(object offers, object quantity, object reference_hook,
     return value, _max2(ceiling, eps), left <= eps
 
 
+cpdef api object quoted_cost_values(object offers, object quantity, object reference,
+                       object recovery_prices, object eps):
+    """Котировка по полностью подготовленным числовым recovery-данным."""
+    cdef object left = quantity
+    cdef object value = 0.0
+    cdef object ceiling = 0.0
+    cdef object q
+    cdef object price
+    cdef object best
+    cdef object remaining
+    for price, remaining in offers:
+        q = _min2(left, remaining)
+        value += q*price
+        ceiling = _max2(ceiling, price)
+        left -= q
+        if left <= eps:
+            break
+    if left > eps:
+        if recovery_prices:
+            best = min(recovery_prices)
+            reference = _max2(reference, best)
+        value += left*reference
+        ceiling = _max2(ceiling, reference)
+    return value, _max2(ceiling, eps), left <= eps
+
+
 def reference_price(object offers, object signal_hook, object default_price):
     """``V3.reference_price``: первая живая цена книги либо ориентир рынка.
 
@@ -158,6 +184,16 @@ def cost_sum(object items, object hook):
     cdef object ratio
     for good, ratio in items:
         total, comp = _fold(total, comp, ratio*hook(good))
+    return _finish(total, comp)
+
+
+def prepared_cost_sum(object items):
+    """Сумма стоимости по заранее разрешённым котировкам."""
+    cdef object total = 0
+    cdef object comp = 0.0
+    cdef object ratio, price
+    for ratio, price in items:
+        total, comp = _fold(total, comp, ratio*price)
     return _finish(total, comp)
 
 

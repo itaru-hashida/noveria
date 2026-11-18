@@ -104,6 +104,20 @@ def build_options_python(engine, sell_list, buyer_tile, good, landed_hook):
                                                      key=stream_key_python)]
 
 
+def build_options_batch(engine, sell_list, buyer_tile, good, landed_hook):
+    """Построить малую книгу, вызывая landed один раз на площадку."""
+    if len(sell_list) >= 1000 or _kernel is None or not hasattr(
+            _kernel, 'build_options_from_freight'):
+        return build_options(engine, sell_list, buyer_tile, good, landed_hook)
+    reachable = engine._orders_in_route_component(sell_list, buyer_tile)
+    freight_by_tile = {}
+    for sell in reachable:
+        tile = sell['tile_id']
+        if tile not in freight_by_tile:
+            freight_by_tile[tile] = landed_hook(tile, buyer_tile, good, 0)
+    return _kernel.build_options_from_freight(reachable, freight_by_tile)
+
+
 def market_book_is_fresh_python(entry, sell_list, engine):
     """Книга принадлежит этому набору офферов и этой эпохе котировок."""
     if entry is None:

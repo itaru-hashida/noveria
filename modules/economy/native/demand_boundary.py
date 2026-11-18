@@ -271,8 +271,28 @@ def customer_demand_groups_python(engine, e, orders=None):
 # Достижимый спрос и продажа старого склада
 # ---------------------------------------------------------------------------
 
+try:
+    from .offer_view import cover_demand_from_books
+except ImportError:
+    cover_demand_from_books = None
+
+
+def prepare_reachable_demand(engine, e, sells):
+    """Собрать входы для покрытия спроса на текущей ревизии рынка."""
+    groups = customer_demand_groups(engine, e)
+    owner, price, good = e['id'], e['price'], e['good']
+    remaining = {sell['id']: sell['remaining'] for sell in sells.get(good, [])}
+    books = {}
+    for participant, _, _, limit, _, _ in groups:
+        if participant != owner and not (limit+EPS < price) and participant not in books:
+            books[participant] = engine._market_book(engine.accounts[participant], good, sells)
+    return owner, price, groups, books, remaining, EPS
+
+
 def reachable_demand(engine, e, sells):
     """Единственный вход из ``V3.reachable_demand``: остатки книги и ядро."""
+    if cover_demand_from_books is not None:
+        return cover_demand_from_books(*prepare_reachable_demand(engine, e, sells))
     groups = customer_demand_groups(engine, e)
     remaining = {sell['id']: sell['remaining'] for sell in sells.get(e['good'], [])}
     return run_reachable(e['id'], e['price'], groups, remaining,
