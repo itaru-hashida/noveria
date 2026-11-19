@@ -1320,13 +1320,15 @@ def apply_project_requests(engine, result, names):
     result['journal'] = result['decision_buffer'].materialize(names)
     for aid, row in result['accounts'].items():
         target = engine.accounts[aid]
-        for key in ('project', 'optimism', 'risk_tolerance'):
+        if 'project' in row:
+            engine.apply_investment_project(target, row['project'])
+        for key in ('optimism', 'risk_tolerance'):
             if key in row:
                 target[key] = row[key]
     for key in ('investment_queue', 'investment_full_reconcile_month'):
         if key in result['meta']:
             if key == 'investment_queue':
-                engine.meta.setdefault(key, [])[:] = result['meta'][key]
+                engine.replace_investment_queue(result['meta'][key])
             else:
                 engine.meta[key] = result['meta'][key]
     engine.report.update(result['report'])

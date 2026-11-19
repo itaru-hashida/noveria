@@ -553,6 +553,17 @@ class Economy(EconomyServices):
         state['supply_revision'][project['good']] += 1
         state['dirty_goods'].update(self.recipe_graph()['affected'][project['good']])
 
+    def apply_investment_project(self, account, project):
+        """Применить принятое решение о проекте к счёту инвестора."""
+        account['project'] = project
+
+    def replace_investment_queue(self, items):
+        """Обновить очередь с сохранением объекта списка и порядка."""
+        self.meta.setdefault('investment_queue', [])[:] = items
+
+    def enqueue_investment_project(self, item):
+        self.meta.setdefault('investment_queue', []).append(item)
+
     def register_investment_project(self, project):
         state = getattr(self, '_investment_state', None)
         index = state['index'] if state is not None else getattr(self, '_investment_index', None)
@@ -2556,14 +2567,14 @@ class Economy(EconomyServices):
                 sum(sell['remaining'] for _, sell, _ in self.offers(investor, good, sells))+EPS
                 for good, ratio in self.goods[project['good']]['inputs'].items())
             if ready:
-                investor['project'] = project
+                self.apply_investment_project(investor, project)
                 self.register_investment_project(project)
                 self.report['investment_decisions'].append(dict(
                     kind='investment_decision', investor=investor['id'], outcome='resumed',
                     **copy.deepcopy(project)))
             else:
                 waiting.append(item)
-        queue[:] = waiting
+        self.replace_investment_queue(waiting)
         for a in self.shuffled(investors):
             project = (self.project_candidate(a, sells, allowed_goods=allowed_goods)
                 if evaluate and 'project' not in a else None)
@@ -2625,7 +2636,7 @@ class Economy(EconomyServices):
                     if upstream:
                         owner, upstream_project = upstream
                         if not owner.get('project'):
-                            owner['project'] = upstream_project
+                            self.apply_investment_project(owner, upstream_project)
                             self.register_investment_project(upstream_project)
                             upstream_decision = copy.deepcopy(upstream_project)
                             upstream_decision.update(kind='investment_decision',
@@ -2638,7 +2649,7 @@ class Economy(EconomyServices):
                                     x.get('project', {}).get('location', {}).get('province_id'))
                                    for x in queue}
                     if queue_key not in queued_keys:
-                        queue.append(dict(created=self.meta['month'], investor=a['id'],
+                        self.enqueue_investment_project(dict(created=self.meta['month'], investor=a['id'],
                                           project=copy.deepcopy(project)))
                     project = None
             if project:
@@ -2656,7 +2667,7 @@ class Economy(EconomyServices):
                         available=round(available, 6), shortage=round(max(0, required-available), 6),
                         historical_unmet=round(signal['unmet'], 6), historical_volume=round(signal['volume'], 6))
                 project['input_evidence'] = evidence
-                a['project'] = project
+                self.apply_investment_project(a, project)
                 self.register_investment_project(project)
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
         if evaluate:
