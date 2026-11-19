@@ -105,11 +105,16 @@ def cache_key(engine, e, sells, hooks):
     history = tuple((row.get('sold', 0), row.get('output', 0),
                      bool(row.get('input_limited')))
                     for row in e.get('sales_history', [])[-3:])
+    return build_cache_key(e, sells, hooks.stock(e['good']), history,
+                           engine._demand_revision[e['good']],
+                           engine._outlook_quote_versions(e), engine._trades_by_seller[e['id']])
+
+
+def build_cache_key(e, sells, stock, history, demand_revision, quote_versions, trades_version):
+    """Собрать ключ из ревизий, при которых был рассчитан прогноз."""
     return (VERSION, id(sells), e['id'], e['tile_id'], e['good'], e['price'],
             e.get('production_price'), e['capacity'], e.get('planned_output', 0),
-            hooks.stock(e['good']), history,
-            engine._demand_revision[e['good']], engine._outlook_quote_versions(e),
-            engine._trades_by_seller[e['id']])
+            stock, history, demand_revision, quote_versions, trades_version)
 
 
 def production_outlook_python(engine, e, sells=None, hooks=None):

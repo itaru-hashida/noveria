@@ -67,10 +67,11 @@ def run_recovery_pair(reference, public=False):
     for name in ('_market_quote_version', '_market_quote_versions',
                  '_market_quotes_epoch', '_demand_revision'):
         assert getattr(reference, name) == getattr(native, name)
-    left = {(None,)+key[1:]: value for key, value in
+    left = {(key[0], None)+key[2:]: value for key, value in
             reference._production_outlook_cache.items()}
-    right = {(None,)+key[1:]: value for key, value in
-             native._production_outlook_cache.items()}
+    recovery_outlooks = native.native_recovery['meta']['recovery_outlooks']
+    assert not recovery_outlooks.keys() & getattr(native, '_production_outlook_cache', {}).keys()
+    right = {(key[0], None)+key[2:]: value for key, value in recovery_outlooks.items()}
     assert left == right
     return sells, native
 
@@ -212,7 +213,7 @@ def test_recovery_outlook_cache_reuse_and_offer_cancellation_match_v3():
     sells, native = run_recovery_pair(reference)
     native_sells = native.native_recovery['sells']
 
-    # plan() должен попасть в recovery cache, а не увидеть уже отменённые offers.
+    # Штатное планирование сверяется после применения результатов recovery.
     for enterprise_id in sorted(reference.enterprises):
         reference.plan(reference.enterprises[enterprise_id], sells=sells)
         native.plan(native.enterprises[enterprise_id], sells=native_sells)

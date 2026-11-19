@@ -7,6 +7,7 @@ import numpy as np
 from modules.economy.support import EPS
 
 from . import load_serial_step
+from .production_outlook_boundary import build_cache_key
 
 
 # Native project support uses a wider tile set than the regular investment
@@ -1028,13 +1029,9 @@ def apply_recovery(engine, data, meta, sells):
     enterprises = list(engine.enterprises.values())
     goods = list(engine.goods)
     journal = []
-    # Восстанавливаем именно те cache entries, которые V3 создал во время recovery.
-    # Все поля и версии книг взяты из journal: повторный production_outlook здесь
-    # увидел бы уже отменённые offers и мог бы вернуть другой план.
-    # Hydrate detached dictionaries and publish them atomically at the end.
-    # Recovery must retain the old whole-cache replacement behavior, while an
-    # injected failure must not partially mutate the live cache.
-    outlook_cache = dict(getattr(engine, '_production_outlook_cache', {}))
+    # Оценки recovery рассчитаны по промежуточному состоянию рынка.
+    # Держим их для диагностики, отдельно от кэша штатного прогноза.
+    recovery_outlooks = {}
     stock_cache = {}
     limits = ('Готовые запасы', 'Нет обеспеченного спроса', 'План',
               'Отрицательная ожидаемая маржа')
@@ -1056,13 +1053,12 @@ def apply_recovery(engine, data, meta, sells):
         quote_versions = (getattr(engine, '_market_quotes_epoch', 0),
             tuple(int(data['recovery_market_version'][index, meta['good_index'][good]])
                   for good in outlook_goods))
-        key = (id(sells), e['id'], e['tile_id'], e['good'], e['price'],
-            e.get('production_price'), e['capacity'], e.get('planned_output', 0),
+        key = build_cache_key(e, sells,
             accounts[int(data['enterprise_account'][index])]['stock'].get(e['good'], 0),
             history, engine._demand_revision[e['good']], quote_versions,
             int(data['enterprise_trades_version'][index]))
         target = float(data['recovery_debug_target'][index])
-        outlook_cache[key] = dict(
+        recovery_outlooks[key] = dict(
             sales_forecast=float(data['recovery_debug_forecast'][index]),
             reachable_demand=float(data['recovery_debug_demand'][index]),
             expected_unit_cost=float(data['recovery_expected_cost'][index]),
@@ -1074,7 +1070,6 @@ def apply_recovery(engine, data, meta, sells):
             planned_price=float(data['recovery_planned_price'][index]),
             expected_fixed_cost=float(data['recovery_fixed_cost'][index]),
             expected_fixed_unit=float(data['recovery_fixed_unit'][index]))
-    engine.replace_production_outlook_cache(outlook_cache)
     engine.replace_stock_sales_cache(stock_cache)
     # defaultdict V3 материализует нулевую ревизию для каждого оценённого товара.
     for index, e in enumerate(enterprises):
@@ -1116,6 +1111,7 @@ def apply_recovery(engine, data, meta, sells):
             # владельца нельзя, иначе у поля снова два owner'а.
             engine.cash_store.add_protected_cash(firm['id'], hold)
             journal.append(('recovery_hold', i, e['id'], hold))
+    meta['recovery_outlooks'] = recovery_outlooks
     return journal
 
 
