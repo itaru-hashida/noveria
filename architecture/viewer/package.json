@@ -1,0 +1,30 @@
+{
+  "name": "noveria-architecture-viewer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Браузерный architecture viewer для экономики Noveria: карта, месячный ход и карта владения",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --test src/filters.test.ts",
+    "smoke": "node smoke_viewer.mjs"
+  },
+  "dependencies": {
+    "cytoscape": "^3.30.2",
+    "mermaid": "^11.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/cytoscape": "^3.21.8",
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

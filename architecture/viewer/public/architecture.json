@@ -1,0 +1,5106 @@
+{
+  "meta": {
+    "generated_at": "2026-11-19T17:11:07+00:00",
+    "generator": "architecture/generate_architecture.py",
+    "repository": "noveria",
+    "branch": "kimi/step8-hierarchical-routing",
+    "commit": "aad285e12e919cb8ac2ace90dd38dccdc2b31b9f",
+    "remote_commit": "aad285e12e919cb8ac2ace90dd38dccdc2b31b9f",
+    "python_files": [
+      "core/db.py",
+      "core/economy_state.py",
+      "core/lab.py",
+      "core/turn_service.py",
+      "core/world_service.py",
+      "modules/economy/__init__.py",
+      "modules/economy/native/__init__.py",
+      "modules/economy/native/cancel_boundary.py",
+      "modules/economy/native/cash_boundary.py",
+      "modules/economy/native/consumption_boundary.py",
+      "modules/economy/native/delivery_boundary.py",
+      "modules/economy/native/demand_boundary.py",
+      "modules/economy/native/dividend_boundary.py",
+      "modules/economy/native/enterprise_settlement_boundary.py",
+      "modules/economy/native/event_buffer_boundary.py",
+      "modules/economy/native/event_writer.py",
+      "modules/economy/native/match_boundary.py",
+      "modules/economy/native/material_boundary.py",
+      "modules/economy/native/material_finalize_boundary.py",
+      "modules/economy/native/money_boundary.py",
+      "modules/economy/native/monthly_boundary.py",
+      "modules/economy/native/monthly_hooks.py",
+      "modules/economy/native/order_boundary.py",
+      "modules/economy/native/owner_consumption_boundary.py",
+      "modules/economy/native/plan_boundary.py",
+      "modules/economy/native/production_boundary.py",
+      "modules/economy/native/project_completion_boundary.py",
+      "modules/economy/native/project_slot.py",
+      "modules/economy/native/quote_boundary.py",
+      "modules/economy/native/report_history_boundary.py",
+      "modules/economy/native/settlement_boundary.py",
+      "modules/economy/native/stock_boundary.py",
+      "modules/economy/native/stock_store_boundary.py",
+      "modules/economy/native/topup_boundary.py",
+      "modules/economy/native/trade_boundary.py",
+      "modules/economy/native/wage_boundary.py",
+      "modules/economy/support.py",
+      "modules/economy/v3.py"
+    ],
+    "cython_files": [
+      "modules/economy/native/cash_store.pyx",
+      "modules/economy/native/consumption_kernel.pyx",
+      "modules/economy/native/demand_kernel.pyx",
+      "modules/economy/native/match_driver.pyx",
+      "modules/economy/native/match_kernel.pyx",
+      "modules/economy/native/money_kernel.pyx",
+      "modules/economy/native/monthly_driver.pyx",
+      "modules/economy/native/order_store.pyx",
+      "modules/economy/native/plan_kernel.pyx",
+      "modules/economy/native/production_kernel.pyx",
+      "modules/economy/native/quote_kernel.pyx",
+      "modules/economy/native/serial_step.pyx",
+      "modules/economy/native/settlement_kernel.pyx",
+      "modules/economy/native/stock_kernel.pyx",
+      "modules/economy/native/stock_store.pyx",
+      "modules/economy/native/trade_kernel.pyx",
+      "modules/economy/native/world_state.pyx"
+    ],
+    "evidence_tests": [
+      "tests/test_economy_native_cash_runtime.py",
+      "tests/test_economy_native_cash_ownership.py",
+      "tests/test_economy_native_order_ownership.py",
+      "tests/test_economy_native_stock_ownership.py",
+      "tests/test_economy_state.py",
+      "tests/test_economy_native_monthly.py",
+      "tests/test_economy_native_monthly_hooks.py"
+    ],
+    "native_extensions_built": true,
+    "native_extension_count": 40,
+    "scope_note": "Анализировались только вход хода, экономика V3, её native-границы, состояние/сохранение и focused-тесты владения. Worldgen, routing, UI и остальные тесты не читались.",
+    "limitations": [
+      "Связи построены по точкам вызова в коде, а не по трассировке выполнения: динамические вызовы через getattr/словари в модель не попали.",
+      "Порядок фаз зафиксирован для planning_mode=\"v3\" и investment_mode=\"v3\"; ветки lagged_batch и snapshot_batch в сценарий не включены.",
+      "Cython-строки указаны по .pyx-исходнику; после пересборки они не меняются.",
+      "Python-эталон месяца (monthly_step_python) в сценарии не показан как отдельный вариант: он используется только как fallback и в differential-тестах."
+    ]
+  },
+  "domains": [
+    {
+      "id": "entry",
+      "title": "Вход и координация",
+      "description": "WorldService, TurnService, Lab: кто запускает месяц и в какой транзакции.",
+      "color": "#5b7cfa"
+    },
+    {
+      "id": "engine",
+      "title": "Движок и драйвер месяца",
+      "description": "Economy V3, monthly_boundary, Cython-драйвер месяца и Python-хуки.",
+      "color": "#8a5cf6"
+    },
+    {
+      "id": "production",
+      "title": "Производство",
+      "description": "Ограничения выпуска, расход сырья, износ, себестоимость.",
+      "color": "#0f9d58"
+    },
+    {
+      "id": "market",
+      "title": "Рынок",
+      "description": "Продающие заявки, матчинг, сделки, итоги книги за месяц.",
+      "color": "#e8710a"
+    },
+    {
+      "id": "consumption",
+      "title": "Потребление",
+      "description": "Домохозяйства, собственники, допкупка базовых нужд.",
+      "color": "#c5221f"
+    },
+    {
+      "id": "projects",
+      "title": "Проекты и строительство",
+      "description": "Инвестиционные проекты, муниципальные стройки, материалы, завершение.",
+      "color": "#1a73e8"
+    },
+    {
+      "id": "settlement",
+      "title": "Расчёты",
+      "description": "Оброк, зарплаты, дивиденды, демография, миграция, инварианты.",
+      "color": "#b06000"
+    },
+    {
+      "id": "money",
+      "title": "Деньги",
+      "description": "balance/reserved/protected, переводы, резервы под заявки и проекты.",
+      "color": "#00a000"
+    },
+    {
+      "id": "stock",
+      "title": "Склад",
+      "description": "stock/stock_reserved/values: количество и учётная стоимость.",
+      "color": "#12a4a4"
+    },
+    {
+      "id": "orders",
+      "title": "Заявки",
+      "description": "report[\"orders\"]: статус, остаток, цена, резерв заявки.",
+      "color": "#d01884"
+    },
+    {
+      "id": "save",
+      "title": "Сохранение и отчёт",
+      "description": "EconomyState, Parquet-checkpoint, отчёты, события, запись в Ladybug.",
+      "color": "#5f6368"
+    },
+    {
+      "id": "native",
+      "title": "Python/Cython границы",
+      "description": "Boundary-модули, ядра Cython, binding и fallback по импорту.",
+      "color": "#795548"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "entry.world_service",
+      "name": "core.world_service.WorldService",
+      "short": "WorldService",
+      "type": "class",
+      "domain": "entry",
+      "language": "python",
+      "responsibility": "Единственный вход игровых действий: держит БД, шину событий и одно экономическое состояние мира.",
+      "owner": "WorldService",
+      "source_location": "loc-0001",
+      "tags": []
+    },
+    {
+      "id": "entry.advance_turn",
+      "name": "core.world_service.WorldService.advance_turn",
+      "short": "WorldService.advance_turn",
+      "type": "function",
+      "domain": "entry",
+      "language": "python",
+      "responsibility": "Команда «следующий ход»: при существующей кампании передаёт управление TurnService.finish.",
+      "owner": null,
+      "source_location": "loc-0002",
+      "tags": []
+    },
+    {
+      "id": "entry.turn_service",
+      "name": "core.turn_service.TurnService",
+      "short": "TurnService",
+      "type": "class",
+      "domain": "entry",
+      "language": "python",
+      "responsibility": "Месячный цикл: список фаз внутри одной транзакции Ladybug, откат экономики снимком памяти.",
+      "owner": "TurnService",
+      "source_location": "loc-0003",
+      "tags": []
+    },
+    {
+      "id": "entry.turn_finish",
+      "name": "core.turn_service.TurnService.finish",
+      "short": "TurnService.finish",
+      "type": "function",
+      "domain": "entry",
+      "language": "python",
+      "responsibility": "Граница хода: begin_turn, прогон фаз, flush_structural, результат хода, autosave.",
+      "owner": null,
+      "source_location": "loc-0004",
+      "tags": []
+    },
+    {
+      "id": "entry.economy_phase",
+      "name": "core.turn_service.TurnService._economy",
+      "short": "TurnService._economy",
+      "type": "function",
+      "domain": "entry",
+      "language": "python",
+      "responsibility": "Фаза economy: вызывает modules.economy.monthly_phase в общей транзакции хода.",
+      "owner": null,
+      "source_location": "loc-0005",
+      "tags": []
+    },
+    {
+      "id": "entry.monthly_phase",
+      "name": "modules.economy.v3.monthly_phase",
+      "short": "monthly_phase",
+      "type": "function",
+      "domain": "entry",
+      "language": "python",
+      "responsibility": "Мост TurnService → EconomyState.step; пишет событие economy_month в Ladybug.",
+      "owner": null,
+      "source_location": "loc-0006",
+      "tags": []
+    },
+    {
+      "id": "entry.lab",
+      "name": "core.lab.execute_experiment",
+      "short": "lab.execute_experiment",
+      "type": "function",
+      "domain": "entry",
+      "language": "python",
+      "responsibility": "Изолированный прогон: один объект состояния на весь эксперимент, checkpoint пишется один раз.",
+      "owner": null,
+      "source_location": "loc-0007",
+      "tags": []
+    },
+    {
+      "id": "engine.economy",
+      "name": "modules.economy.v3.Economy",
+      "short": "Economy",
+      "type": "class",
+      "domain": "engine",
+      "language": "python",
+      "responsibility": "Движок V3: правила, счета, предприятия, отчёт месяца; владеет состоянием между ходами.",
+      "owner": "Economy",
+      "source_location": "loc-0008",
+      "tags": []
+    },
+    {
+      "id": "engine.step",
+      "name": "modules.economy.v3.Economy.step",
+      "short": "Economy.step",
+      "type": "function",
+      "domain": "engine",
+      "language": "python",
+      "responsibility": "Фасад месяца: проверка режимов, открытие окна владения cash, ровно один вызов драйвера.",
+      "owner": null,
+      "source_location": "loc-0009",
+      "tags": []
+    },
+    {
+      "id": "engine.monthly_boundary",
+      "name": "modules.economy.native.monthly_boundary",
+      "short": "monthly_boundary",
+      "type": "boundary",
+      "domain": "native",
+      "language": "python",
+      "responsibility": "Единственная точка входа месяца: native-драйвер либо Python-эталон; require_native_monthly.",
+      "owner": null,
+      "source_location": "loc-0010",
+      "tags": []
+    },
+    {
+      "id": "engine.monthly_driver",
+      "name": "modules.economy.native.monthly_driver.monthly_step",
+      "short": "monthly_driver.monthly_step",
+      "type": "kernel",
+      "domain": "engine",
+      "language": "cython",
+      "responsibility": "Cython-оркестрация месяца: порядок фаз, тайминги, ветки planning/investment/native.",
+      "owner": null,
+      "source_location": "loc-0011",
+      "tags": []
+    },
+    {
+      "id": "engine.monthly_hooks",
+      "name": "modules.economy.native.monthly_hooks.MonthlyHooks",
+      "short": "MonthlyHooks",
+      "type": "boundary",
+      "domain": "native",
+      "language": "python",
+      "responsibility": "Python-хуки месяца: сброс резервов, защита кассы, истечение заявок, диагностика. Состояния не держит.",
+      "owner": null,
+      "source_location": "loc-0012",
+      "tags": []
+    },
+    {
+      "id": "engine.serial_step",
+      "name": "modules.economy.native.serial_step",
+      "short": "serial_step",
+      "type": "kernel",
+      "domain": "native",
+      "language": "cython",
+      "responsibility": "Один packed-шаг: цены, recovery, продающие заявки, запросы домохозяйств и собственников.",
+      "owner": null,
+      "source_location": "loc-0013",
+      "tags": []
+    },
+    {
+      "id": "money.cash_store",
+      "name": "modules.economy.native.cash_store.CashStore",
+      "short": "CashStore",
+      "type": "store",
+      "domain": "money",
+      "language": "cython",
+      "responsibility": "Владелец balance/reserved/protected: колонки — истина, dict счёта — зеркало.",
+      "owner": "CashStore",
+      "source_location": "loc-0014",
+      "tags": []
+    },
+    {
+      "id": "money.cash_store_python",
+      "name": "modules.economy.native.cash_boundary.CashStorePython",
+      "short": "CashStorePython",
+      "type": "store",
+      "domain": "money",
+      "language": "python",
+      "responsibility": "Python-эталон и fallback владельца денежных полей с той же семантикой сверки.",
+      "owner": "CashStorePython",
+      "source_location": "loc-0015",
+      "tags": []
+    },
+    {
+      "id": "money.transfer",
+      "name": "modules.economy.support.EconomyServices.transfer",
+      "short": "EconomyServices.transfer",
+      "type": "function",
+      "domain": "money",
+      "language": "python",
+      "responsibility": "Единственная точка изменения balance: проверки, move_balance через владельца, ровно один flow.",
+      "owner": null,
+      "source_location": "loc-0016",
+      "tags": []
+    },
+    {
+      "id": "money.money_boundary",
+      "name": "modules.economy.native.money_boundary",
+      "short": "money_boundary",
+      "type": "boundary",
+      "domain": "money",
+      "language": "python",
+      "responsibility": "Резервы под проекты, распределения и второй цикл settle поверх money_kernel.",
+      "owner": null,
+      "source_location": "loc-0017",
+      "tags": []
+    },
+    {
+      "id": "money.money_kernel",
+      "name": "modules.economy.native.money_kernel",
+      "short": "money_kernel",
+      "type": "kernel",
+      "domain": "money",
+      "language": "cython",
+      "responsibility": "Числовые расчёты денег; читает состояние только через Python-хуки.",
+      "owner": null,
+      "source_location": "loc-0018",
+      "tags": []
+    },
+    {
+      "id": "money.runtime_window",
+      "name": "modules.economy.native.cash_store.CashStore.begin_runtime",
+      "short": "CashStore.begin_runtime",
+      "type": "function",
+      "domain": "money",
+      "language": "cython",
+      "responsibility": "Окно владения на месяц: на входе принимает импорт, внутри месяца запрещает запись мимо владельца.",
+      "owner": null,
+      "source_location": "loc-0019",
+      "tags": []
+    },
+    {
+      "id": "stock.stock_store",
+      "name": "modules.economy.native.stock_store.StockStore",
+      "short": "StockStore",
+      "type": "store",
+      "domain": "stock",
+      "language": "cython",
+      "responsibility": "Владелец stock/stock_reserved по счёту и товару; учётная стоимость values идёт через set_value.",
+      "owner": "StockStore",
+      "source_location": "loc-0020",
+      "tags": []
+    },
+    {
+      "id": "stock.stock_store_python",
+      "name": "modules.economy.native.stock_store_boundary.StockStorePython",
+      "short": "StockStorePython",
+      "type": "store",
+      "domain": "stock",
+      "language": "python",
+      "responsibility": "Python-эталон и fallback склада с теми же живыми словарями счетов.",
+      "owner": "StockStorePython",
+      "source_location": "loc-0021",
+      "tags": []
+    },
+    {
+      "id": "stock.stock_boundary",
+      "name": "modules.economy.native.stock_boundary",
+      "short": "stock_boundary",
+      "type": "boundary",
+      "domain": "native",
+      "language": "python",
+      "responsibility": "Граница склада: привязка ядра/эталона при импорте, без диспетчера на каждой операции.",
+      "owner": null,
+      "source_location": "loc-0022",
+      "tags": []
+    },
+    {
+      "id": "stock.stock_kernel",
+      "name": "modules.economy.native.stock_kernel",
+      "short": "stock_kernel",
+      "type": "kernel",
+      "domain": "stock",
+      "language": "cython",
+      "responsibility": "add_stock/use_stock/locked_material/free_stock/total_stock/gold; пишет только через StockStore.",
+      "owner": null,
+      "source_location": "loc-0023",
+      "tags": []
+    },
+    {
+      "id": "orders.order_store",
+      "name": "modules.economy.native.order_store.OrderStore",
+      "short": "OrderStore",
+      "type": "store",
+      "domain": "orders",
+      "language": "cython",
+      "responsibility": "Владелец статуса/остатка/цены/количества/резерва заявки; живой список report[\"orders\"].",
+      "owner": "OrderStore",
+      "source_location": "loc-0024",
+      "tags": []
+    },
+    {
+      "id": "orders.order_store_python",
+      "name": "modules.economy.native.order_boundary.OrderStorePython",
+      "short": "OrderStorePython",
+      "type": "store",
+      "domain": "orders",
+      "language": "python",
+      "responsibility": "Python-эталон и fallback владельца заявок.",
+      "owner": "OrderStorePython",
+      "source_location": "loc-0025",
+      "tags": []
+    },
+    {
+      "id": "orders.world_state",
+      "name": "modules.economy.native.world_state.WorldState",
+      "short": "WorldState",
+      "type": "store",
+      "domain": "engine",
+      "language": "cython",
+      "responsibility": "Контейнер ссылок на существующие хранилища на время native-шага; своего состояния не держит.",
+      "owner": null,
+      "source_location": "loc-0026",
+      "tags": []
+    },
+    {
+      "id": "production.produce",
+      "name": "modules.economy.v3.Economy.produce",
+      "short": "Economy.produce",
+      "type": "function",
+      "domain": "production",
+      "language": "python",
+      "responsibility": "Точка входа производства: порядок предприятий и RNG остаются здесь.",
+      "owner": null,
+      "source_location": "loc-0027",
+      "tags": []
+    },
+    {
+      "id": "production.boundary",
+      "name": "modules.economy.native.production_boundary",
+      "short": "production_boundary",
+      "type": "boundary",
+      "domain": "production",
+      "language": "python",
+      "responsibility": "Ограничения выпуска, применение результата, побочные эффекты отчёта через хуки.",
+      "owner": null,
+      "source_location": "loc-0028",
+      "tags": []
+    },
+    {
+      "id": "production.kernel",
+      "name": "modules.economy.native.production_kernel.calculate_output",
+      "short": "production_kernel.calculate_output",
+      "type": "kernel",
+      "domain": "production",
+      "language": "cython",
+      "responsibility": "Чистый расчёт фактического выпуска по словарю ограничений.",
+      "owner": null,
+      "source_location": "loc-0029",
+      "tags": []
+    },
+    {
+      "id": "market.sell_orders",
+      "name": "modules.economy.v3.Economy.sell_orders",
+      "short": "Economy.sell_orders",
+      "type": "function",
+      "domain": "market",
+      "language": "python",
+      "responsibility": "Публикация продающих заявок предприятий и складских остатков.",
+      "owner": null,
+      "source_location": "loc-0030",
+      "tags": []
+    },
+    {
+      "id": "market.order",
+      "name": "modules.economy.v3.Economy.order",
+      "short": "Economy.order",
+      "type": "function",
+      "domain": "market",
+      "language": "python",
+      "responsibility": "Создание заявки: резерв кассы (buy) или склада (sell) через владельцев.",
+      "owner": null,
+      "source_location": "loc-0031",
+      "tags": []
+    },
+    {
+      "id": "market.cancel_order",
+      "name": "modules.economy.v3.Economy.cancel_order",
+      "short": "Economy.cancel_order",
+      "type": "function",
+      "domain": "market",
+      "language": "python",
+      "responsibility": "Отмена заявки: освобождение резерва через CashStore/StockStore, статус через OrderStore.",
+      "owner": null,
+      "source_location": "loc-0032",
+      "tags": []
+    },
+    {
+      "id": "market.match",
+      "name": "modules.economy.v3.Economy.match",
+      "short": "Economy.match",
+      "type": "function",
+      "domain": "market",
+      "language": "python",
+      "responsibility": "Матчинг одной заявки покупателя с книгой предложений.",
+      "owner": null,
+      "source_location": "loc-0033",
+      "tags": []
+    },
+    {
+      "id": "market.match_boundary",
+      "name": "modules.economy.native.match_boundary",
+      "short": "match_boundary",
+      "type": "boundary",
+      "domain": "market",
+      "language": "python",
+      "responsibility": "Внешний цикл покупателей: обход, порядок, обратные вызовы сделки остаются в Python.",
+      "owner": null,
+      "source_location": "loc-0034",
+      "tags": []
+    },
+    {
+      "id": "market.match_kernel",
+      "name": "modules.economy.native.match_kernel.calculate_quantity",
+      "short": "match_kernel.calculate_quantity",
+      "type": "kernel",
+      "domain": "market",
+      "language": "cython",
+      "responsibility": "Чистый расчёт объёма сделки; книгу и записи не трогает.",
+      "owner": null,
+      "source_location": "loc-0035",
+      "tags": []
+    },
+    {
+      "id": "market.trade_boundary",
+      "name": "modules.economy.native.trade_boundary.apply_trade",
+      "short": "trade_boundary.apply_trade",
+      "type": "boundary",
+      "domain": "market",
+      "language": "python",
+      "responsibility": "Применение сделки: деньги, склад, заявки через владельцев; откат одной сделки.",
+      "owner": null,
+      "source_location": "loc-0036",
+      "tags": []
+    },
+    {
+      "id": "market.trade_kernel",
+      "name": "modules.economy.native.trade_kernel.calculate_trade",
+      "short": "trade_kernel.calculate_trade",
+      "type": "kernel",
+      "domain": "market",
+      "language": "cython",
+      "responsibility": "Чистый расчёт количества, цены и доставки сделки.",
+      "owner": null,
+      "source_location": "loc-0037",
+      "tags": []
+    },
+    {
+      "id": "market.record_market",
+      "name": "modules.economy.v3.Economy.record_market",
+      "short": "Economy.record_market",
+      "type": "function",
+      "domain": "market",
+      "language": "python",
+      "responsibility": "Итоги книги за месяц: volume, trade_gold, freight, unmet_solvent, price_feedback.",
+      "owner": null,
+      "source_location": "loc-0038",
+      "tags": []
+    },
+    {
+      "id": "market.report_history",
+      "name": "modules.economy.native.report_history_boundary",
+      "short": "report_history_boundary",
+      "type": "boundary",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Числовые агрегаты отчёта, истории продаж и строки рынка.",
+      "owner": null,
+      "source_location": "loc-0039",
+      "tags": []
+    },
+    {
+      "id": "consumption.household_requests",
+      "name": "modules.economy.v3.Economy.household_requests",
+      "short": "Economy.household_requests",
+      "type": "function",
+      "domain": "consumption",
+      "language": "python",
+      "responsibility": "Потребности домохозяйств превращаются в покупательские заявки.",
+      "owner": null,
+      "source_location": "loc-0040",
+      "tags": []
+    },
+    {
+      "id": "consumption.owner_requests",
+      "name": "modules.economy.v3.Economy.owner_requests",
+      "short": "Economy.owner_requests",
+      "type": "function",
+      "domain": "consumption",
+      "language": "python",
+      "responsibility": "Личное потребление собственников: бюджет от свободной кассы.",
+      "owner": null,
+      "source_location": "loc-0041",
+      "tags": []
+    },
+    {
+      "id": "consumption.owner_boundary",
+      "name": "modules.economy.native.owner_consumption_boundary",
+      "short": "owner_consumption_boundary",
+      "type": "boundary",
+      "domain": "consumption",
+      "language": "python",
+      "responsibility": "Применение купленного собственниками; списание идёт через stock boundary.",
+      "owner": null,
+      "source_location": "loc-0042",
+      "tags": []
+    },
+    {
+      "id": "consumption.boundary",
+      "name": "modules.economy.native.consumption_boundary",
+      "short": "consumption_boundary",
+      "type": "boundary",
+      "domain": "consumption",
+      "language": "python",
+      "responsibility": "Числовой цикл потребления домохозяйств; списание через StockStore.",
+      "owner": null,
+      "source_location": "loc-0043",
+      "tags": []
+    },
+    {
+      "id": "consumption.kernel",
+      "name": "modules.economy.native.consumption_kernel.calculate_consumption",
+      "short": "consumption_kernel.calculate_consumption",
+      "type": "kernel",
+      "domain": "consumption",
+      "language": "cython",
+      "responsibility": "Чистый расчёт доступного объёма потребления.",
+      "owner": null,
+      "source_location": "loc-0044",
+      "tags": []
+    },
+    {
+      "id": "consumption.topup",
+      "name": "modules.economy.native.topup_boundary.top_up",
+      "short": "topup_boundary.top_up",
+      "type": "boundary",
+      "domain": "consumption",
+      "language": "python",
+      "responsibility": "Допкупка базовых нужд после освобождения резервов.",
+      "owner": null,
+      "source_location": "loc-0045",
+      "tags": []
+    },
+    {
+      "id": "projects.project_requests",
+      "name": "modules.economy.v3.Economy.project_requests",
+      "short": "Economy.project_requests",
+      "type": "function",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Инвестиционные решения месяца: кандидаты, расширения, очередь проектов.",
+      "owner": null,
+      "source_location": "loc-0046",
+      "tags": []
+    },
+    {
+      "id": "projects.project_slot",
+      "name": "modules.economy.native.project_slot",
+      "short": "project_slot",
+      "type": "function",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Единственная точка записи инвестиционного проекта на счёте (attach/detach).",
+      "owner": null,
+      "source_location": "loc-0047",
+      "tags": []
+    },
+    {
+      "id": "projects.start_public",
+      "name": "modules.economy.v3.Economy.start_public_project",
+      "short": "Economy.start_public_project",
+      "type": "function",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Создание муниципальной стройки по статической смете.",
+      "owner": null,
+      "source_location": "loc-0048",
+      "tags": []
+    },
+    {
+      "id": "projects.advance_public",
+      "name": "modules.economy.v3.Economy.advance_public_projects",
+      "short": "Economy.advance_public_projects",
+      "type": "function",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Продвижение строек: труд, зарплаты, прогресс.",
+      "owner": null,
+      "source_location": "loc-0049",
+      "tags": []
+    },
+    {
+      "id": "projects.wage_boundary",
+      "name": "modules.economy.native.wage_boundary",
+      "short": "wage_boundary",
+      "type": "boundary",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Расчёт рабочих и зарплат строек; выплаты через хуки движка.",
+      "owner": null,
+      "source_location": "loc-0050",
+      "tags": []
+    },
+    {
+      "id": "projects.finish",
+      "name": "modules.economy.v3.Economy.finish_projects",
+      "short": "Economy.finish_projects",
+      "type": "function",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Завершение готовых проектов и создание предприятия.",
+      "owner": null,
+      "source_location": "loc-0051",
+      "tags": []
+    },
+    {
+      "id": "projects.completion_boundary",
+      "name": "modules.economy.native.project_completion_boundary",
+      "short": "project_completion_boundary",
+      "type": "boundary",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Проверка готовности и последовательное применение завершения проекта.",
+      "owner": null,
+      "source_location": "loc-0052",
+      "tags": []
+    },
+    {
+      "id": "projects.material_boundary",
+      "name": "modules.economy.native.material_boundary",
+      "short": "material_boundary",
+      "type": "boundary",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Резерв стройматериалов и заявки на недостающее.",
+      "owner": null,
+      "source_location": "loc-0053",
+      "tags": []
+    },
+    {
+      "id": "projects.delivery_boundary",
+      "name": "modules.economy.native.delivery_boundary",
+      "short": "delivery_boundary",
+      "type": "boundary",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Смета доставки, защита кассы и закупка материалов проекта.",
+      "owner": null,
+      "source_location": "loc-0054",
+      "tags": []
+    },
+    {
+      "id": "projects.material_requests",
+      "name": "modules.economy.v3.Economy.project_material_requests",
+      "short": "Economy.project_material_requests",
+      "type": "function",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Последовательные закупки и отмены уже принятых проектов.",
+      "owner": null,
+      "source_location": "loc-0055",
+      "tags": []
+    },
+    {
+      "id": "projects.cancel_boundary",
+      "name": "modules.economy.native.cancel_boundary",
+      "short": "cancel_boundary",
+      "type": "boundary",
+      "domain": "projects",
+      "language": "python",
+      "responsibility": "Отмена проектов по простою и по марже/спросу; снятие проекта — хуком.",
+      "owner": null,
+      "source_location": "loc-0056",
+      "tags": []
+    },
+    {
+      "id": "settlement.settle",
+      "name": "modules.economy.v3.Economy.settle",
+      "short": "Economy.settle",
+      "type": "function",
+      "domain": "settlement",
+      "language": "python",
+      "responsibility": "Вход расчётов: оброк и финансовые итоги предприятий плюс распределения.",
+      "owner": null,
+      "source_location": "loc-0057",
+      "tags": []
+    },
+    {
+      "id": "settlement.enterprise_boundary",
+      "name": "modules.economy.native.enterprise_settlement_boundary",
+      "short": "enterprise_settlement_boundary",
+      "type": "boundary",
+      "domain": "settlement",
+      "language": "python",
+      "responsibility": "Финансовые итоги предприятия, месяцы убыточности, закрытие; атомарный откат.",
+      "owner": null,
+      "source_location": "loc-0058",
+      "tags": []
+    },
+    {
+      "id": "settlement.dividend_boundary",
+      "name": "modules.economy.native.dividend_boundary",
+      "short": "dividend_boundary",
+      "type": "boundary",
+      "domain": "settlement",
+      "language": "python",
+      "responsibility": "Дивиденды: резерв, доступная касса, предел и доли; выплаты через transfer.",
+      "owner": null,
+      "source_location": "loc-0059",
+      "tags": []
+    },
+    {
+      "id": "settlement.demography",
+      "name": "modules.economy.v3.Economy.update_demography",
+      "short": "Economy.update_demography",
+      "type": "function",
+      "domain": "settlement",
+      "language": "python",
+      "responsibility": "Демография: стресс, рождения, смерти по провинциям и стратам.",
+      "owner": null,
+      "source_location": "loc-0060",
+      "tags": []
+    },
+    {
+      "id": "settlement.boundary",
+      "name": "modules.economy.native.settlement_boundary",
+      "short": "settlement_boundary",
+      "type": "boundary",
+      "domain": "settlement",
+      "language": "python",
+      "responsibility": "Численные проверки инвариантов, демография и миграция.",
+      "owner": null,
+      "source_location": "loc-0061",
+      "tags": []
+    },
+    {
+      "id": "settlement.kernel",
+      "name": "modules.economy.native.settlement_kernel.run_demography",
+      "short": "settlement_kernel.run_demography",
+      "type": "kernel",
+      "domain": "settlement",
+      "language": "cython",
+      "responsibility": "Числовое тело демографии; население читает через population_hook.",
+      "owner": null,
+      "source_location": "loc-0062",
+      "tags": []
+    },
+    {
+      "id": "settlement.validate",
+      "name": "modules.economy.v3.Economy.validate",
+      "short": "Economy.validate",
+      "type": "function",
+      "domain": "settlement",
+      "language": "python",
+      "responsibility": "Инварианты месяца: read-only проверки населения и счетов.",
+      "owner": null,
+      "source_location": "loc-0063",
+      "tags": []
+    },
+    {
+      "id": "save.economy_state",
+      "name": "core.economy_state.EconomyState",
+      "short": "EconomyState",
+      "type": "class",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Владелец экономического состояния между ходами, отчётов и Parquet-checkpoint.",
+      "owner": "EconomyState",
+      "source_location": "loc-0064",
+      "tags": []
+    },
+    {
+      "id": "save.state_step",
+      "name": "core.economy_state.EconomyState.step",
+      "short": "EconomyState.step",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Один месяц: вызывает движок и хранит last_report/reports.",
+      "owner": null,
+      "source_location": "loc-0065",
+      "tags": []
+    },
+    {
+      "id": "save.begin_turn",
+      "name": "core.economy_state.EconomyState.begin_turn",
+      "short": "EconomyState.begin_turn",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Откат хода = снимок изменяемой части движка (export_state).",
+      "owner": null,
+      "source_location": "loc-0066",
+      "tags": []
+    },
+    {
+      "id": "save.flush_structural",
+      "name": "core.economy_state.EconomyState.flush_structural",
+      "short": "EconomyState.flush_structural",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Единственная запись экономики в Ladybug: Institution и SocialGroup(population, welfare).",
+      "owner": null,
+      "source_location": "loc-0067",
+      "tags": []
+    },
+    {
+      "id": "save.save_checkpoint",
+      "name": "core.economy_state.EconomyState.save_checkpoint",
+      "short": "EconomyState.save_checkpoint",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Запись всей экономики в Parquet: staging → подмена, previous как резерв.",
+      "owner": null,
+      "source_location": "loc-0068",
+      "tags": []
+    },
+    {
+      "id": "save.load_checkpoint",
+      "name": "core.economy_state.EconomyState.load_checkpoint",
+      "short": "EconomyState.load_checkpoint",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Восстановление из Parquet с проверкой схемы, отпечатка мира и keep_reports.",
+      "owner": null,
+      "source_location": "loc-0069",
+      "tags": []
+    },
+    {
+      "id": "save.record_event",
+      "name": "core.db.WorldDB.record_event",
+      "short": "WorldDB.record_event",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Запись события в Ladybug: события и структура мира, не экономика.",
+      "owner": null,
+      "source_location": "loc-0070",
+      "tags": []
+    },
+    {
+      "id": "save.autosave",
+      "name": "core.turn_service.TurnService._autosave",
+      "short": "TurnService._autosave",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Autosave по умолчанию выключен: экономика пишется только явным сохранением.",
+      "owner": null,
+      "source_location": "loc-0071",
+      "tags": []
+    },
+    {
+      "id": "save.event_recorder",
+      "name": "modules.economy.native.event_buffer_boundary.EventRecorderPython",
+      "short": "EventRecorder",
+      "type": "boundary",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Синхронный буфер событий месяца: фильтр, батчи, ссылки на готовые строки отчёта.",
+      "owner": null,
+      "source_location": "loc-0072",
+      "tags": []
+    },
+    {
+      "id": "save.event_writer",
+      "name": "modules.economy.native.event_writer.EventWriter",
+      "short": "EventWriter",
+      "type": "boundary",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Фоновый writer событий: единственный, кто касается диска в этом слое.",
+      "owner": null,
+      "source_location": "loc-0073",
+      "tags": []
+    },
+    {
+      "id": "save.world_save",
+      "name": "core.world_service.WorldService.save_checkpoint",
+      "short": "WorldService.save_checkpoint",
+      "type": "function",
+      "domain": "save",
+      "language": "python",
+      "responsibility": "Явное сохранение мира: определяет путь и вызывает EconomyState.save_checkpoint.",
+      "owner": null,
+      "source_location": "loc-0074",
+      "tags": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-001",
+      "source": "entry.world_service",
+      "target": "entry.turn_service",
+      "kind": "owns",
+      "label": "WorldService создаёт TurnService",
+      "confidence": "confirmed",
+      "source_location": "loc-0075",
+      "note": "TurnService получает сервис и его БД."
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.advance_turn",
+      "target": "entry.turn_finish",
+      "kind": "calls",
+      "label": "advance_turn → turns.finish",
+      "confidence": "confirmed",
+      "source_location": "loc-0076",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.turn_service",
+      "target": "entry.economy_phase",
+      "kind": "calls",
+      "label": "фазы хода: commands → economy → integrity → snapshot",
+      "confidence": "confirmed",
+      "source_location": "loc-0077",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.economy_phase",
+      "target": "entry.monthly_phase",
+      "kind": "calls",
+      "label": "monthly_phase(service, ctx)",
+      "confidence": "confirmed",
+      "source_location": "loc-0078",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.monthly_phase",
+      "target": "save.state_step",
+      "kind": "calls",
+      "label": "state.step()",
+      "confidence": "confirmed",
+      "source_location": "loc-0079",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "save.state_step",
+      "target": "engine.step",
+      "kind": "calls",
+      "label": "engine.step(planning_mode)",
+      "confidence": "confirmed",
+      "source_location": "loc-0080",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.step",
+      "target": "engine.monthly_boundary",
+      "kind": "calls",
+      "label": "monthly_boundary.monthly_step(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0081",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_boundary",
+      "target": "engine.monthly_driver",
+      "kind": "binds",
+      "label": "monthly_step = _driver.monthly_step (при собранном расширении)",
+      "confidence": "confirmed",
+      "source_location": "loc-0082",
+      "note": "Даже native_mode=\"off\" идёт через Cython-драйвер; Python-эталон — только fallback."
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "engine.monthly_hooks",
+      "kind": "calls",
+      "label": "hooks = _make_hooks(engine)",
+      "confidence": "confirmed",
+      "source_location": "loc-0083",
+      "note": "Cython → Python: один объект хуков на месяц."
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.step",
+      "target": "money.runtime_window",
+      "kind": "calls",
+      "label": "cash_store.begin_runtime()",
+      "confidence": "confirmed",
+      "source_location": "loc-0084",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.step",
+      "target": "save.event_writer",
+      "kind": "calls",
+      "label": "_event_writer.drain_recorder(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0085",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.economy",
+      "target": "money.cash_store",
+      "kind": "owns",
+      "label": "Economy.cash_store → CashStore",
+      "confidence": "confirmed",
+      "source_location": "loc-0086",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "money.transfer",
+      "target": "money.cash_store",
+      "kind": "writes",
+      "label": "cash.move_balance(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0087",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "money.money_boundary",
+      "target": "money.money_kernel",
+      "kind": "calls",
+      "label": "run_settle → money_kernel",
+      "confidence": "confirmed",
+      "source_location": "loc-0088",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "money.cash_store",
+      "target": "money.runtime_window",
+      "kind": "owns",
+      "label": "окно владения открывается на месяц",
+      "confidence": "confirmed",
+      "source_location": "loc-0019",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.economy",
+      "target": "stock.stock_store",
+      "kind": "owns",
+      "label": "Economy.stock_store → StockStore",
+      "confidence": "confirmed",
+      "source_location": "loc-0089",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "stock.stock_boundary",
+      "target": "stock.stock_kernel",
+      "kind": "binds",
+      "label": "add_stock = _kernel.add_stock",
+      "confidence": "confirmed",
+      "source_location": "loc-0090",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "stock.stock_kernel",
+      "target": "stock.stock_store",
+      "kind": "writes",
+      "label": "stock_store.add_stock / set_value",
+      "confidence": "confirmed",
+      "source_location": "loc-0091",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "production.boundary",
+      "target": "stock.stock_store",
+      "kind": "writes",
+      "label": "engine.use_stock → StockStore",
+      "confidence": "confirmed",
+      "source_location": "loc-0092",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.economy",
+      "target": "orders.order_store",
+      "kind": "owns",
+      "label": "Economy.order_store → OrderStore",
+      "confidence": "confirmed",
+      "source_location": "loc-0093",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.order",
+      "target": "orders.order_store",
+      "kind": "writes",
+      "label": "order_store.append(o)",
+      "confidence": "confirmed",
+      "source_location": "loc-0094",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.order",
+      "target": "money.cash_store",
+      "kind": "writes",
+      "label": "add_reserved_cash (buy)",
+      "confidence": "confirmed",
+      "source_location": "loc-0095",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.order",
+      "target": "stock.stock_store",
+      "kind": "writes",
+      "label": "add_reserved (sell)",
+      "confidence": "confirmed",
+      "source_location": "loc-0096",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.cancel_order",
+      "target": "money.cash_store",
+      "kind": "writes",
+      "label": "release_reserved_cash",
+      "confidence": "confirmed",
+      "source_location": "loc-0097",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.cancel_order",
+      "target": "stock.stock_store",
+      "kind": "writes",
+      "label": "release_reserved",
+      "confidence": "confirmed",
+      "source_location": "loc-0098",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "orders.world_state",
+      "target": "orders.order_store",
+      "kind": "owns",
+      "label": "WorldState перепривязывается к OrderStore",
+      "confidence": "confirmed",
+      "source_location": "loc-0099",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "market.sell_orders",
+      "kind": "calls",
+      "label": "sells = engine.sell_orders(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0100",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "market.match_boundary",
+      "kind": "calls",
+      "label": "_match.run_buyers(engine, buys, ...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0101",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.match_boundary",
+      "target": "market.trade_boundary",
+      "kind": "callback",
+      "label": "commit=commit_trade вызывается на каждую сделку",
+      "confidence": "confirmed",
+      "source_location": "loc-0102",
+      "note": "Python-обход книги вызывает Python-callback commit_trade на каждую сделку."
+    },
+    {
+      "id": "edge-001",
+      "source": "market.match_boundary",
+      "target": "market.match_kernel",
+      "kind": "calls",
+      "label": "inner=run_match → calculate_quantity (kernel)",
+      "confidence": "confirmed",
+      "source_location": "loc-0103",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.trade_boundary",
+      "target": "market.trade_kernel",
+      "kind": "calls",
+      "label": "calculate_trade (kernel) → apply_trade",
+      "confidence": "confirmed",
+      "source_location": "loc-0104",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.trade_boundary",
+      "target": "money.cash_store",
+      "kind": "writes",
+      "label": "деньги сделки через cash_store",
+      "confidence": "confirmed",
+      "source_location": "loc-0036",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "market.report_history",
+      "target": "market.record_market",
+      "kind": "callback",
+      "label": "_report_history.record_market_rows(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0105",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "production.produce",
+      "kind": "calls",
+      "label": "engine.produce(existing, planning_sells)",
+      "confidence": "confirmed",
+      "source_location": "loc-0106",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "production.produce",
+      "target": "production.boundary",
+      "kind": "calls",
+      "label": "_production.produce(self, existing)",
+      "confidence": "confirmed",
+      "source_location": "loc-0107",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "production.boundary",
+      "target": "production.kernel",
+      "kind": "calls",
+      "label": "calculate = production_kernel.calculate_output",
+      "confidence": "confirmed",
+      "source_location": "loc-0108",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "consumption.household_requests",
+      "kind": "calls",
+      "label": "engine.household_requests(...) × basic/extra",
+      "confidence": "confirmed",
+      "source_location": "loc-0109",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "consumption.owner_requests",
+      "kind": "calls",
+      "label": "engine.owner_requests(sells)",
+      "confidence": "confirmed",
+      "source_location": "loc-0110",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "consumption.boundary",
+      "kind": "calls",
+      "label": "_consumption.consume_households(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0111",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "consumption.boundary",
+      "target": "consumption.kernel",
+      "kind": "calls",
+      "label": "calculate_consumption (kernel)",
+      "confidence": "confirmed",
+      "source_location": "loc-0112",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "consumption.topup",
+      "kind": "calls",
+      "label": "engine.household_top_up(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0113",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "projects.project_requests",
+      "kind": "calls",
+      "label": "engine.project_requests(sells) (Python-ветка)",
+      "confidence": "confirmed",
+      "source_location": "loc-0114",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.project_requests",
+      "target": "projects.delivery_boundary",
+      "kind": "calls",
+      "label": "_delivery.request_project_materials(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0115",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.delivery_boundary",
+      "target": "projects.material_boundary",
+      "kind": "calls",
+      "label": "reserve_materials (закупка материалов)",
+      "confidence": "confirmed",
+      "source_location": "loc-0116",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.project_requests",
+      "target": "projects.cancel_boundary",
+      "kind": "calls",
+      "label": "_cancel.cancel_stalled_project(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0117",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "projects.advance_public",
+      "kind": "calls",
+      "label": "engine.advance_public_projects()",
+      "confidence": "confirmed",
+      "source_location": "loc-0118",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.advance_public",
+      "target": "projects.wage_boundary",
+      "kind": "calls",
+      "label": "_wage.advance_public_projects(self)",
+      "confidence": "confirmed",
+      "source_location": "loc-0119",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "projects.finish",
+      "kind": "calls",
+      "label": "engine.finish_projects()",
+      "confidence": "confirmed",
+      "source_location": "loc-0120",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.finish",
+      "target": "projects.completion_boundary",
+      "kind": "calls",
+      "label": "_project_completion.finish_projects(self)",
+      "confidence": "confirmed",
+      "source_location": "loc-0121",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.project_slot",
+      "target": "engine.economy",
+      "kind": "writes",
+      "label": "attach(account, project) — единственная точка записи project",
+      "confidence": "confirmed",
+      "source_location": "loc-0122",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "settlement.settle",
+      "kind": "calls",
+      "label": "engine.settle(list(enterprises), households)",
+      "confidence": "confirmed",
+      "source_location": "loc-0123",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "settlement.settle",
+      "target": "settlement.enterprise_boundary",
+      "kind": "calls",
+      "label": "_enterprise_settlement.settle_month(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0124",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "settlement.settle",
+      "target": "money.money_boundary",
+      "kind": "calls",
+      "label": "money_boundary.settle(...) — второй цикл",
+      "confidence": "confirmed",
+      "source_location": "loc-0125",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "settlement.dividend_boundary",
+      "kind": "calls",
+      "label": "engine.pay_dividends(planning_sells)",
+      "confidence": "confirmed",
+      "source_location": "loc-0126",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "settlement.dividend_boundary",
+      "target": "money.transfer",
+      "kind": "callback",
+      "label": "hooks.transfer(...) на каждую выплату",
+      "confidence": "confirmed",
+      "source_location": "loc-0127",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "settlement.demography",
+      "kind": "calls",
+      "label": "engine.update_demography()",
+      "confidence": "confirmed",
+      "source_location": "loc-0128",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "settlement.demography",
+      "target": "settlement.kernel",
+      "kind": "calls",
+      "label": "run_demography (kernel) с population_hook",
+      "confidence": "confirmed",
+      "source_location": "loc-0129",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "engine.monthly_driver",
+      "target": "settlement.validate",
+      "kind": "calls",
+      "label": "engine.validate(before)",
+      "confidence": "confirmed",
+      "source_location": "loc-0130",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "settlement.validate",
+      "target": "settlement.boundary",
+      "kind": "calls",
+      "label": "_settlement.validate(self, EPS)",
+      "confidence": "confirmed",
+      "source_location": "loc-0131",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.turn_finish",
+      "target": "save.begin_turn",
+      "kind": "calls",
+      "label": "state.begin_turn()",
+      "confidence": "confirmed",
+      "source_location": "loc-0132",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "save.begin_turn",
+      "target": "save.economy_state",
+      "kind": "writes",
+      "label": "self._undo = engine.export_state()",
+      "confidence": "confirmed",
+      "source_location": "loc-0133",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.turn_finish",
+      "target": "save.flush_structural",
+      "kind": "calls",
+      "label": "state.flush_structural(self.db)",
+      "confidence": "confirmed",
+      "source_location": "loc-0134",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "save.flush_structural",
+      "target": "save.record_event",
+      "kind": "writes",
+      "label": "db.create_entity / db.update_social_groups",
+      "confidence": "confirmed",
+      "source_location": "loc-0135",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "save.world_save",
+      "target": "save.save_checkpoint",
+      "kind": "calls",
+      "label": "EconomyState.save_checkpoint(state, destination)",
+      "confidence": "confirmed",
+      "source_location": "loc-0136",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "save.save_checkpoint",
+      "target": "save.load_checkpoint",
+      "kind": "writes",
+      "label": "schema keep_reports читается загрузкой",
+      "confidence": "confirmed",
+      "source_location": "loc-0137",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "save.economy_state",
+      "target": "save.save_checkpoint",
+      "kind": "owns",
+      "label": "checkpoint_path/checkpoint_seconds пишет сам EconomyState",
+      "confidence": "confirmed",
+      "source_location": "loc-0138",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.lab",
+      "target": "save.economy_state",
+      "kind": "calls",
+      "label": "state = EconomyState.load_checkpoint(directory/\"economy\", ...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0139",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.lab",
+      "target": "entry.advance_turn",
+      "kind": "calls",
+      "label": "service.advance_turn(...) на каждый месяц",
+      "confidence": "confirmed",
+      "source_location": "loc-0140",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "entry.lab",
+      "target": "save.save_checkpoint",
+      "kind": "calls",
+      "label": "state.save_checkpoint(directory/\"economy\") — один раз за эксперимент",
+      "confidence": "confirmed",
+      "source_location": "loc-0141",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.material_requests",
+      "target": "projects.cancel_boundary",
+      "kind": "calls",
+      "label": "_cancel.cancel_stalled_project(self, a, EPS)",
+      "confidence": "confirmed",
+      "source_location": "loc-0117",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.material_requests",
+      "target": "projects.delivery_boundary",
+      "kind": "calls",
+      "label": "_delivery.request_project_materials(...)",
+      "confidence": "confirmed",
+      "source_location": "loc-0115",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "projects.project_requests",
+      "target": "projects.material_requests",
+      "kind": "calls",
+      "label": "self.project_material_requests(sells, due, investors)",
+      "confidence": "confirmed",
+      "source_location": "loc-0142",
+      "note": null
+    },
+    {
+      "id": "edge-001",
+      "source": "save.economy_state",
+      "target": "save.state_step",
+      "kind": "owns",
+      "label": "last_report/reports обновляет EconomyState",
+      "confidence": "confirmed",
+      "source_location": "loc-0143",
+      "note": null
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "month",
+      "title": "Месячный ход",
+      "description": "Порядок вызовов одного месяца: вход, подготовка, производство, рынок, потребление, проекты, зарплаты/дивиденды, settlement, отчёт, сохранение. Шаги взяты из реального кода драйвера месяца и TurnService; условия — из тех же ветвей, что в коде.",
+      "variants": [
+        {
+          "id": "python",
+          "title": "Python-эталон (native_mode=\"off\")",
+          "summary": "Каждая фаза месяца вызывается из Cython-драйвера отдельным Python-вызовом. Драйвер тот же: monthly_boundary подменяет monthly_step на расширение, поэтому «Python-режим» — это режим фаз, а не режим оркестрации.",
+          "steps": [
+            {
+              "phase": "вход",
+              "node": "entry.advance_turn",
+              "call": "WorldService.advance_turn",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0076"
+            },
+            {
+              "phase": "вход",
+              "node": "entry.turn_finish",
+              "call": "TurnService.finish",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0004"
+            },
+            {
+              "phase": "подготовка",
+              "node": "save.begin_turn",
+              "call": "state.begin_turn() — снимок для отката",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0132"
+            },
+            {
+              "phase": "подготовка",
+              "node": "entry.economy_phase",
+              "call": "фаза economy",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0078"
+            },
+            {
+              "phase": "подготовка",
+              "node": "entry.monthly_phase",
+              "call": "monthly_phase → state.step()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0079"
+            },
+            {
+              "phase": "подготовка",
+              "node": "save.state_step",
+              "call": "EconomyState.step → engine.step",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0080"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.step",
+              "call": "Economy.step: проверка режимов",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0144"
+            },
+            {
+              "phase": "подготовка",
+              "node": "money.runtime_window",
+              "call": "cash_store.begin_runtime()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0084"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_boundary",
+              "call": "monthly_boundary.monthly_step(...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0081"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_hooks",
+              "call": "hooks = _make_hooks(engine)",
+              "condition": null,
+              "language": "cython",
+              "note": null,
+              "source_location": "loc-0083"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_driver",
+              "call": "activate_rules, reset_report, meta[\"month\"] += 1",
+              "condition": null,
+              "language": "cython",
+              "note": null,
+              "source_location": "loc-0145"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_hooks",
+              "call": "hooks.reset_month_reserves(accounts)",
+              "condition": null,
+              "language": "cython",
+              "note": null,
+              "source_location": "loc-0146"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_driver",
+              "call": "reset_enterprises(existing)",
+              "condition": null,
+              "language": "cython",
+              "note": null,
+              "source_location": "loc-0147"
+            },
+            {
+              "phase": "подготовка",
+              "node": "market.sell_orders",
+              "call": "update_prices()",
+              "condition": "native_mode == 'off'",
+              "language": "cython",
+              "note": null,
+              "source_location": "loc-0148"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.economy",
+              "call": "prepare_recovery_quotes()",
+              "condition": "native_mode != 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0149"
+            },
+            {
+              "phase": "подготовка",
+              "node": "market.sell_orders",
+              "call": "sells = engine.sell_orders(exclude=lagged_firms)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0100"
+            },
+            {
+              "phase": "подготовка",
+              "node": "consumption.household_requests",
+              "call": "households = engine.shuffled(...)",
+              "condition": "native_mode != 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0150"
+            },
+            {
+              "phase": "подготовка",
+              "node": "consumption.household_requests",
+              "call": "household_requests(basic_needs)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0109"
+            },
+            {
+              "phase": "подготовка",
+              "node": "consumption.household_requests",
+              "call": "household_requests(extra_needs)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0151"
+            },
+            {
+              "phase": "подготовка",
+              "node": "consumption.owner_requests",
+              "call": "owner_requests(sells)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0110"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.economy",
+              "call": "recover_enterprises(sells)",
+              "condition": "native_mode != 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0152"
+            },
+            {
+              "phase": "подготовка",
+              "node": "projects.start_public",
+              "call": "public_project_requests(sells)",
+              "condition": "native_mode != 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0153"
+            },
+            {
+              "phase": "подготовка",
+              "node": "projects.project_requests",
+              "call": "project_requests(sells)",
+              "condition": "native_mode != 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0114"
+            },
+            {
+              "phase": "планирование",
+              "node": "engine.economy",
+              "call": "plan_enterprises(existing, sells)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0154"
+            },
+            {
+              "phase": "рынок",
+              "node": "market.match",
+              "call": "match(buy, sells, local_only=True) для базовых нужд",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0155"
+            },
+            {
+              "phase": "рынок",
+              "node": "market.match_boundary",
+              "call": "_match.run_buyers(engine, shuffled(buys), ...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0101"
+            },
+            {
+              "phase": "рынок",
+              "node": "market.trade_boundary",
+              "call": "commit_trade на каждую сделку (callback)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0156"
+            },
+            {
+              "phase": "рынок",
+              "node": "consumption.topup",
+              "call": "household_top_up(households, sells)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0113"
+            },
+            {
+              "phase": "рынок",
+              "node": "market.record_market",
+              "call": "record_market()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0157"
+            },
+            {
+              "phase": "рынок",
+              "node": "engine.monthly_hooks",
+              "call": "hooks.expire_orders()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0158"
+            },
+            {
+              "phase": "производство",
+              "node": "production.produce",
+              "call": "produce(existing, planning_sells)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0106"
+            },
+            {
+              "phase": "проекты",
+              "node": "projects.advance_public",
+              "call": "advance_public_projects()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0118"
+            },
+            {
+              "phase": "проекты",
+              "node": "projects.finish",
+              "call": "finish_projects()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0120"
+            },
+            {
+              "phase": "потребление",
+              "node": "consumption.owner_boundary",
+              "call": "consume_owner_purchases()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0159"
+            },
+            {
+              "phase": "потребление",
+              "node": "consumption.boundary",
+              "call": "_consumption.consume_households(...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0111"
+            },
+            {
+              "phase": "отчёт",
+              "node": "market.report_history",
+              "call": "update_sales_history / update_stock_sales_history",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0160"
+            },
+            {
+              "phase": "расчёты",
+              "node": "engine.monthly_hooks",
+              "call": "hooks.protect_balances(accounts)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0161"
+            },
+            {
+              "phase": "расчёты",
+              "node": "settlement.settle",
+              "call": "settle(enterprises, households)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0123"
+            },
+            {
+              "phase": "расчёты",
+              "node": "settlement.dividend_boundary",
+              "call": "pay_dividends(planning_sells)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0126"
+            },
+            {
+              "phase": "расчёты",
+              "node": "settlement.demography",
+              "call": "update_demography()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0128"
+            },
+            {
+              "phase": "расчёты",
+              "node": "engine.economy",
+              "call": "apply_migration()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0162"
+            },
+            {
+              "phase": "расчёты",
+              "node": "engine.monthly_hooks",
+              "call": "hooks.apply_project_reserves(...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0163"
+            },
+            {
+              "phase": "отчёт",
+              "node": "engine.economy",
+              "call": "summarize(prior_cash)",
+              "condition": "detail != 'none'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0164"
+            },
+            {
+              "phase": "отчёт",
+              "node": "market.report_history",
+              "call": "build_report_aggregates(...)",
+              "condition": "detail != 'none'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0165"
+            },
+            {
+              "phase": "отчёт",
+              "node": "save.event_recorder",
+              "call": "_record_report_channels(engine, detail)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0166"
+            },
+            {
+              "phase": "отчёт",
+              "node": "settlement.validate",
+              "call": "validate(before)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0130"
+            },
+            {
+              "phase": "отчёт",
+              "node": "engine.economy",
+              "call": "build_causal_events()",
+              "condition": "detail == 'deep'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0167"
+            },
+            {
+              "phase": "выход",
+              "node": "money.runtime_window",
+              "call": "cash_store.end_runtime(check=completed)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0168"
+            },
+            {
+              "phase": "выход",
+              "node": "save.event_writer",
+              "call": "_event_writer.drain_recorder(...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0085"
+            },
+            {
+              "phase": "выход",
+              "node": "save.state_step",
+              "call": "last_report = report; reports.append(...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0143"
+            },
+            {
+              "phase": "отчёт",
+              "node": "entry.monthly_phase",
+              "call": "db.record_event(economy_month)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0169"
+            },
+            {
+              "phase": "сохранение",
+              "node": "save.flush_structural",
+              "call": "state.flush_structural(self.db)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0134"
+            },
+            {
+              "phase": "сохранение",
+              "node": "entry.turn_finish",
+              "call": "save_turn_result + событие turn_advanced",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0170"
+            },
+            {
+              "phase": "сохранение",
+              "node": "save.autosave",
+              "call": "_autosave(state) — по умолчанию выключен",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0171"
+            },
+            {
+              "phase": "сохранение",
+              "node": "save.world_save",
+              "call": "явное сохранение: WorldService.save_checkpoint",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0136"
+            },
+            {
+              "phase": "сохранение",
+              "node": "save.save_checkpoint",
+              "call": "EconomyState.save_checkpoint → Parquet",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0138"
+            }
+          ],
+          "divergences": [
+            "Фазы подготовки рынка идут по отдельности: update_prices → prepare_recovery_quotes → sell_orders → household_requests → owner_requests → recover_enterprises → public_project_requests → project_requests.",
+            "WorldState не создаётся и world.begin_step/end_step не вызываются (world = None).",
+            "stock_store.sync() не вызывается: склад берётся из живого dict.",
+            "Проектные запросы считает Python: engine.project_requests(sells)."
+          ]
+        },
+        {
+          "id": "cython",
+          "title": "Cython (native_mode=\"cython\")",
+          "summary": "Подготовка рынка выполняется одним packed-шагом serial_step (public_project_preparation) с numpy-буферами, затем результат применяется теми же Python-границами. Оркестрация и до/после — тот же monthly_driver.",
+          "steps": [
+            {
+              "phase": "вход",
+              "node": "entry.advance_turn",
+              "call": "WorldService.advance_turn",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0076"
+            },
+            {
+              "phase": "вход",
+              "node": "entry.turn_finish",
+              "call": "TurnService.finish",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0004"
+            },
+            {
+              "phase": "подготовка",
+              "node": "save.begin_turn",
+              "call": "state.begin_turn()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0132"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.step",
+              "call": "Economy.step: native_mode == \"cython\"",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0172"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_boundary",
+              "call": "require_native_monthly()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0173"
+            },
+            {
+              "phase": "подготовка",
+              "node": "money.runtime_window",
+              "call": "cash_store.begin_runtime()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0084"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_driver",
+              "call": "monthly_step(engine, ...) — Cython",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0081"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_hooks",
+              "call": "hooks = _make_hooks(engine)",
+              "condition": null,
+              "language": "cython",
+              "note": null,
+              "source_location": "loc-0083"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.monthly_hooks",
+              "call": "hooks.reset_month_reserves(accounts)",
+              "condition": null,
+              "language": "cython",
+              "note": null,
+              "source_location": "loc-0146"
+            },
+            {
+              "phase": "подготовка",
+              "node": "stock.stock_store",
+              "call": "stock_store.sync()",
+              "condition": "native_mode == 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0174"
+            },
+            {
+              "phase": "подготовка",
+              "node": "orders.world_state",
+              "call": "world.begin_step(engine)",
+              "condition": "native_mode == 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0175"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.serial_step",
+              "call": "run_native_public_projects(engine) — один pack/call/apply",
+              "condition": "native_mode == 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0176"
+            },
+            {
+              "phase": "подготовка",
+              "node": "engine.serial_step",
+              "call": "public_project_preparation(data, rng)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0177"
+            },
+            {
+              "phase": "подготовка",
+              "node": "market.sell_orders",
+              "call": "sells = native_market[\"sells\"]",
+              "condition": "native_mode == 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0178"
+            },
+            {
+              "phase": "подготовка",
+              "node": "consumption.household_requests",
+              "call": "households = native_households[\"households\"]",
+              "condition": "native_mode == 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0179"
+            },
+            {
+              "phase": "подготовка",
+              "node": "projects.project_requests",
+              "call": "run_native_project_requests(engine, sells)",
+              "condition": "native_mode == 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0180"
+            },
+            {
+              "phase": "планирование",
+              "node": "engine.economy",
+              "call": "plan_enterprises(existing, sells)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0154"
+            },
+            {
+              "phase": "рынок",
+              "node": "market.match_boundary",
+              "call": "_match.run_buyers(engine, shuffled(buys), ...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0101"
+            },
+            {
+              "phase": "рынок",
+              "node": "market.trade_boundary",
+              "call": "commit_trade на каждую сделку (callback)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0156"
+            },
+            {
+              "phase": "рынок",
+              "node": "market.record_market",
+              "call": "record_market()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0157"
+            },
+            {
+              "phase": "рынок",
+              "node": "engine.monthly_hooks",
+              "call": "hooks.expire_orders()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0158"
+            },
+            {
+              "phase": "производство",
+              "node": "production.boundary",
+              "call": "produce(existing, planning_sells) → production_kernel",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0106"
+            },
+            {
+              "phase": "проекты",
+              "node": "projects.advance_public",
+              "call": "advance_public_projects()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0118"
+            },
+            {
+              "phase": "проекты",
+              "node": "projects.finish",
+              "call": "finish_projects()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0120"
+            },
+            {
+              "phase": "потребление",
+              "node": "consumption.boundary",
+              "call": "_consumption.consume_households(...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0111"
+            },
+            {
+              "phase": "расчёты",
+              "node": "settlement.settle",
+              "call": "settle(...)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0123"
+            },
+            {
+              "phase": "расчёты",
+              "node": "settlement.dividend_boundary",
+              "call": "pay_dividends(planning_sells)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0126"
+            },
+            {
+              "phase": "расчёты",
+              "node": "settlement.demography",
+              "call": "update_demography()",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0128"
+            },
+            {
+              "phase": "расчёты",
+              "node": "settlement.boundary",
+              "call": "apply_migration() → run_migration",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0162"
+            },
+            {
+              "phase": "отчёт",
+              "node": "market.report_history",
+              "call": "build_report_aggregates(...)",
+              "condition": "detail != 'none'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0165"
+            },
+            {
+              "phase": "отчёт",
+              "node": "settlement.validate",
+              "call": "validate(before)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0130"
+            },
+            {
+              "phase": "отчёт",
+              "node": "save.event_recorder",
+              "call": "_record_report_channels(engine, detail)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0166"
+            },
+            {
+              "phase": "выход",
+              "node": "orders.world_state",
+              "call": "world.end_step(engine, completed=completed)",
+              "condition": "native_mode == 'cython'",
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0181"
+            },
+            {
+              "phase": "выход",
+              "node": "money.runtime_window",
+              "call": "cash_store.end_runtime(check=completed)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0168"
+            },
+            {
+              "phase": "выход",
+              "node": "save.state_step",
+              "call": "last_report = report",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0143"
+            },
+            {
+              "phase": "сохранение",
+              "node": "save.flush_structural",
+              "call": "state.flush_structural(self.db)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0134"
+            },
+            {
+              "phase": "сохранение",
+              "node": "save.autosave",
+              "call": "_autosave(state)",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0171"
+            },
+            {
+              "phase": "сохранение",
+              "node": "save.save_checkpoint",
+              "call": "EconomyState.save_checkpoint → Parquet",
+              "condition": null,
+              "language": "python",
+              "note": null,
+              "source_location": "loc-0138"
+            }
+          ],
+          "divergences": [
+            "run_native_public_projects собирает update_prices, recovery, sell_orders, household_requests, owner_requests, recover_enterprises и public_project_requests в один pack/call/apply.",
+            "Создаётся WorldState: begin_step до фаз и end_step в finally.",
+            "stock_store.sync() вызывается после reset_month_reserves.",
+            "Проектные запросы считает сериализованное ядро: serial_step.native_project_requests.",
+            "Перед месяцем require_native_monthly() падает, если расширение не собрано (fallback запрещён)."
+          ]
+        }
+      ]
+    }
+  ],
+  "owners": [
+    {
+      "id": "cash",
+      "title": "Деньги счёта (balance / reserved / protected)",
+      "state": "balance, reserved, protected на каждом счёте",
+      "storage": "engine.accounts[*] (dict-зеркало) + колонки CashStore (истина)",
+      "owner_node": "money.cash_store",
+      "fallback_node": "money.cash_store_python",
+      "write_path": "Economy.cash_store → CashStore.set_balance/add_balance/move_balance/set_reserved_cash/add_reserved_cash/release_reserved_cash/set_protected_cash/add_protected_cash/release_protected_cash",
+      "readers": [
+        "money.transfer",
+        "money.money_boundary",
+        "settlement.dividend_boundary",
+        "production.boundary",
+        "projects.material_boundary"
+      ],
+      "writers": [
+        "money.cash_store",
+        "money.transfer"
+      ],
+      "direct_writes": [
+        "v-account-creation"
+      ],
+      "callbacks": [],
+      "confidence": "confirmed",
+      "notes": "Внутри месяца окно владения открыто: запись в dict мимо store падает ValueError. Вне окна расхождение принимается как импорт и считается в adopt_mismatch.",
+      "evidence": [
+        "tests/test_economy_native_cash_runtime.py::test_runtime_month_has_no_direct_cash_writers",
+        "tests/test_economy_native_cash_ownership.py::test_balance_reserved_protected_share_one_owner",
+        "tests/test_economy_native_cash_runtime.py::test_dict_write_inside_runtime_is_rejected"
+      ]
+    },
+    {
+      "id": "stock",
+      "title": "Склад (stock / stock_reserved / values)",
+      "state": "stock, stock_reserved, values (учётная стоимость) по счёту и товару",
+      "storage": "engine.accounts[*][\"stock\"|\"stock_reserved\"|\"values\"] + StockStore",
+      "owner_node": "stock.stock_store",
+      "fallback_node": "stock.stock_store_python",
+      "write_path": "Economy.stock_store → set_stock/add_stock/set_value/set_reserved/add_reserved/release_reserved/reset_reserved/restore_good",
+      "readers": [
+        "production.boundary",
+        "projects.material_boundary",
+        "market.order",
+        "consumption.boundary"
+      ],
+      "writers": [
+        "stock.stock_kernel",
+        "stock.stock_store"
+      ],
+      "direct_writes": [
+        "v-stock-values-dict-only"
+      ],
+      "callbacks": [
+        "v-callback-money"
+      ],
+      "confidence": "confirmed",
+      "notes": "Количества и резервы идут через колонки стора; values пишется только зеркалом в dict.",
+      "evidence": [
+        "tests/test_economy_native_stock_ownership.py::test_stock_store_uses_live_dicts",
+        "tests/test_economy_native_stock_ownership.py::test_stock_store_release_matches_previous_max_semantics"
+      ]
+    },
+    {
+      "id": "orders",
+      "title": "Заявка (status / remaining / price / quantity / reserved)",
+      "state": "поля заявки в report[\"orders\"] текущего месяца",
+      "storage": "engine.report[\"orders\"] — живой список словарей на один отчётный месяц",
+      "owner_node": "orders.order_store",
+      "fallback_node": "orders.order_store_python",
+      "write_path": "Economy.order_store → append/remove/set_remaining/set_reserved/set_status/set_price/set_quantity/set_metadata",
+      "readers": [
+        "market.match_boundary",
+        "market.record_market",
+        "engine.monthly_hooks",
+        "settlement.dividend_boundary"
+      ],
+      "writers": [
+        "market.order",
+        "market.cancel_order",
+        "market.trade_boundary"
+      ],
+      "direct_writes": [
+        "v-order-metadata-direct",
+        "v-unmet-solvent-two-writers"
+      ],
+      "callbacks": [
+        "v-callback-trade",
+        "v-match-driver-callbacks"
+      ],
+      "confidence": "confirmed",
+      "notes": "Store перепроверяется по тождеству списка: после reset_report ссылка берётся заново.",
+      "evidence": [
+        "tests/test_economy_native_order_ownership.py::test_audit_detects_direct_dict_write",
+        "tests/test_economy_native_order_ownership.py::test_trade_writes_both_orders_through_store"
+      ]
+    },
+    {
+      "id": "projects",
+      "title": "Проекты (project / public_projects)",
+      "state": "account[\"project\"] (инвестиционный) и account[\"public_projects\"] (муниципальные)",
+      "storage": "engine.accounts[*][\"project\"|\"public_projects\"] — словари/список на счёте",
+      "owner_node": "projects.project_slot",
+      "fallback_node": null,
+      "write_path": "project_slot.attach/detach — только для ссылки на инвестиционный проект; поля проекта меняются множеством прямых записей",
+      "readers": [
+        "projects.project_requests",
+        "projects.wage_boundary",
+        "projects.completion_boundary",
+        "projects.cancel_boundary",
+        "projects.delivery_boundary"
+      ],
+      "writers": [
+        "projects.project_slot",
+        "projects.wage_boundary",
+        "projects.start_public"
+      ],
+      "direct_writes": [
+        "v-public-projects-direct",
+        "v-public-projects-wage",
+        "v-project-fields"
+      ],
+      "callbacks": [],
+      "confidence": "confirmed",
+      "notes": "Владельца нет: это единственный из ключевых доменов без store. attach/detach закрывает только саму ссылку, не её поля.",
+      "evidence": [
+        "tests/test_economy_native_projects.py",
+        "tests/test_economy_owners.py::test_project_material_assignment_keeps_surplus_offer"
+      ]
+    },
+    {
+      "id": "production_results",
+      "title": "Результаты выпуска",
+      "state": "report[\"production\"|\"inputs_used\"|\"equipment_wear\"] и поля предприятия (output, production_cost, unit_cost, wages, status, production_plan)",
+      "storage": "engine.report текущего месяца + engine.enterprises[*]",
+      "owner_node": "production.boundary",
+      "fallback_node": null,
+      "write_path": "production_boundary.run_enterprises → hooks.production/input_used/equipment_worn для отчёта; числовые поля предприятия пишутся напрямую",
+      "readers": [
+        "market.report_history",
+        "settlement.enterprise_boundary",
+        "save.save_checkpoint"
+      ],
+      "writers": [
+        "production.boundary",
+        "projects.wage_boundary"
+      ],
+      "direct_writes": [
+        "v-production-result-direct",
+        "v-production-plan-direct"
+      ],
+      "callbacks": [
+        "v-callback-quote",
+        "v-callback-money"
+      ],
+      "confidence": "confirmed",
+      "notes": "Отчётные строки — хуки, поля предприятия — прямая запись; единого владельца нет.",
+      "evidence": [
+        "tests/test_economy_native_production.py",
+        "tests/test_economy_native_plan.py"
+      ]
+    },
+    {
+      "id": "reports_save",
+      "title": "Отчёты и checkpoint",
+      "state": "EconomyState.reports/last_report, Parquet-таблицы, schema.json",
+      "storage": "память EconomyState + каталог checkpoint (Parquet, zstd)",
+      "owner_node": "save.economy_state",
+      "fallback_node": null,
+      "write_path": "EconomyState.save_checkpoint (staging → previous → replace), load_checkpoint (проверка schema_version, world fingerprint, keep_reports)",
+      "readers": [
+        "entry.monthly_phase",
+        "entry.lab",
+        "save.load_checkpoint"
+      ],
+      "writers": [
+        "save.save_checkpoint"
+      ],
+      "direct_writes": [
+        "v-trades-from-reports"
+      ],
+      "callbacks": [],
+      "confidence": "confirmed",
+      "notes": "В Ladybug из экономики попадают только Institution и SocialGroup(population, welfare) через flush_structural; остальное — Parquet по явному сохранению.",
+      "evidence": [
+        "tests/test_economy_state.py::test_checkpoint_round_trip_keeps_state_exactly",
+        "tests/test_economy_state.py::test_save_load_continues_next_turn_exactly",
+        "tests/test_economy_state.py::test_autosave_is_off_by_default"
+      ]
+    }
+  ],
+  "violations": [
+    {
+      "id": "v-public-projects-direct",
+      "title": "Муниципальные стройки пишутся в счёт напрямую",
+      "kind": "ownerless_state",
+      "severity": "medium",
+      "state": "projects",
+      "description": "Список public_projects на счёте заменяется присваиванием: единого владельца (store) у этого состояния нет, в отличие от cash/stock/orders.",
+      "mitigation": "Ввести ProjectStore или point-запись через project_slot для public_projects.",
+      "related_nodes": [
+        "projects.start_public"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0182"
+    },
+    {
+      "id": "v-public-projects-wage",
+      "title": "Стройка переписывает public_projects из wage_boundary",
+      "kind": "direct_write",
+      "severity": "medium",
+      "state": "projects",
+      "description": "wage_boundary подменяет список public_projects на счёте дважды за шаг, а также правит поля проекта (work_done, status) прямо в словаре.",
+      "mitigation": "Та же точка записи, что и для инвестиционных проектов.",
+      "related_nodes": [
+        "projects.advance_public",
+        "projects.wage_boundary"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0183"
+    },
+    {
+      "id": "v-project-fields",
+      "title": "Поля проекта меняются без владельца",
+      "kind": "direct_write",
+      "severity": "medium",
+      "state": "projects",
+      "description": "work_done и status проекта обновляются прямо в dict из wage_boundary; attach/detach из project_slot закрывает только ссылку на проект целиком.",
+      "mitigation": "Отдельный API проекта с методами progress/complete.",
+      "related_nodes": [
+        "projects.wage_boundary"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0184"
+    },
+    {
+      "id": "v-production-plan-direct",
+      "title": "Производственный план пишется прямо в предприятие",
+      "kind": "direct_write",
+      "severity": "medium",
+      "state": "production",
+      "description": "plan_boundary присваивает e[\"production_plan\"] и вторую форму плана напрямую: владельца у плана нет, чтение и запись разнесены по границам.",
+      "mitigation": "Вынести план в отдельный store/структуру с единственной точкой записи.",
+      "related_nodes": [
+        "projects.project_requests"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0185"
+    },
+    {
+      "id": "v-production-result-direct",
+      "title": "Результат выпуска пишется прямо в предприятие",
+      "kind": "direct_write",
+      "severity": "low",
+      "state": "production",
+      "description": "production_boundary обновляет status/workers/output/production_cost/unit_cost/wages напрямую в dict предприятия; отчётные строки при этом идут через хуки.",
+      "mitigation": "Владелец у числовых полей предприятия или явный API записи.",
+      "related_nodes": [
+        "production.boundary"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0186"
+    },
+    {
+      "id": "v-order-metadata-direct",
+      "title": "Метаданные заявки пишутся мимо OrderStore",
+      "kind": "direct_write",
+      "severity": "low",
+      "state": "orders",
+      "description": "project_id, reserved_before_top_up, superseded_by_top_up и reserved_at_clearing присваиваются прямо в словарь заявки. OrderStore защищает колонки status/remaining/price/quantity/reserved, но не произвольные метаданные.",
+      "mitigation": "Использовать OrderStore.set_metadata для всех полей заявки.",
+      "related_nodes": [
+        "market.order",
+        "market.cancel_order"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0187"
+    },
+    {
+      "id": "v-unmet-solvent-two-writers",
+      "title": "unmet_solvent пишется и ядром, и Python-эталоном",
+      "kind": "direct_write",
+      "severity": "low",
+      "state": "orders",
+      "description": "Одно и то же поле заявки пишет и report_history_kernel (native), и эталонная Python-граница. Работает одна ветка, но два писателя одного поля повышают риск расхождения.",
+      "mitigation": "Оставить один путь записи поля, второй — только расчётом.",
+      "related_nodes": [
+        "market.report_history"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0188"
+    },
+    {
+      "id": "v-trades-from-reports",
+      "title": "Сделки в checkpoint зависят от хранения отчётов",
+      "kind": "boundary_leak",
+      "severity": "medium",
+      "state": "save",
+      "description": "Таблица trades строится из reports[-1:] или last_report: если история отчётов не хранится и последнего отчёта нет, сделки в файл не попадут. Состояние сохранения зависит от режима хранения истории.",
+      "mitigation": "Писать сделки отдельным полем состояния, а не выводить из отчёта.",
+      "related_nodes": [
+        "save.save_checkpoint",
+        "save.state_step"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0189"
+    },
+    {
+      "id": "v-stock-values-dict-only",
+      "title": "Стоимость запасов пишется только в dict",
+      "kind": "direct_write",
+      "severity": "low",
+      "state": "stock",
+      "description": "У stock и stock_reserved в native-хранилище есть колонки, а values пишется прямо в dict счёта через set_value (и в Python-fallback, и в ядре). Асимметрия внутри одного владельца.",
+      "mitigation": "Добавить колонку values по аналогии со stock, либо задокументировать как зеркало.",
+      "related_nodes": [
+        "stock.stock_store"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0190"
+    },
+    {
+      "id": "v-account-creation",
+      "title": "Счёт создаётся прямым словарём",
+      "kind": "direct_write",
+      "severity": "info",
+      "state": "money",
+      "description": "EconomyServices.account выставляет balance/stock/values при создании счёта, когда владельцев ещё нет. Это граница импорта/создания, а не runtime-путь.",
+      "mitigation": "Отдельный конструктор счёта, проходящий через владельцев после создания.",
+      "related_nodes": [
+        "money.cash_store",
+        "stock.stock_store"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0191"
+    },
+    {
+      "id": "v-match-driver-callbacks",
+      "title": "match_driver содержит callbacks, но не является входом",
+      "kind": "callback",
+      "severity": "low",
+      "state": "market",
+      "description": "В собранном match_driver.pyx внешний цикл вызывает Python-callback inner и commit на каждого покупателя, однако в production-пути run_buyer/run_buyers привязаны к Python-версиям: модуль остаётся только для диагностики.",
+      "mitigation": "Либо включить драйвер как вход, либо удалить из сборки.",
+      "related_nodes": [
+        "market.match_boundary"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0192"
+    },
+    {
+      "id": "v-callback-quote",
+      "title": "quote_kernel вызывает Python-хуки на каждую котировку",
+      "kind": "callback",
+      "severity": "info",
+      "state": "market",
+      "description": "reference_hook/landed_hook/stock_hook/quoted_hook/signal_hook вызываются из Cython внутри горячего цикла: это осознанная граница, но каждый вызов — переход C→Python.",
+      "mitigation": "Кэшировать результаты хуков на месяц либо считать их нативно.",
+      "related_nodes": [
+        "market.match_boundary"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0193"
+    },
+    {
+      "id": "v-callback-money",
+      "title": "money_kernel вызывает Python-хуки денег и склада",
+      "kind": "callback",
+      "severity": "info",
+      "state": "money",
+      "description": "stock_hook/quote_hook/population_hook/balance_hook/free_cash_hook/transfer_hook/distribute_hook — переходы в Python из native-расчёта.",
+      "mitigation": "Читать нужные величины заранее пакетом (как в serial_step).",
+      "related_nodes": [
+        "money.money_kernel"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0194"
+    },
+    {
+      "id": "v-callback-demand",
+      "title": "demand_kernel вызывает Python-хуки книги",
+      "kind": "callback",
+      "severity": "info",
+      "state": "market",
+      "description": "component_hook/landed_hook/account_hook/offers_hook вызываются из Cython при обходе заявок и предложений.",
+      "mitigation": "Передавать готовые индексы, как это сделано для update_prices.",
+      "related_nodes": [
+        "market.report_history"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0195"
+    },
+    {
+      "id": "v-callback-demography",
+      "title": "settlement_kernel зовёт population_hook по каждому домохозяйству",
+      "kind": "callback",
+      "severity": "info",
+      "state": "settlement",
+      "description": "run_demography читает население через Python-callback в цикле по домохозяйствам каждой провинции.",
+      "mitigation": "Передавать численность массивом в native-вход.",
+      "related_nodes": [
+        "settlement.kernel"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0196"
+    },
+    {
+      "id": "v-callback-monthly",
+      "title": "Драйвер месяца вызывает Python-хуки и фазы",
+      "kind": "callback",
+      "severity": "info",
+      "state": "engine",
+      "description": "monthly_driver собирает хуки месяца и вызывает Python-фазы: единственный обратный переход Cython→Python внутри месяца, но их столько же, сколько фаз осталось в Python.",
+      "mitigation": "Переносить фазы по одной, сохраняя parity-тесты.",
+      "related_nodes": [
+        "engine.monthly_driver",
+        "engine.monthly_hooks"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0197"
+    },
+    {
+      "id": "v-callback-trade",
+      "title": "Сделка — Python-callback на каждую пару заявок",
+      "kind": "callback",
+      "severity": "info",
+      "state": "market",
+      "description": "Обход книги остаётся в Python, commit_trade вызывается на каждую сделку; нативной считается только арифметика объёма.",
+      "mitigation": "Пакетный native-обход книги с журналом сделок, как в serial_step.",
+      "related_nodes": [
+        "market.match_boundary"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0102"
+    },
+    {
+      "id": "v-worldstate-scope",
+      "title": "WorldState существует только в native-месяце",
+      "kind": "boundary_leak",
+      "severity": "info",
+      "state": "engine",
+      "description": "Контейнер WorldState создаётся лениво и открывается только при native_mode=\"cython\": в Python-режиме его нет, поэтому «единый контейнер» не является общим для обоих режимов.",
+      "mitigation": "Либо создавать контейнер всегда, либо явно описать его как native-only.",
+      "related_nodes": [
+        "orders.world_state"
+      ],
+      "confidence": "confirmed",
+      "source_location": "loc-0198"
+    }
+  ],
+  "source_locations": [
+    {
+      "id": "loc-0001",
+      "file": "core/world_service.py",
+      "line": 10,
+      "end_line": null,
+      "symbol": "core.world_service.WorldService",
+      "anchor": "class WorldService",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0002",
+      "file": "core/world_service.py",
+      "line": 240,
+      "end_line": null,
+      "symbol": "core.world_service.WorldService.advance_turn",
+      "anchor": "def advance_turn",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0003",
+      "file": "core/turn_service.py",
+      "line": 11,
+      "end_line": null,
+      "symbol": "core.turn_service.TurnService",
+      "anchor": "class TurnService",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0004",
+      "file": "core/turn_service.py",
+      "line": 51,
+      "end_line": null,
+      "symbol": "core.turn_service.TurnService.finish",
+      "anchor": "def finish",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0005",
+      "file": "core/turn_service.py",
+      "line": 16,
+      "end_line": null,
+      "symbol": "core.turn_service.TurnService._economy",
+      "anchor": "def _economy",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0006",
+      "file": "modules/economy/v3.py",
+      "line": 2888,
+      "end_line": null,
+      "symbol": "modules.economy.v3.monthly_phase",
+      "anchor": "def monthly_phase",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0007",
+      "file": "core/lab.py",
+      "line": 113,
+      "end_line": null,
+      "symbol": "core.lab.execute_experiment",
+      "anchor": "def execute_experiment",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0008",
+      "file": "modules/economy/v3.py",
+      "line": 72,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy",
+      "anchor": "class Economy",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0009",
+      "file": "modules/economy/v3.py",
+      "line": 2805,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.step",
+      "anchor": "def step",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0010",
+      "file": "modules/economy/native/monthly_boundary.py",
+      "line": 21,
+      "end_line": null,
+      "symbol": "modules.economy.native.monthly_boundary",
+      "anchor": "def monthly_step_python",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0011",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 65,
+      "end_line": null,
+      "symbol": "modules.economy.native.monthly_driver.monthly_step",
+      "anchor": "def monthly_step",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0012",
+      "file": "modules/economy/native/monthly_hooks.py",
+      "line": 30,
+      "end_line": null,
+      "symbol": "modules.economy.native.monthly_hooks.MonthlyHooks",
+      "anchor": "class MonthlyHooks",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0013",
+      "file": "modules/economy/native/serial_step.pyx",
+      "line": 131,
+      "end_line": null,
+      "symbol": "modules.economy.native.serial_step",
+      "anchor": "def update_prices",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0014",
+      "file": "modules/economy/native/cash_store.pyx",
+      "line": 71,
+      "end_line": null,
+      "symbol": "modules.economy.native.cash_store.CashStore",
+      "anchor": "cdef class CashStore",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0015",
+      "file": "modules/economy/native/cash_boundary.py",
+      "line": 20,
+      "end_line": null,
+      "symbol": "modules.economy.native.cash_boundary.CashStorePython",
+      "anchor": "class CashStorePython",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0016",
+      "file": "modules/economy/support.py",
+      "line": 147,
+      "end_line": null,
+      "symbol": "modules.economy.support.EconomyServices.transfer",
+      "anchor": "def transfer",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0017",
+      "file": "modules/economy/native/money_boundary.py",
+      "line": 270,
+      "end_line": null,
+      "symbol": "modules.economy.native.money_boundary",
+      "anchor": "def settle(",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0018",
+      "file": "modules/economy/native/money_kernel.pyx",
+      "line": 352,
+      "end_line": null,
+      "symbol": "modules.economy.native.money_kernel",
+      "anchor": "def distribute",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0019",
+      "file": "modules/economy/native/cash_store.pyx",
+      "line": 423,
+      "end_line": null,
+      "symbol": "modules.economy.native.cash_store.CashStore.begin_runtime",
+      "anchor": "def begin_runtime",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0020",
+      "file": "modules/economy/native/stock_store.pyx",
+      "line": 4,
+      "end_line": null,
+      "symbol": "modules.economy.native.stock_store.StockStore",
+      "anchor": "cdef class StockStore",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0021",
+      "file": "modules/economy/native/stock_store_boundary.py",
+      "line": 5,
+      "end_line": null,
+      "symbol": "modules.economy.native.stock_store_boundary.StockStorePython",
+      "anchor": "class StockStorePython",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0022",
+      "file": "modules/economy/native/stock_boundary.py",
+      "line": 35,
+      "end_line": null,
+      "symbol": "modules.economy.native.stock_boundary",
+      "anchor": "def add_stock_python",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0023",
+      "file": "modules/economy/native/stock_kernel.pyx",
+      "line": 127,
+      "end_line": null,
+      "symbol": "modules.economy.native.stock_kernel",
+      "anchor": "def add_stock",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0024",
+      "file": "modules/economy/native/order_store.pyx",
+      "line": 67,
+      "end_line": null,
+      "symbol": "modules.economy.native.order_store.OrderStore",
+      "anchor": "cdef class OrderStore",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0025",
+      "file": "modules/economy/native/order_boundary.py",
+      "line": 31,
+      "end_line": null,
+      "symbol": "modules.economy.native.order_boundary.OrderStorePython",
+      "anchor": "class OrderStorePython",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0026",
+      "file": "modules/economy/native/world_state.pyx",
+      "line": 39,
+      "end_line": null,
+      "symbol": "modules.economy.native.world_state.WorldState",
+      "anchor": "cdef class WorldState",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0027",
+      "file": "modules/economy/v3.py",
+      "line": 2736,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.produce",
+      "anchor": "def produce",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0028",
+      "file": "modules/economy/native/production_boundary.py",
+      "line": 146,
+      "end_line": null,
+      "symbol": "modules.economy.native.production_boundary",
+      "anchor": "def produce",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0029",
+      "file": "modules/economy/native/production_kernel.pyx",
+      "line": 4,
+      "end_line": null,
+      "symbol": "modules.economy.native.production_kernel.calculate_output",
+      "anchor": "def calculate_output",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0030",
+      "file": "modules/economy/v3.py",
+      "line": 1905,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.sell_orders",
+      "anchor": "def sell_orders",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0031",
+      "file": "modules/economy/v3.py",
+      "line": 1533,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.order",
+      "anchor": "def order",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0032",
+      "file": "modules/economy/v3.py",
+      "line": 1582,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.cancel_order",
+      "anchor": "def cancel_order",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0033",
+      "file": "modules/economy/v3.py",
+      "line": 1837,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.match",
+      "anchor": "def match",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0034",
+      "file": "modules/economy/native/match_boundary.py",
+      "line": 121,
+      "end_line": null,
+      "symbol": "modules.economy.native.match_boundary",
+      "anchor": "def run_buyers_python",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0035",
+      "file": "modules/economy/native/match_kernel.pyx",
+      "line": 14,
+      "end_line": null,
+      "symbol": "modules.economy.native.match_kernel.calculate_quantity",
+      "anchor": "def calculate_quantity",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0036",
+      "file": "modules/economy/native/trade_boundary.py",
+      "line": 192,
+      "end_line": null,
+      "symbol": "modules.economy.native.trade_boundary.apply_trade",
+      "anchor": "def apply_trade",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0037",
+      "file": "modules/economy/native/trade_kernel.pyx",
+      "line": 21,
+      "end_line": null,
+      "symbol": "modules.economy.native.trade_kernel.calculate_trade",
+      "anchor": "def calculate_trade",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0038",
+      "file": "modules/economy/v3.py",
+      "line": 2760,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.record_market",
+      "anchor": "def record_market",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0039",
+      "file": "modules/economy/native/report_history_boundary.py",
+      "line": 100,
+      "end_line": null,
+      "symbol": "modules.economy.native.report_history_boundary",
+      "anchor": "def record_market_rows_python",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0040",
+      "file": "modules/economy/v3.py",
+      "line": 2205,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.household_requests",
+      "anchor": "def household_requests",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0041",
+      "file": "modules/economy/v3.py",
+      "line": 1272,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.owner_requests",
+      "anchor": "def owner_requests",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0042",
+      "file": "modules/economy/native/owner_consumption_boundary.py",
+      "line": 58,
+      "end_line": null,
+      "symbol": "modules.economy.native.owner_consumption_boundary",
+      "anchor": "def consume_owner_purchases",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0043",
+      "file": "modules/economy/native/consumption_boundary.py",
+      "line": 37,
+      "end_line": null,
+      "symbol": "modules.economy.native.consumption_boundary",
+      "anchor": "def consume_households",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0044",
+      "file": "modules/economy/native/consumption_kernel.pyx",
+      "line": 5,
+      "end_line": null,
+      "symbol": "modules.economy.native.consumption_kernel.calculate_consumption",
+      "anchor": "def calculate_consumption",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0045",
+      "file": "modules/economy/native/topup_boundary.py",
+      "line": 84,
+      "end_line": null,
+      "symbol": "modules.economy.native.topup_boundary.top_up",
+      "anchor": "def top_up",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0046",
+      "file": "modules/economy/v3.py",
+      "line": 2524,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.project_requests",
+      "anchor": "def project_requests",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0047",
+      "file": "modules/economy/native/project_slot.py",
+      "line": 4,
+      "end_line": null,
+      "symbol": "modules.economy.native.project_slot",
+      "anchor": "def attach",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0048",
+      "file": "modules/economy/v3.py",
+      "line": 1322,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.start_public_project",
+      "anchor": "def start_public_project",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0049",
+      "file": "modules/economy/v3.py",
+      "line": 1420,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.advance_public_projects",
+      "anchor": "def advance_public_projects",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0050",
+      "file": "modules/economy/native/wage_boundary.py",
+      "line": 231,
+      "end_line": null,
+      "symbol": "modules.economy.native.wage_boundary",
+      "anchor": "def advance_public_projects",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0051",
+      "file": "modules/economy/v3.py",
+      "line": 2727,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.finish_projects",
+      "anchor": "def finish_projects",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0052",
+      "file": "modules/economy/native/project_completion_boundary.py",
+      "line": 185,
+      "end_line": null,
+      "symbol": "modules.economy.native.project_completion_boundary",
+      "anchor": "def finish_projects",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0053",
+      "file": "modules/economy/native/material_boundary.py",
+      "line": 123,
+      "end_line": null,
+      "symbol": "modules.economy.native.material_boundary",
+      "anchor": "def reserve_materials",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0054",
+      "file": "modules/economy/native/delivery_boundary.py",
+      "line": 115,
+      "end_line": null,
+      "symbol": "modules.economy.native.delivery_boundary",
+      "anchor": "def request_project_materials",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0055",
+      "file": "modules/economy/v3.py",
+      "line": 2697,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.project_material_requests",
+      "anchor": "def project_material_requests",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0056",
+      "file": "modules/economy/native/cancel_boundary.py",
+      "line": 193,
+      "end_line": null,
+      "symbol": "modules.economy.native.cancel_boundary",
+      "anchor": "def cancel_stalled_project",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0057",
+      "file": "modules/economy/v3.py",
+      "line": 2757,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.settle",
+      "anchor": "def settle",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0058",
+      "file": "modules/economy/native/enterprise_settlement_boundary.py",
+      "line": 334,
+      "end_line": null,
+      "symbol": "modules.economy.native.enterprise_settlement_boundary",
+      "anchor": "def settle_month",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0059",
+      "file": "modules/economy/native/dividend_boundary.py",
+      "line": 236,
+      "end_line": null,
+      "symbol": "modules.economy.native.dividend_boundary",
+      "anchor": "def pay_dividends(",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0060",
+      "file": "modules/economy/v3.py",
+      "line": 1140,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.update_demography",
+      "anchor": "def update_demography",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0061",
+      "file": "modules/economy/native/settlement_boundary.py",
+      "line": 293,
+      "end_line": null,
+      "symbol": "modules.economy.native.settlement_boundary",
+      "anchor": "def run_migration(",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0062",
+      "file": "modules/economy/native/settlement_kernel.pyx",
+      "line": 126,
+      "end_line": null,
+      "symbol": "modules.economy.native.settlement_kernel.run_demography",
+      "anchor": "def run_demography",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0063",
+      "file": "modules/economy/v3.py",
+      "line": 2858,
+      "end_line": null,
+      "symbol": "modules.economy.v3.Economy.validate",
+      "anchor": "def validate",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0064",
+      "file": "core/economy_state.py",
+      "line": 164,
+      "end_line": null,
+      "symbol": "core.economy_state.EconomyState",
+      "anchor": "class EconomyState",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0065",
+      "file": "core/economy_state.py",
+      "line": 356,
+      "end_line": null,
+      "symbol": "core.economy_state.EconomyState.step",
+      "anchor": "def step",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0066",
+      "file": "core/economy_state.py",
+      "line": 340,
+      "end_line": null,
+      "symbol": "core.economy_state.EconomyState.begin_turn",
+      "anchor": "def begin_turn",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0067",
+      "file": "core/economy_state.py",
+      "line": 373,
+      "end_line": null,
+      "symbol": "core.economy_state.EconomyState.flush_structural",
+      "anchor": "def flush_structural",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0068",
+      "file": "core/economy_state.py",
+      "line": 548,
+      "end_line": null,
+      "symbol": "core.economy_state.EconomyState.save_checkpoint",
+      "anchor": "def save_checkpoint",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0069",
+      "file": "core/economy_state.py",
+      "line": 198,
+      "end_line": null,
+      "symbol": "core.economy_state.EconomyState.load_checkpoint",
+      "anchor": "def load_checkpoint",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0070",
+      "file": "core/db.py",
+      "line": 277,
+      "end_line": null,
+      "symbol": "core.db.WorldDB.record_event",
+      "anchor": "def record_event",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0071",
+      "file": "core/turn_service.py",
+      "line": 107,
+      "end_line": null,
+      "symbol": "core.turn_service.TurnService._autosave",
+      "anchor": "def _autosave",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0072",
+      "file": "modules/economy/native/event_buffer_boundary.py",
+      "line": 37,
+      "end_line": null,
+      "symbol": "modules.economy.native.event_buffer_boundary.EventRecorderPython",
+      "anchor": "class EventRecorderPython",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0073",
+      "file": "modules/economy/native/event_writer.py",
+      "line": 148,
+      "end_line": null,
+      "symbol": "modules.economy.native.event_writer.EventWriter",
+      "anchor": "class EventWriter",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0074",
+      "file": "core/world_service.py",
+      "line": 51,
+      "end_line": null,
+      "symbol": "core.world_service.WorldService.save_checkpoint",
+      "anchor": "def save_checkpoint",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0075",
+      "file": "core/world_service.py",
+      "line": 14,
+      "end_line": null,
+      "symbol": "WorldService создаёт TurnService",
+      "anchor": "TurnService(self)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0076",
+      "file": "core/world_service.py",
+      "line": 241,
+      "end_line": null,
+      "symbol": "advance_turn → turns.finish",
+      "anchor": "return self.turns.finish",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0077",
+      "file": "core/turn_service.py",
+      "line": 14,
+      "end_line": null,
+      "symbol": "фазы хода: commands → economy → integrity → snapshot",
+      "anchor": "('economy',self._economy)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0078",
+      "file": "core/turn_service.py",
+      "line": 18,
+      "end_line": null,
+      "symbol": "monthly_phase(service, ctx)",
+      "anchor": "monthly_phase(self.service, ctx)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0079",
+      "file": "modules/economy/v3.py",
+      "line": 2897,
+      "end_line": null,
+      "symbol": "state.step()",
+      "anchor": "report = state.step()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0080",
+      "file": "core/economy_state.py",
+      "line": 357,
+      "end_line": null,
+      "symbol": "engine.step(planning_mode)",
+      "anchor": "self.engine.step",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0081",
+      "file": "modules/economy/v3.py",
+      "line": 2844,
+      "end_line": null,
+      "symbol": "monthly_boundary.monthly_step(...)",
+      "anchor": "monthly_boundary.monthly_step",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0082",
+      "file": "modules/economy/native/monthly_boundary.py",
+      "line": 259,
+      "end_line": null,
+      "symbol": "monthly_step = _driver.monthly_step (при собранном расширении)",
+      "anchor": "monthly_step = _driver.monthly_step",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0083",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 97,
+      "end_line": null,
+      "symbol": "hooks = _make_hooks(engine)",
+      "anchor": "hooks = _make_hooks(engine)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0084",
+      "file": "modules/economy/v3.py",
+      "line": 2841,
+      "end_line": null,
+      "symbol": "cash_store.begin_runtime()",
+      "anchor": "self.cash_store.begin_runtime()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0085",
+      "file": "modules/economy/v3.py",
+      "line": 2855,
+      "end_line": null,
+      "symbol": "_event_writer.drain_recorder(...)",
+      "anchor": "_event_writer.drain_recorder",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0086",
+      "file": "modules/economy/v3.py",
+      "line": 1494,
+      "end_line": null,
+      "symbol": "Economy.cash_store → CashStore",
+      "anchor": "_cash.CashStore(accounts)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0087",
+      "file": "modules/economy/support.py",
+      "line": 163,
+      "end_line": null,
+      "symbol": "cash.move_balance(...)",
+      "anchor": "cash.move_balance",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0088",
+      "file": "modules/economy/native/money_boundary.py",
+      "line": 278,
+      "end_line": null,
+      "symbol": "run_settle → money_kernel",
+      "anchor": "run_settle(MoneyHooks(engine)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0089",
+      "file": "modules/economy/v3.py",
+      "line": 918,
+      "end_line": null,
+      "symbol": "Economy.stock_store → StockStore",
+      "anchor": "def stock_store",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0090",
+      "file": "modules/economy/native/stock_boundary.py",
+      "line": 122,
+      "end_line": null,
+      "symbol": "add_stock = _kernel.add_stock",
+      "anchor": "_kernel = load_stock_kernel()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0091",
+      "file": "modules/economy/native/stock_kernel.pyx",
+      "line": 133,
+      "end_line": null,
+      "symbol": "stock_store.add_stock / set_value",
+      "anchor": "stock_store.add_stock",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0092",
+      "file": "modules/economy/native/production_boundary.py",
+      "line": 98,
+      "end_line": null,
+      "symbol": "engine.use_stock → StockStore",
+      "anchor": "engine.use_stock",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0093",
+      "file": "modules/economy/v3.py",
+      "line": 1473,
+      "end_line": null,
+      "symbol": "Economy.order_store → OrderStore",
+      "anchor": "_order.OrderStore(orders)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0094",
+      "file": "modules/economy/v3.py",
+      "line": 1557,
+      "end_line": null,
+      "symbol": "order_store.append(o)",
+      "anchor": "self.order_store.append(o)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0095",
+      "file": "modules/economy/v3.py",
+      "line": 1554,
+      "end_line": null,
+      "symbol": "add_reserved_cash (buy)",
+      "anchor": "self.cash_store.add_reserved_cash",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0096",
+      "file": "modules/economy/v3.py",
+      "line": 1556,
+      "end_line": null,
+      "symbol": "add_reserved (sell)",
+      "anchor": "self.stock_store.add_reserved",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0097",
+      "file": "modules/economy/v3.py",
+      "line": 1591,
+      "end_line": null,
+      "symbol": "release_reserved_cash",
+      "anchor": "self.cash_store.release_reserved_cash",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0098",
+      "file": "modules/economy/v3.py",
+      "line": 1377,
+      "end_line": null,
+      "symbol": "release_reserved",
+      "anchor": "self.stock_store.release_reserved",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0099",
+      "file": "modules/economy/v3.py",
+      "line": 1530,
+      "end_line": null,
+      "symbol": "WorldState перепривязывается к OrderStore",
+      "anchor": "state = self._world_state = _world.WorldState()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0100",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 159,
+      "end_line": null,
+      "symbol": "sells = engine.sell_orders(...)",
+      "anchor": "engine.sell_orders(exclude=lagged_firms)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0101",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 223,
+      "end_line": null,
+      "symbol": "_match.run_buyers(engine, buys, ...)",
+      "anchor": "_match.run_buyers",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0102",
+      "file": "modules/economy/native/match_boundary.py",
+      "line": 124,
+      "end_line": null,
+      "symbol": "commit=commit_trade вызывается на каждую сделку",
+      "anchor": "run_buyer_python(owner, buy, sells, eps, commit, inner, local_only)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0103",
+      "file": "modules/economy/native/match_boundary.py",
+      "line": 182,
+      "end_line": null,
+      "symbol": "inner=run_match → calculate_quantity (kernel)",
+      "anchor": "def run_match",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0104",
+      "file": "modules/economy/native/trade_boundary.py",
+      "line": 315,
+      "end_line": null,
+      "symbol": "calculate_trade (kernel) → apply_trade",
+      "anchor": "_kernel.calculate_trade(prepared, eps)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0105",
+      "file": "modules/economy/v3.py",
+      "line": 2766,
+      "end_line": null,
+      "symbol": "_report_history.record_market_rows(...)",
+      "anchor": "record_market_rows(",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0106",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 242,
+      "end_line": null,
+      "symbol": "engine.produce(existing, planning_sells)",
+      "anchor": "engine.produce(existing, planning_sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0107",
+      "file": "modules/economy/v3.py",
+      "line": 2741,
+      "end_line": null,
+      "symbol": "_production.produce(self, existing)",
+      "anchor": "_production.produce",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0108",
+      "file": "modules/economy/native/production_boundary.py",
+      "line": 169,
+      "end_line": null,
+      "symbol": "calculate = production_kernel.calculate_output",
+      "anchor": "_kernel = load_production_kernel()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0109",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 172,
+      "end_line": null,
+      "symbol": "engine.household_requests(...) × basic/extra",
+      "anchor": "engine.household_requests(households, engine.cfg['basic_needs']",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0110",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 175,
+      "end_line": null,
+      "symbol": "engine.owner_requests(sells)",
+      "anchor": "engine.owner_requests(sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0111",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 252,
+      "end_line": null,
+      "symbol": "_consumption.consume_households(...)",
+      "anchor": "_consumption.consume_households",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0112",
+      "file": "modules/economy/native/consumption_boundary.py",
+      "line": 47,
+      "end_line": null,
+      "symbol": "calculate_consumption (kernel)",
+      "anchor": "def load_consumption_kernel",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0113",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 226,
+      "end_line": null,
+      "symbol": "engine.household_top_up(...)",
+      "anchor": "engine.household_top_up engine.household_top_up(households, sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0114",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 194,
+      "end_line": null,
+      "symbol": "engine.project_requests(sells) (Python-ветка)",
+      "anchor": "engine.project_requests(sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0115",
+      "file": "modules/economy/v3.py",
+      "line": 2721,
+      "end_line": null,
+      "symbol": "_delivery.request_project_materials(...)",
+      "anchor": "_delivery.request_project_materials _delivery.request_project_materials(self, a, sells, EPS, store, distance)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0116",
+      "file": "modules/economy/native/delivery_boundary.py",
+      "line": 106,
+      "end_line": null,
+      "symbol": "reserve_materials (закупка материалов)",
+      "anchor": "reserve_materials(",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0117",
+      "file": "modules/economy/v3.py",
+      "line": 2707,
+      "end_line": null,
+      "symbol": "_cancel.cancel_stalled_project(...)",
+      "anchor": "_cancel.cancel_stalled_project _cancel.cancel_stalled_project(self, a, EPS)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0118",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 243,
+      "end_line": null,
+      "symbol": "engine.advance_public_projects()",
+      "anchor": "engine.advance_public_projects()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0119",
+      "file": "modules/economy/v3.py",
+      "line": 1426,
+      "end_line": null,
+      "symbol": "_wage.advance_public_projects(self)",
+      "anchor": "_wage.advance_public_projects",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0120",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 244,
+      "end_line": null,
+      "symbol": "engine.finish_projects()",
+      "anchor": "engine.finish_projects()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0121",
+      "file": "modules/economy/v3.py",
+      "line": 2734,
+      "end_line": null,
+      "symbol": "_project_completion.finish_projects(self)",
+      "anchor": "_project_completion.finish_projects",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0122",
+      "file": "modules/economy/v3.py",
+      "line": 559,
+      "end_line": null,
+      "symbol": "attach(account, project) — единственная точка записи project",
+      "anchor": "_project_slot.attach(account, project)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0123",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 268,
+      "end_line": null,
+      "symbol": "engine.settle(list(enterprises), households)",
+      "anchor": "engine.settle(list(engine.enterprises.values()), households)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0124",
+      "file": "modules/economy/v3.py",
+      "line": 2758,
+      "end_line": null,
+      "symbol": "_enterprise_settlement.settle_month(...)",
+      "anchor": "_enterprise_settlement.settle_month",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0125",
+      "file": "modules/economy/native/enterprise_settlement_boundary.py",
+      "line": 345,
+      "end_line": null,
+      "symbol": "money_boundary.settle(...) — второй цикл",
+      "anchor": "money_boundary.settle",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0126",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 269,
+      "end_line": null,
+      "symbol": "engine.pay_dividends(planning_sells)",
+      "anchor": "engine.pay_dividends(planning_sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0127",
+      "file": "modules/economy/native/dividend_boundary.py",
+      "line": 98,
+      "end_line": null,
+      "symbol": "hooks.transfer(...) на каждую выплату",
+      "anchor": "def transfer(self, sender, recipient, amount, reason)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0128",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 270,
+      "end_line": null,
+      "symbol": "engine.update_demography()",
+      "anchor": "engine.update_demography()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0129",
+      "file": "modules/economy/native/settlement_boundary.py",
+      "line": 129,
+      "end_line": null,
+      "symbol": "run_demography (kernel) с population_hook",
+      "anchor": "def run_demography_python",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0130",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 292,
+      "end_line": null,
+      "symbol": "engine.validate(before)",
+      "anchor": "engine.validate(before)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0131",
+      "file": "modules/economy/v3.py",
+      "line": 2865,
+      "end_line": null,
+      "symbol": "_settlement.validate(self, EPS)",
+      "anchor": "_settlement.validate(self, EPS)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0132",
+      "file": "core/turn_service.py",
+      "line": 66,
+      "end_line": null,
+      "symbol": "state.begin_turn()",
+      "anchor": "state.begin_turn()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0133",
+      "file": "core/economy_state.py",
+      "line": 342,
+      "end_line": null,
+      "symbol": "self._undo = engine.export_state()",
+      "anchor": "self.engine.export_state()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0134",
+      "file": "core/turn_service.py",
+      "line": 84,
+      "end_line": null,
+      "symbol": "state.flush_structural(self.db)",
+      "anchor": "state.flush_structural(self.db)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0135",
+      "file": "core/economy_state.py",
+      "line": 396,
+      "end_line": null,
+      "symbol": "db.create_entity / db.update_social_groups",
+      "anchor": "db.update_social_groups(",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0136",
+      "file": "core/world_service.py",
+      "line": 56,
+      "end_line": null,
+      "symbol": "EconomyState.save_checkpoint(state, destination)",
+      "anchor": "EconomyState.save_checkpoint(state, destination)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0137",
+      "file": "core/economy_state.py",
+      "line": 589,
+      "end_line": null,
+      "symbol": "schema keep_reports читается загрузкой",
+      "anchor": "keep_reports=bool(self.keep_reports)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0138",
+      "file": "core/economy_state.py",
+      "line": 608,
+      "end_line": null,
+      "symbol": "checkpoint_path/checkpoint_seconds пишет сам EconomyState",
+      "anchor": "self.checkpoint_path = path",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0139",
+      "file": "core/lab.py",
+      "line": 128,
+      "end_line": null,
+      "symbol": "state = EconomyState.load_checkpoint(directory/\"economy\", ...)",
+      "anchor": "EconomyState.load_checkpoint(directory/",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0140",
+      "file": "core/lab.py",
+      "line": 143,
+      "end_line": null,
+      "symbol": "service.advance_turn(...) на каждый месяц",
+      "anchor": "service.advance_turn(command_id=f'lab-",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0141",
+      "file": "core/lab.py",
+      "line": 157,
+      "end_line": null,
+      "symbol": "state.save_checkpoint(directory/\"economy\") — один раз за эксперимент",
+      "anchor": "state.save_checkpoint(directory/'economy')",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0142",
+      "file": "modules/economy/v3.py",
+      "line": 2695,
+      "end_line": null,
+      "symbol": "self.project_material_requests(sells, due, investors)",
+      "anchor": "self.project_material_requests(sells, due, investors)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0143",
+      "file": "core/economy_state.py",
+      "line": 359,
+      "end_line": null,
+      "symbol": "last_report/reports обновляет EconomyState",
+      "anchor": "self.last_report = report",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0144",
+      "file": "modules/economy/v3.py",
+      "line": 2807,
+      "end_line": null,
+      "symbol": "Economy.step: проверка режимов",
+      "anchor": "native_mode not in",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0145",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 106,
+      "end_line": null,
+      "symbol": "activate_rules, reset_report, meta[\"month\"] += 1",
+      "anchor": "engine.meta['month'] += 1",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0146",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 118,
+      "end_line": null,
+      "symbol": "hooks.reset_month_reserves(accounts)",
+      "anchor": "hooks.reset_month_reserves(engine.accounts)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0147",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 126,
+      "end_line": null,
+      "symbol": "reset_enterprises(existing)",
+      "anchor": "reset_enterprises(existing)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0148",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 143,
+      "end_line": null,
+      "symbol": "update_prices()",
+      "anchor": "engine.update_prices()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0149",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 153,
+      "end_line": null,
+      "symbol": "prepare_recovery_quotes()",
+      "anchor": "engine.prepare_recovery_quotes()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0150",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 167,
+      "end_line": null,
+      "symbol": "households = engine.shuffled(...)",
+      "anchor": "households = engine.shuffled(",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0151",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 173,
+      "end_line": null,
+      "symbol": "household_requests(extra_needs)",
+      "anchor": "engine.household_requests(households, engine.cfg['extra_needs']",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0152",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 177,
+      "end_line": null,
+      "symbol": "recover_enterprises(sells)",
+      "anchor": "engine.recover_enterprises(sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0153",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 179,
+      "end_line": null,
+      "symbol": "public_project_requests(sells)",
+      "anchor": "engine.public_project_requests(sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0154",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 203,
+      "end_line": null,
+      "symbol": "plan_enterprises(existing, sells)",
+      "anchor": "engine.plan_enterprises(existing, sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0155",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 216,
+      "end_line": null,
+      "symbol": "match(buy, sells, local_only=True) для базовых нужд",
+      "anchor": "engine.match(buy, sells, local_only=True)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0156",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 224,
+      "end_line": null,
+      "symbol": "commit_trade на каждую сделку (callback)",
+      "anchor": "_trade.commit_trade",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0157",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 227,
+      "end_line": null,
+      "symbol": "record_market()",
+      "anchor": "engine.record_market()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0158",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 236,
+      "end_line": null,
+      "symbol": "hooks.expire_orders()",
+      "anchor": "hooks.expire_orders()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0159",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 245,
+      "end_line": null,
+      "symbol": "consume_owner_purchases()",
+      "anchor": "engine.consume_owner_purchases()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0160",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 263,
+      "end_line": null,
+      "symbol": "update_sales_history / update_stock_sales_history",
+      "anchor": "_report_history.update_sales_history(engine, eps)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0161",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 267,
+      "end_line": null,
+      "symbol": "hooks.protect_balances(accounts)",
+      "anchor": "hooks.protect_balances(engine.accounts)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0162",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 271,
+      "end_line": null,
+      "symbol": "apply_migration()",
+      "anchor": "engine.apply_migration()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0163",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 272,
+      "end_line": null,
+      "symbol": "hooks.apply_project_reserves(...)",
+      "anchor": "hooks.apply_project_reserves",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0164",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 281,
+      "end_line": null,
+      "symbol": "summarize(prior_cash)",
+      "anchor": "engine.summarize(prior_cash)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0165",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 287,
+      "end_line": null,
+      "symbol": "build_report_aggregates(...)",
+      "anchor": "_report_history.build_report_aggregates",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0166",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 298,
+      "end_line": null,
+      "symbol": "_record_report_channels(engine, detail)",
+      "anchor": "_record_report_channels(engine, detail)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0167",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 302,
+      "end_line": null,
+      "symbol": "build_causal_events()",
+      "anchor": "engine.build_causal_events()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0168",
+      "file": "modules/economy/v3.py",
+      "line": 2851,
+      "end_line": null,
+      "symbol": "cash_store.end_runtime(check=completed)",
+      "anchor": "self.cash_store.end_runtime(check=completed)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0169",
+      "file": "modules/economy/v3.py",
+      "line": 2880,
+      "end_line": null,
+      "symbol": "db.record_event(economy_month)",
+      "anchor": "service.db.record_event",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0170",
+      "file": "core/turn_service.py",
+      "line": 91,
+      "end_line": null,
+      "symbol": "save_turn_result + событие turn_advanced",
+      "anchor": "save_turn_result",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0171",
+      "file": "core/turn_service.py",
+      "line": 102,
+      "end_line": null,
+      "symbol": "_autosave(state) — по умолчанию выключен",
+      "anchor": "self._autosave(state)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0172",
+      "file": "modules/economy/v3.py",
+      "line": 2815,
+      "end_line": null,
+      "symbol": "Economy.step: native_mode == \"cython\"",
+      "anchor": "load_serial_step()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0173",
+      "file": "modules/economy/v3.py",
+      "line": 2816,
+      "end_line": null,
+      "symbol": "require_native_monthly()",
+      "anchor": "monthly_boundary.require_native_monthly()",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0174",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 120,
+      "end_line": null,
+      "symbol": "stock_store.sync()",
+      "anchor": "engine.stock_store.sync()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0175",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 133,
+      "end_line": null,
+      "symbol": "world.begin_step(engine)",
+      "anchor": "world.begin_step(engine)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0176",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 141,
+      "end_line": null,
+      "symbol": "run_native_public_projects(engine) — один pack/call/apply",
+      "anchor": "run_native_public_projects(engine)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0177",
+      "file": "modules/economy/native/update_prices_boundary.py",
+      "line": 1176,
+      "end_line": null,
+      "symbol": "public_project_preparation(data, rng)",
+      "anchor": "native.public_project_preparation(data, engine.rng)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0178",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 157,
+      "end_line": null,
+      "symbol": "sells = native_market[\"sells\"]",
+      "anchor": "sells = engine.native_market['sells']",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0179",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 164,
+      "end_line": null,
+      "symbol": "households = native_households[\"households\"]",
+      "anchor": "engine.native_households['households']",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0180",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 192,
+      "end_line": null,
+      "symbol": "run_native_project_requests(engine, sells)",
+      "anchor": "run_native_project_requests(engine, sells)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0181",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 322,
+      "end_line": null,
+      "symbol": "world.end_step(engine, completed=completed)",
+      "anchor": "world.end_step(engine, completed=completed)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0182",
+      "file": "modules/economy/v3.py",
+      "line": 1350,
+      "end_line": null,
+      "symbol": "Муниципальные стройки пишутся в счёт напрямую",
+      "anchor": "account['public_projects'] = [project]",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0183",
+      "file": "modules/economy/native/wage_boundary.py",
+      "line": 36,
+      "end_line": null,
+      "symbol": "Стройка переписывает public_projects из wage_boundary",
+      "anchor": "account['public_projects'] = self.remaining",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0184",
+      "file": "modules/economy/native/wage_boundary.py",
+      "line": 76,
+      "end_line": null,
+      "symbol": "Поля проекта меняются без владельца",
+      "anchor": "project['work_done'] += workers",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0185",
+      "file": "modules/economy/native/plan_boundary.py",
+      "line": 136,
+      "end_line": null,
+      "symbol": "Производственный план пишется прямо в предприятие",
+      "anchor": "e['production_plan'] = plan",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0186",
+      "file": "modules/economy/native/production_boundary.py",
+      "line": 107,
+      "end_line": null,
+      "symbol": "Результат выпуска пишется прямо в предприятие",
+      "anchor": "e.update(status='active', workers=workers",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0187",
+      "file": "modules/economy/v3.py",
+      "line": 1400,
+      "end_line": null,
+      "symbol": "Метаданные заявки пишутся мимо OrderStore",
+      "anchor": "order['project_id'] = project['id']",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0188",
+      "file": "modules/economy/native/report_history_boundary.py",
+      "line": 122,
+      "end_line": null,
+      "symbol": "unmet_solvent пишется и ядром, и Python-эталоном",
+      "anchor": "o['unmet_solvent'] = min(o['remaining']",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0189",
+      "file": "core/economy_state.py",
+      "line": 522,
+      "end_line": null,
+      "symbol": "Сделки в checkpoint зависят от хранения отчётов",
+      "anchor": "for report in (self.reports[-1:] or ([self.last_report]",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0190",
+      "file": "modules/economy/native/stock_store_boundary.py",
+      "line": 58,
+      "end_line": null,
+      "symbol": "Стоимость запасов пишется только в dict",
+      "anchor": "self.accounts[aid]['values'][good] = value",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0191",
+      "file": "modules/economy/support.py",
+      "line": 143,
+      "end_line": null,
+      "symbol": "Счёт создаётся прямым словарём",
+      "anchor": "dict(id=identity, kind=kind, balance=float(balance)",
+      "language": "python",
+      "verified": true
+    },
+    {
+      "id": "loc-0192",
+      "file": "modules/economy/native/match_driver.pyx",
+      "line": 84,
+      "end_line": null,
+      "symbol": "match_driver содержит callbacks, но не является входом",
+      "anchor": "inner(owner, buy, options, sells, eps, cash, store, commit)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0193",
+      "file": "modules/economy/native/quote_kernel.pyx",
+      "line": 116,
+      "end_line": null,
+      "symbol": "quote_kernel вызывает Python-хуки на каждую котировку",
+      "anchor": "reference = reference_hook()",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0194",
+      "file": "modules/economy/native/money_kernel.pyx",
+      "line": 134,
+      "end_line": null,
+      "symbol": "money_kernel вызывает Python-хуки денег и склада",
+      "anchor": "missing = _max0(quantity-stock_hook(good)-ordered)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0195",
+      "file": "modules/economy/native/demand_kernel.pyx",
+      "line": 113,
+      "end_line": null,
+      "symbol": "demand_kernel вызывает Python-хуки книги",
+      "anchor": "component = component_hook(order['tile_id'])",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0196",
+      "file": "modules/economy/native/settlement_kernel.pyx",
+      "line": 90,
+      "end_line": null,
+      "symbol": "settlement_kernel зовёт population_hook по каждому домохозяйству",
+      "anchor": "population_hook(account)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0197",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 46,
+      "end_line": null,
+      "symbol": "Драйвер месяца вызывает Python-хуки и фазы",
+      "anchor": "cdef object _call(object fn, object engine)",
+      "language": "cython",
+      "verified": true
+    },
+    {
+      "id": "loc-0198",
+      "file": "modules/economy/native/monthly_driver.pyx",
+      "line": 131,
+      "end_line": null,
+      "symbol": "WorldState существует только в native-месяце",
+      "anchor": "world = engine.world_state if native_mode == 'cython' else None",
+      "language": "cython",
+      "verified": true
+    }
+  ],
+  "stats": {
+    "nodes": 74,
+    "edges": 73,
+    "domains": 12,
+    "owners": 6,
+    "violations": 18,
+    "source_locations": 198,
+    "dangling_nodes": []
+  }
+}
