@@ -190,11 +190,14 @@ cpdef api object cover_demand_from_books(object owner, object price, object grou
                            dict books, dict remaining, object eps):
     """Покрыть спрос по готовым книгам с локальными остатками прогноза."""
     cdef dict cursors = {}
+    # Общий для покупателей префикс исчерпанных офферов только этого прогноза.
+    cdef dict prefixes = {}
     cdef _OfferIterator cursor
     cdef object demand = 0.0
     cdef object participant, tile, order_price, limit, freight, volume
     cdef object landed, row, sell, sell_id, covered
-    cdef Py_ssize_t index
+    cdef object book_key
+    cdef Py_ssize_t index, first, start
     for participant, tile, order_price, limit, freight, volume in groups:
         if participant == owner or limit+eps < price:
             continue
@@ -204,7 +207,10 @@ cpdef api object cover_demand_from_books(object owner, object price, object grou
             cursor._begin()
             cursors[participant] = cursor
         landed = price+freight
-        for index in range(cursor._index, cursor._stop):
+        book_key = id(cursor._book)
+        first = prefixes.get(book_key, cursor._index)
+        start = first
+        for index in range(first, cursor._stop):
             row = cursor._options[index]
             sell = row[1]
             if sell['participant'] == participant or not _is_live(
@@ -218,6 +224,10 @@ cpdef api object cover_demand_from_books(object owner, object price, object grou
             covered = min(volume, remaining[sell_id])
             volume -= covered
             remaining[sell_id] -= covered
+            if index == first and remaining[sell_id] == 0:
+                first += 1
+        if first != start:
+            prefixes[book_key] = first
         demand += volume
     return demand
 
