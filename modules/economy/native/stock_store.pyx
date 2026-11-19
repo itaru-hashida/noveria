@@ -74,6 +74,30 @@ cdef class StockStore:
             self.accounts[aid]['stock_reserved'] = self.reserved[aid] = {}
         return self.reserved[aid]
 
+    def snapshot_good(self, aid, good):
+        """Снять значения и наличие ключей для отката одной сделки."""
+        account = self._account(aid)
+        stock = self.stock[aid]
+        reserved = self.reserved[aid]
+        return (good in stock, stock.get(good), 'stock_reserved' in account,
+                good in reserved, reserved.get(good))
+
+    def restore_good(self, aid, good, snapshot):
+        """Восстановить количество, резерв и исходную форму словарей."""
+        stock_present, quantity, has_reserves, reserved_present, reserved = snapshot
+        account = self._account(aid)
+        if stock_present:
+            self.stock[aid][good] = quantity
+        else:
+            self.stock[aid].pop(good, None)
+        if not has_reserves:
+            account.pop('stock_reserved', None)
+            self.reserved[aid] = {}
+        elif reserved_present:
+            self.ensure_reserved(aid)[good] = reserved
+        else:
+            self.ensure_reserved(aid).pop(good, None)
+
     def sync(self):
         self._load()
 

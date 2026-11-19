@@ -1,10 +1,25 @@
 from copy import deepcopy
 
-from modules.economy.native.stock_store_boundary import StockStore
+from modules.economy.native.stock_store_boundary import StockStore, StockStorePython
 
 
 def accounts():
     return {'a': {'id': 'a', 'stock': {'wood': 3}, 'stock_reserved': {'wood': 1}}}
+
+
+def test_stock_restore_preserves_missing_keys_and_existing_values():
+    for store_type in (StockStore, StockStorePython):
+        for original in ({'stock': {}}, {'stock': {'wood': 0}, 'stock_reserved': {}},
+                         {'stock': {'wood': 3}, 'stock_reserved': {'wood': 1}}):
+            data = {'a': deepcopy(original)}
+            store = store_type(data)
+            saved = store.snapshot_good('a', 'wood')
+            store.set_stock('a', 'wood', 7.0)
+            store.set_reserved('a', 'wood', 8.0)
+            store.restore_good('a', 'wood', saved)
+            assert data['a'] == original
+            assert store.get_stock('a', 'wood') == original['stock'].get('wood', 0)
+            assert store.get_reserved('a', 'wood') == original.get('stock_reserved', {}).get('wood', 0)
 
 
 def test_stock_store_uses_live_dicts():

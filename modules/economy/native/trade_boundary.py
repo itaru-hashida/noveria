@@ -58,14 +58,7 @@ class _TradeTransaction(object):
             account = owner.accounts[account_id]
             self.cash[account_id] = (owner.cash_store.get_balance(account_id),
                                      owner.cash_store.get_reserved_cash(account_id))
-            stock_values = account['stock']
-            reserved_field_present = 'stock_reserved' in account
-            reserved_values = account.get('stock_reserved', {})
-            self.stock[account_id] = (stock_values, good in stock_values,
-                                      stock_values.get(good), reserved_values,
-                                      good in reserved_values,
-                                      reserved_values.get(good),
-                                      reserved_field_present)
+            self.stock[account_id] = stock_store.snapshot_good(account_id, good)
             values = account.get('values', {})
             self.values[account_id] = (values, good in values, values.get(good))
             if account_id == buyer_id and buy['purpose'] == 'Строительные материалы':
@@ -111,20 +104,7 @@ class _TradeTransaction(object):
             cash.set_balance(account_id, balance)
             cash.set_reserved_cash(account_id, reserved)
         for account_id, saved in self.stock.items():
-            (stock_values, stock_present, quantity, reserved_values,
-             reserved_present, reserved, reserved_field_present) = saved
-            stock.set_stock(account_id, self.buy['good'], quantity)
-            stock.set_reserved(account_id, self.buy['good'], reserved)
-            if stock_present:
-                stock_values[self.buy['good']] = quantity
-            else:
-                stock_values.pop(self.buy['good'], None)
-            if reserved_present:
-                reserved_values[self.buy['good']] = reserved
-            else:
-                reserved_values.pop(self.buy['good'], None)
-            if not reserved_field_present:
-                owner.accounts[account_id].pop('stock_reserved', None)
+            stock.restore_good(account_id, self.buy['good'], saved)
             values, had_value, previous = self.values[account_id]
             if had_value:
                 values[ self.buy['good']] = previous
