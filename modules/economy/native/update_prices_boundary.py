@@ -687,6 +687,7 @@ def pack_update_prices(engine):
         enterprise_sales_forecast=state.data['enterprise_sales_forecast'],
         enterprise_sold_now=_float64(_update_sold_now(engine, enterprises)),
         enterprise_history_count=state.data['enterprise_history_count'],
+        enterprise_history_average=state.data['enterprise_history_average'],
         enterprise_history_sold=state.data['enterprise_history_sold'],
         enterprise_history_output=state.data['enterprise_history_output'],
         enterprise_previous_output=state.data['enterprise_previous_output'],

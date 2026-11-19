@@ -115,3 +115,28 @@ def test_compare_baseline_mode_passes_without_manual_paths():
     """``--compare-baseline`` проходит на текущей ветке без ручных путей."""
     assert parity.BASELINE == BASELINE
     assert parity.main(['--compare-baseline']) == 0
+
+
+def test_mixed_sales_history_preserves_month_five_orders_and_trades(tmp_path):
+    from modules.economy.native import monthly_boundary
+
+    if not monthly_boundary.NATIVE_MONTHLY_DRIVER:
+        pytest.skip('Cython-драйвер месяца не собран')
+
+    rows = {}
+    for mode in MODES:
+        directory = tmp_path / mode
+        directory.mkdir()
+        db, service = parity.sr.build_world(24963, directory, report_detail='standard')
+        try:
+            engine = service.economy_state().engine
+            for _ in range(5):
+                report = engine.step(native_mode=mode)
+            order = next(o for o in report['orders'] if o['id'] == '5-1363')
+            trade = next(t for t in report['trades'] if t['buy_order'] == order['id'])
+            assert order['quantity'] == trade['quantity'] == 6.459613333333334
+            rows[mode] = (parity.digest(report['orders']), parity.digest(report['trades']),
+                          engine.rng.getstate())
+        finally:
+            db.close()
+    assert rows['off'] == rows['cython']

@@ -298,6 +298,8 @@ cdef class NativeUpdateState:
             self._data, 'enterprise_previous_output', (n,), _state_np.float64, 0)
         cdef double[:, ::1] history_sold = _state_buffer(
             self._data, 'enterprise_history_sold', (n, 3), _state_np.float64, 0)
+        cdef double[::1] history_average = _state_buffer(
+            self._data, 'enterprise_history_average', (n,), _state_np.float64, 0)
         cdef double[:, ::1] history_output = _state_buffer(
             self._data, 'enterprise_history_output', (n, 3), _state_np.float64, 0)
         cdef unsigned char[:, ::1] history_limited = _state_buffer(
@@ -312,7 +314,7 @@ cdef class NativeUpdateState:
         cdef unsigned char[::1] resource_ok = _state_buffer(
             self._data, 'enterprise_resource_ok', (n,), _state_np.uint8, 0)
         cdef dict e, row, recipe
-        cdef list history
+        cdef list history, sold_values
         cdef object good, status, resource
         cdef double best, candidate, default
         cdef bint found
@@ -346,11 +348,16 @@ cdef class NativeUpdateState:
             else:
                 start = 0
             history_count[i] = count
+            sold_values = []
             for k in range(count):
                 row = history[start+k]
-                history_sold[i, k] = row.get('sold', 0)
+                sold_values.append(row.get('sold', 0))
+                history_sold[i, k] = sold_values[k]
                 history_output[i, k] = row.get('output', 0)
                 history_limited[i, k] = 1 if row.get('input_limited') else 0
+            # Сумма на исходных int/float: float64 меняет момент начала
+            # компенсации в sum() и может сдвинуть результат на один ULP.
+            history_average[i] = sum(sold_values)/count if count else 0.0
             for k in range(count, 3):
                 history_sold[i, k] = 0.0
                 history_output[i, k] = 0.0

@@ -1097,7 +1097,7 @@ def recover_enterprises(dict data, object rng):
     cdef double[::1] sales_forecast = data['enterprise_sales_forecast']
     cdef double[::1] sold_now = data['enterprise_sold_now']
     cdef int[::1] history_count = data['enterprise_history_count']
-    cdef double[:, ::1] history_sold = data['enterprise_history_sold']
+    cdef double[::1] history_average = data['enterprise_history_average']
     cdef unsigned char[::1] suspended = data['enterprise_suspended']
     cdef unsigned char[::1] closed = data['enterprise_closed']
     cdef int[::1] available_from = data['enterprise_available_from']
@@ -1273,14 +1273,7 @@ def recover_enterprises(dict data, object rng):
                 share = final_quantity/quantity if quantity > eps else (1.0 if consumer[good] else 0.0)
                 quote_net = price*(1-tax*share)
             if history_count[e]:
-                raw_hi = 0.0; raw_lo = 0.0
-                for k in range(history_count[e]):
-                    item = history_sold[e, k]
-                    next_hi = raw_hi+item
-                    if abs(raw_hi) >= abs(item): raw_lo += (raw_hi-next_hi)+item
-                    else: raw_lo += (item-next_hi)+raw_hi
-                    raw_hi = next_hi
-                own = (raw_hi+raw_lo)/history_count[e]
+                own = history_average[e]
             else:
                 own = sales_forecast[e]
             demand = _reachable_demand(e, account, good, enterprise_tile[e], price,
