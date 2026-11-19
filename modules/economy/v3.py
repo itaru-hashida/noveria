@@ -124,10 +124,14 @@ class Economy(EconomyServices):
         return detail
 
     def reset_report(self):
-        # Рыночные кэши живут строго один отчётный месяц. Это также нужно
-        # лабораторным сценариям, которые вручную начинают следующий месяц.
+        # Книги живут один отчётный месяц. Доставка зависит от сети и
+        # констант контента, поэтому её кэш переживает смену отчёта.
+        # Проверяем и ручные правки формы графа до первого cache hit.
+        if self.__dict__.get('_landed_cache') and (
+                self.graph.number_of_nodes(), self.graph.number_of_edges()
+        ) != self._route_graph_shape:
+            self.invalidate_routes()
         self.clear_market_books()
-        self.invalidate_landed_cache()
         self.invalidate_production_outlook_cache()
         self.invalidate_stock_sales_cache()
         for key in ('_customer_order_index', '_physical_stock_totals',

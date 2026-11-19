@@ -366,6 +366,27 @@ def test_route_invalidation_drops_landed_and_stock_sales_caches():
     assert '_stock_sales_cache' not in engine.__dict__
 
 
+def test_landed_quotes_survive_month_reset_and_refresh_after_road_edit():
+    engine = make_engine()
+    original = engine.landed('t1', 't2', 'grain', 0)
+    assert original is not None
+    cache = engine.__dict__['_landed_cache']
+    engine.meta['month'] += 1
+    engine.reset_report()
+    assert engine.__dict__['_landed_cache'] is cache
+    assert engine.landed('t1', 't2', 'grain', 0) == original
+
+    edge = dict(engine.graph['t1']['t2'])
+    engine.graph.remove_edge('t1', 't2')
+    engine.meta['month'] += 1
+    engine.reset_report()
+    assert engine.landed('t1', 't2', 'grain', 0) is None
+
+    engine.graph.add_edge('t1', 't2', **edge)
+    engine.invalidate_routes()
+    assert engine.landed('t1', 't2', 'grain', 0) == original
+
+
 def test_price_change_after_invalidation_is_visible():
     engine = make_engine()
     buyer = engine.accounts['h']

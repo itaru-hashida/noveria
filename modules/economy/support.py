@@ -353,9 +353,11 @@ class EconomyServices:
         self.invalidate_stock_sales_cache()
         self.invalidate_landed_cache()
         self.invalidate_market_books()
-        # Изменённый вручную graph может не совпадать с данными tiles. Нельзя
-        # записывать его дерево под ключом исходной карты.
-        self._route_cache_key = ('runtime', id(self.graph), self.meta.get('month', 0))
+        # Каждая правка получает новый ключ, даже если граф и месяц те же.
+        # Исходная карта и её деревья могут использоваться другими мирами.
+        if self._route_cache_key[0:1] == ('runtime',):
+            ROUTE_TREE_CACHE.pop(self._route_cache_key, None)
+        self._route_cache_key = ('runtime', object())
         self._route_graph_shape = (self.graph.number_of_nodes(), self.graph.number_of_edges())
         self._route_shape_checked_month = self.meta.get('month')
 
