@@ -31,6 +31,7 @@ from .native import production_outlook_boundary as _production_outlook
 from .native import quote_boundary as _quote
 from .native import report_history_boundary as _report_history
 from .native import project_completion_boundary as _project_completion
+from .native import project_slot as _project_slot
 from .native import settlement_boundary as _settlement
 from .native import stock_boundary as _stock
 from .native import stock_store_boundary as _stock_store
@@ -555,7 +556,7 @@ class Economy(EconomyServices):
 
     def apply_investment_project(self, account, project):
         """Применить принятое решение о проекте к счёту инвестора."""
-        account['project'] = project
+        _project_slot.attach(account, project)
 
     def replace_investment_queue(self, items):
         """Обновить очередь с сохранением объекта списка и порядка."""
@@ -2747,7 +2748,7 @@ class Economy(EconomyServices):
         for o in self.report['orders']:
             if o['participant'] == e['id'] and o['side'] == 'buy':
                 self.cancel_order(o, 'Предприятие закрыто')
-        self.accounts[e['id']].pop('project', None)
+        _project_slot.detach(self.accounts[e['id']], missing_ok=True)
         e.update(status='closed', closed=self.meta['month'], closure_reason='Двенадцать месяцев подряд убыточной работы', reason='Прекращение нежизнеспособной деятельности')
         self.return_capital(e)
         self.mark_investment_dirty(e['good'])

@@ -2,7 +2,7 @@
 
 import importlib
 
-from . import cash_boundary
+from . import cash_boundary, project_slot
 
 # EPS проекта. Импорт из support безопасен: support не импортирует эту
 # границу, поэтому цикла support -> boundary -> support не возникает.
@@ -47,7 +47,7 @@ class ProjectCompletionHooks(object):
 
     def detach_project(self, a):
         """Снятие проекта со счёта и сброс защиты денег."""
-        a.pop('project')
+        project_slot.detach(a)
         cash_boundary.store_for(self.engine, a).set_protected_cash(a['id'], 0)
 
     def pay_delivery(self, a, p):
