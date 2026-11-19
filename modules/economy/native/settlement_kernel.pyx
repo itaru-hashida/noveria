@@ -219,87 +219,24 @@ def run_demography(object entities, object accounts, object province_ids,
     return rows
 
 
-def run_migration(object rows, object hooks, object cfg, object eps):
-    """Числовое тело ``V3.apply_migration``: давление, выбор цели, комната.
+def migration_rate(object stress, object threshold, object maximum,
+                   object pressure, object eps):
+    cdef object push = _max0(stress-threshold)
+    if push <= eps:
+        return None
+    return _min2(maximum, pressure*push/(1-threshold))
 
-    Порядок прежний: провинции по убыванию ``food_stress`` и по ``id``, цели —
-    в порядке ``rows``. RNG (перемешивание кандидатов), маршруты, переводы и
-    склад остаются за хуками границы; ядро считает push, rate, requested,
-    advantage, room и people и обновляет ``incoming``/счётчики строк.
 
-    ``move_share`` вызывается внутри цикла там же, где прежний код звал
-    ``_move_household_share``: чередование расчёта и мутации сохранено, поэтому
-    следующий источник видит уже изменённое население.
-    """
-    cdef dict incoming = {}
-    cdef list sources = []
-    cdef list candidates = []
-    cdef list moved_rows = []
-    cdef object source_row, destination_row, source_id, destination_id, row
-    cdef object push, rate, requested, advantage, distance, room, people
-    cdef object source_tile, households, moved_gold, moved_stock, good, quantity
-    cdef object best, count, account_id
-    for row in rows.values():
-        sources.append(row)
-    sources = sorted(sources, key=lambda row: (-row['food_stress'], row['province_id']))
-    for source_row in sources:
-        source_id = source_row['province_id']
-        # Прибывшие в этом месяце не продолжают путь через полкарты за тот же ход.
-        if incoming.get(source_id, 0):
-            continue
-        push = _max0(source_row['food_stress']-cfg['stress_threshold'])
-        if push <= eps:
-            continue
-        rate = _min2(cfg['max_monthly_rate'],
-                     cfg['pressure_rate']*push/(1-cfg['stress_threshold']))
-        requested = math.floor(hooks.population(source_id)*rate)
-        if requested <= 0:
-            continue
-        source_tile = hooks.location_tile(source_id)
-        candidates = []
-        for destination_id, destination_row in rows.items():
-            if destination_id == source_id or hooks.owner(destination_id) != hooks.owner(source_id):
-                continue
-            advantage = (source_row['food_stress']-destination_row['food_stress']
-                         -cfg['minimum_advantage'])
-            distance = hooks.distance(source_tile, hooks.location_tile(destination_id))
-            if advantage > eps and distance is not None:
-                candidates.append((advantage/(1+distance), destination_id,
-                                   distance, destination_row))
-        if not candidates:
-            continue
-        # Порядок перемешивания прежний: ключ сортировки — id провинции.
-        candidates = hooks.shuffled(candidates)
-        best = candidates[0]
-        for row in candidates:
-            if row[0] > best[0]:
-                best = row
-        destination_id = best[1]
-        distance = best[2]
-        destination_row = best[3]
-        room = _max0(math.floor(hooks.population(destination_id)
-                                *cfg['destination_max_rate'])
-                     -incoming.get(destination_id, 0))
-        people = _min2(requested, room)
-        if people <= 0:
-            continue
-        households = hooks.households(source_id)
-        moved_gold = 0.0
-        moved_stock = {}
-        for account_id, count in hooks.split_people(people, households).items():
-            moved = hooks.move_share(account_id, destination_id, count)
-            moved_gold = moved_gold+moved['gold']
-            for good, quantity in moved['stock'].items():
-                moved_stock[good] = moved_stock.get(good, 0.0)+quantity
-        source_row['migration_out'] = source_row['migration_out']+people
-        destination_row['migration_in'] = destination_row['migration_in']+people
-        incoming[destination_id] = incoming.get(destination_id, 0)+people
-        moved_rows.append(dict(source_province=source_id,
-            destination_province=destination_id, state_id=hooks.owner(source_id),
-            people=people, source_stress=source_row['food_stress'],
-            destination_stress=destination_row['food_stress'], distance=distance,
-            gold=moved_gold, stock=dict(moved_stock), cause='chronic_food_stress'))
-    return moved_rows
+def migration_score(object advantage, object distance, object eps):
+    if advantage > eps and distance is not None:
+        return advantage/(1+distance)
+    return None
+
+
+def migration_people(object requested, object population, object maximum_rate,
+                     object incoming):
+    cdef object room = _max0(math.floor(population*maximum_rate)-incoming)
+    return _min2(requested, room)
 
 
 def run_validate(object engine, object eps, object hooks):

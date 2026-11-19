@@ -434,3 +434,8 @@ def test_boundary_exposes_both_implementations():
                  'run_migration', 'run_migration_python',
                  'MigrationHooks'):
         assert getattr(boundary, name) is not None, name
+    kernel = boundary.load_settlement_kernel()
+    if kernel is not None:
+        for name in ('migration_rate', 'migration_score', 'migration_people'):
+            assert getattr(boundary, name) is getattr(kernel, name)
+        assert not hasattr(kernel, 'run_migration')

@@ -214,8 +214,25 @@ class MigrationHooks(object):
             self.engine.accounts[account_id], destination_id, count)
 
 
-def run_migration_python(rows, hooks, cfg, eps):
-    """Эталон числового тела ``V3.apply_migration``: буквальный прежний код."""
+def migration_rate_python(stress, threshold, maximum, pressure, eps):
+    push = max(0, stress-threshold)
+    if push <= eps:
+        return None
+    return min(maximum, pressure*push/(1-threshold))
+
+
+def migration_score_python(advantage, distance, eps):
+    if advantage > eps and distance is not None:
+        return advantage/(1+distance)
+    return None
+
+
+def migration_people_python(requested, population, maximum_rate, incoming):
+    return min(requested, max(0, math.floor(population*maximum_rate)-incoming))
+
+
+def _run_migration(rows, hooks, cfg, eps, source_rate, score_candidate, limit_people):
+    """Применить каждый переезд до чтения населения для следующего."""
     incoming = {}
     moved_rows = []
     sources = sorted(rows.values(), key=lambda row: (-row['food_stress'],
@@ -224,11 +241,10 @@ def run_migration_python(rows, hooks, cfg, eps):
         source_id = source_row['province_id']
         if incoming.get(source_id, 0):
             continue
-        push = max(0, source_row['food_stress']-cfg['stress_threshold'])
-        if push <= eps:
+        rate = source_rate(source_row['food_stress'], cfg['stress_threshold'],
+                           cfg['max_monthly_rate'], cfg['pressure_rate'], eps)
+        if rate is None:
             continue
-        rate = min(cfg['max_monthly_rate'],
-                   cfg['pressure_rate']*push/(1-cfg['stress_threshold']))
         requested = math.floor(hooks.population(source_id)*rate)
         if requested <= 0:
             continue
@@ -240,17 +256,15 @@ def run_migration_python(rows, hooks, cfg, eps):
             advantage = (source_row['food_stress']-destination_row['food_stress']
                          -cfg['minimum_advantage'])
             distance = hooks.distance(source_tile, hooks.location_tile(destination_id))
-            if advantage > eps and distance is not None:
-                candidates.append((advantage/(1+distance), destination_id,
-                                   distance, destination_row))
+            score = score_candidate(advantage, distance, eps)
+            if score is not None:
+                candidates.append((score, destination_id, distance, destination_row))
         if not candidates:
             continue
         _, destination_id, distance, destination_row = max(
             hooks.shuffled(candidates), key=lambda row: row[0])
-        room = max(0, math.floor(hooks.population(destination_id)
-                                 *cfg['destination_max_rate'])
-                   -incoming.get(destination_id, 0))
-        people = min(requested, room)
+        people = limit_people(requested, hooks.population(destination_id),
+                              cfg['destination_max_rate'], incoming.get(destination_id, 0))
         if people <= 0:
             continue
         households = hooks.households(source_id)
@@ -269,6 +283,16 @@ def run_migration_python(rows, hooks, cfg, eps):
             destination_stress=destination_row['food_stress'], distance=distance,
             gold=moved_gold, stock=dict(moved_stock), cause='chronic_food_stress'))
     return moved_rows
+
+
+def run_migration_python(rows, hooks, cfg, eps):
+    return _run_migration(rows, hooks, cfg, eps, migration_rate_python,
+                          migration_score_python, migration_people_python)
+
+
+def run_migration(rows, hooks, cfg, eps):
+    return _run_migration(rows, hooks, cfg, eps, migration_rate,
+                          migration_score, migration_people)
 
 
 def validate(engine, eps):
@@ -308,11 +332,13 @@ if _kernel is not None:
     province_population = _kernel.province_population
     split_people = _kernel.split_people
     run_demography = _kernel.run_demography
-    run_migration = _kernel.run_migration
     NATIVE_KERNEL = True
 else:
     run_validate = run_validate_python
     province_population = province_population_python
     split_people = split_people_python
     run_demography = run_demography_python
-    run_migration = run_migration_python
+
+migration_rate = getattr(_kernel, 'migration_rate', migration_rate_python)
+migration_score = getattr(_kernel, 'migration_score', migration_score_python)
+migration_people = getattr(_kernel, 'migration_people', migration_people_python)
