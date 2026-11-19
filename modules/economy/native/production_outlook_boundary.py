@@ -203,11 +203,22 @@ def _compute(engine, e, hooks):
     разойтись с ядром по порядку вызовов он не может.
     """
     cost = hooks.unit_cost()
-    base_net = hooks.net_price(e)
+    base_groups = None
+    if (NATIVE_KERNEL and _forecast_from_books is not None
+            and _demand.cover_demand_from_books is not None
+            and _demand.run_outlook_demand_prices is not None):
+        from ..v3 import Economy
+        if (getattr(engine.net_price, '__func__', None) is Economy.net_price
+                and getattr(engine.customer_quotes, '__func__', None) is Economy.customer_quotes):
+            base_net, base_groups = _demand.prepare_outlook_demand_prices(engine, e)
+    if base_groups is None:
+        base_net = hooks.net_price(e)
     price = run_price(e['price'], base_net, cost,
                       e.get('production_price', e['price']), EPS)
     quote = dict(e, price=price)
-    snapshot = _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote)
+    snapshot = (_prepare_snapshot(engine, e, hooks, cost, base_net, price, quote)
+                if base_groups is None else _prepare_books_snapshot(
+                    engine, e, hooks, cost, base_net, price, quote, base_groups))
     result, sales = _compute_snapshot(snapshot)
     if snapshot.get('stock_cache_owner') is not None:
         engine.store_stock_sales(snapshot['stock_cache_owner'],
@@ -273,12 +284,14 @@ def _compute_snapshot(snapshot, calculator=None):
             else calculated), None
 
 
-def _prepare_books_snapshot(engine, e, hooks, cost, base_net, price, quote):
+def _prepare_books_snapshot(engine, e, hooks, cost, base_net, price, quote,
+                            base_groups=None):
     """Подготовить входы книги без чтений после создания snapshot."""
     sells = hooks.sells
     owner, good, price = e['id'], e['good'], quote['price']
     revision = engine.STOCK_PLANNING_REVISION
-    demand_input = _demand.prepare_reachable_demand(engine, quote, sells)
+    demand_input = _demand.prepare_reachable_demand(
+        engine, quote, sells, base_groups if price == e['price'] else None)
     history = hooks.observations()
     sales = offered = alternate = None
     cache = None
@@ -291,7 +304,7 @@ def _prepare_books_snapshot(engine, e, hooks, cost, base_net, price, quote):
             if sales is None:
                 cache, offered = stock_cache, available
                 if price != e['price']:
-                    alternate = _demand.prepare_reachable_demand(engine, e, sells)
+                    alternate = _demand.prepare_reachable_demand(engine, e, sells, base_groups)
     stock = hooks.stock(good)
     stock_input = (sales, offered, stock, history, alternate)
     outlook_input = OutlookCalculationInputs(

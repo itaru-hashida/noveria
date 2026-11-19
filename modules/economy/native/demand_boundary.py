@@ -277,9 +277,10 @@ except ImportError:
     cover_demand_from_books = None
 
 
-def prepare_reachable_demand(engine, e, sells):
+def prepare_reachable_demand(engine, e, sells, groups=None):
     """Собрать входы для покрытия спроса на текущей ревизии рынка."""
-    groups = customer_demand_groups(engine, e)
+    if groups is None:
+        groups = customer_demand_groups(engine, e)
     owner, price, good = e['id'], e['price'], e['good']
     remaining = {sell['id']: sell['remaining'] for sell in sells.get(good, [])}
     books = {}
@@ -287,6 +288,14 @@ def prepare_reachable_demand(engine, e, sells):
         if participant != owner and not (limit+EPS < price) and participant not in books:
             books[participant] = engine._market_book(engine.accounts[participant], good, sells)
     return owner, price, groups, books, remaining, EPS
+
+
+def prepare_outlook_demand_prices(engine, e):
+    orders = _planning_orders(engine, None)
+    consumer = e['good'] in (engine.cfg['basic_needs'] | engine.cfg['extra_needs'])
+    return run_outlook_demand_prices(
+        _customer_quote_index(engine, e['tile_id'], e['good'], orders),
+        e['id'], e['price'], EPS, engine.cfg['consumption_tax'], consumer)
 
 
 def reachable_demand(engine, e, sells):
@@ -484,6 +493,7 @@ def _route_groups_python(customer_orders, component_hook):
 NATIVE_KERNEL = False
 
 _kernel = load_demand_kernel()
+run_outlook_demand_prices = getattr(_kernel, 'outlook_demand_prices', None)
 if _kernel is not None:
     run_orders = _kernel.customer_orders
     run_route_groups = _kernel.route_order_groups

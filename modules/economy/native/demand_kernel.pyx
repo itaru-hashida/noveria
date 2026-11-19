@@ -211,6 +211,39 @@ def demand_groups(object rows, object price, object eps):
 # Достижимый спрос
 # ---------------------------------------------------------------------------
 
+def outlook_demand_prices(object rows, object owner, object price, object eps,
+                          object tax, bint consumer):
+    """Prepare demand groups and net price in one ordered pass."""
+    cdef dict grouped = {}
+    cdef object order, freight, participant, order_price, limit, remaining, reserved
+    cdef object tile, key, row, volume, quantity = 0.0, final_quantity = 0.0
+    cdef object share
+    for order, freight in rows:
+        remaining = order['remaining']
+        if remaining <= eps or order['status'] in ('cancelled', 'expired'):
+            continue
+        order_price = order['price']
+        limit = order_price-freight
+        if limit+eps < price:
+            continue
+        reserved = order['reserved']
+        participant = order['participant']
+        tile = order['tile_id']
+        key = (participant, tile, order_price)
+        row = grouped.get(key)
+        if row is None:
+            row = grouped[key] = [participant, tile, order_price, limit, freight, 0.0]
+        row[5] += _min2(remaining, reserved/_max2(price+freight, eps))
+        if participant != owner:
+            # Net price reconstructs freight from the limit. Keep its rounding.
+            volume = _min2(remaining, reserved/_max2(price+(order_price-limit), eps))
+            quantity += volume
+            if order.get('final_consumption'):
+                final_quantity += volume
+    share = final_quantity/quantity if quantity > eps else float(consumer)
+    return price*(1-tax*share), tuple(tuple(row) for row in grouped.values())
+
+
 def reachable_demand(object owner_id, object price, object groups,
                      object remaining, object account_hook, object offers_hook,
                      object good, object sells, object eps):
