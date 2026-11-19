@@ -643,7 +643,7 @@ def test_boundary_exposes_native_when_built():
     built = wage_boundary.load_wage_kernel() is not None
     assert wage_boundary.NATIVE_KERNEL is built
     if built:
-        assert wage_boundary.run_advance.__module__.endswith('wage_kernel')
+        assert wage_boundary.run_advance is wage_boundary.run_advance_native
         assert wage_boundary.advance_public_projects.__module__.endswith('wage_boundary')
     else:
         assert wage_boundary.run_advance is wage_boundary.run_advance_python
@@ -653,7 +653,9 @@ def test_native_entry_points_are_compiled():
     kernel = wage_boundary.load_wage_kernel()
     if kernel is None:
         pytest.skip('Cython-расширение wage_kernel не собрано')
-    assert wage_boundary.run_advance is kernel.run_advance
+    assert wage_boundary.run_advance is wage_boundary.run_advance_native
+    assert kernel.calculate_workers.__module__.endswith('wage_kernel')
+    assert not hasattr(kernel, 'run_advance')
     assert wage_boundary.run_advance is not wage_boundary.run_advance_python
 
 

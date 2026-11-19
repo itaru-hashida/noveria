@@ -1,18 +1,4 @@
-"""Граница зарплатного среза публичных строек: одна привязка на импорт.
-
-Ядро считает только числа — готовность стройки, число работников, wage bill и
-надбавку за жильё. Граница даёт ему доступ к движку через узкий набор хуков и
-выполняет уже разрешённые side effects в прежнем порядке: склад, износ, отчёт,
-завершение стройки и мутация ``project``.
-
-Деньги двигает только прежний ``Economy.distribute``, а он — прежний
-``Economy.transfer`` над ``cash_store``. Собственного ledger у границы нет,
-второй cash ledger не заводится, ``balance`` напрямую не меняется.
-
-Эталонная Python-реализация живёт в этом же модуле: она нужна как образец для
-focused-тестов и как fallback, если расширение не собрано. Имена привязываются
-один раз при импорте, чтобы не платить за диспетчер на каждой стройке.
-"""
+"""Последовательное применение труда и выплат публичных строек."""
 
 import importlib
 from collections import defaultdict
@@ -38,7 +24,7 @@ class WageHooks:
         # в локальную переменную и присваивал счёту после обхода проектов.
         self.remaining = None
 
-    # --- чтение, которое ядру нужно для чисел -----------------------------
+    # --- чтение кассы перед расчётом -------------------------------------
     def free_cash(self, account_id):
         return self.engine.free_cash(account_id)
 
@@ -200,23 +186,50 @@ def load_wage_kernel():
         return None
 
 
-NATIVE_KERNEL = False
-
 _kernel = load_wage_kernel()
-if _kernel is not None:
-    run_advance = _kernel.run_advance
-    NATIVE_KERNEL = True
-else:
-    run_advance = run_advance_python
+NATIVE_KERNEL = hasattr(_kernel, 'calculate_workers')
+
+
+def run_advance_native(engine, accounts, labor, expedited, hooks, eps):
+    """Применить работу одной стройки до чтения состояния следующей."""
+    for account in accounts:
+        hooks.begin(account)
+        for project in account.get('public_projects', []):
+            materials = project['material_bill']
+            ready = not materials or _kernel.supplies_ready(materials, project['materials'], eps)
+            if ready:
+                equipment = project['equipment']
+                ready = not equipment or _kernel.supplies_ready(
+                    equipment, project['equipment_held'], eps)
+            location = project['location']
+            key = (location['state_id'], location['province_id'])
+            workers = 0.0
+            advanced = False
+            if ready:
+                mode = engine.cfg['construction_modes'][project['mode']]
+                if project['mode'] == 'accelerated':
+                    workers = expedited.get(project['id'], 0)
+                else:
+                    workers = _kernel.calculate_workers(
+                        project['max_workers'], project['work_required']-project['work_done'],
+                        labor[key], hooks.free_cash(account['id']), engine.cfg['wage'])
+                advanced = workers > eps
+                if advanced:
+                    wages = _kernel.calculate_wages(
+                        workers, engine.cfg['wage'], mode['wage_multiplier'])
+                    hooks.pay_wages(account['id'], project, wages)
+                    lodging = _kernel.calculate_lodging(workers, mode['lodging_allowance'])
+                    if lodging > eps:
+                        hooks.pay_lodging(account['id'], project, lodging)
+            hooks.tail(account, project, ready, workers, advanced)
+        hooks.end(account)
+
+
+run_advance = run_advance_native if NATIVE_KERNEL else run_advance_python
 
 
 def advance_public_projects(engine):
-    """Единственная точка входа: ядро поверх хуков, без второй копии цикла.
-
-    ``labor`` — тот же живой словарь, что лежит в ``engine._construction_labor``:
-    ядро читает его на каждой стройке, а хук ``tail`` уменьшает остаток.
-    Поэтому объект привязывается к движку до вызова ядра, а не после.
-    """
+    """Привязать общий остаток труда и обработать стройки по порядку."""
     labor = getattr(engine, '_construction_labor', defaultdict(float))
     engine._construction_labor = labor
     expedited = getattr(engine, '_expedited_construction_workers', {})
