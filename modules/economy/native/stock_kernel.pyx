@@ -131,7 +131,7 @@ def add_stock(owner, account, good, quantity, value=0):
     cdef object stock_store = get_stock_store(owner)
     cdef object before = stock_store.get_stock(account, good)
     cdef object after = stock_store.add_stock(account, good, quantity)
-    values[good] = values.get(good, 0)+value
+    stock_store.set_value(account, good, values.get(good, 0)+value)
     _track(owner.__dict__.get('_physical_stock_totals'), good, before, after)
 
 
@@ -152,6 +152,6 @@ def use_stock(owner, account, good, quantity):
     stock_store.set_stock(account, good, after)
     # Перечитывание values.get(good, 0) — как в V3, а не переиспользование
     # ранее прочитанного значения: порядок операций должен совпадать.
-    values[good] = max(0, values.get(good, 0)-value)
+    stock_store.set_value(account, good, max(0, values.get(good, 0)-value))
     _track(owner.__dict__.get('_physical_stock_totals'), good, available, after)
     return value

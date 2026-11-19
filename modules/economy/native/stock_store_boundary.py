@@ -54,17 +54,22 @@ class StockStorePython:
             self.accounts[aid]['stock_reserved'] = self.reserved[aid] = {}
         return self.reserved[aid]
 
+    def set_value(self, aid, good, value):
+        self.accounts[aid]['values'][good] = value
+
     def snapshot_good(self, aid, good):
         """Снять значения и наличие ключей для отката одной сделки."""
         account = self._account(aid)
         stock = self.stock[aid]
         reserved = self.reserved[aid]
+        values = account.get('values', {})
         return (good in stock, stock.get(good), 'stock_reserved' in account,
-                good in reserved, reserved.get(good))
+                good in reserved, reserved.get(good), good in values, values.get(good))
 
     def restore_good(self, aid, good, snapshot):
         """Восстановить количество, резерв и исходную форму словарей."""
-        stock_present, quantity, has_reserves, reserved_present, reserved = snapshot
+        (stock_present, quantity, has_reserves, reserved_present, reserved,
+         value_present, value) = snapshot
         account = self._account(aid)
         if stock_present:
             self.stock[aid][good] = quantity
@@ -77,6 +82,10 @@ class StockStorePython:
             self.ensure_reserved(aid)[good] = reserved
         else:
             self.ensure_reserved(aid).pop(good, None)
+        if value_present:
+            self.set_value(aid, good, value)
+        elif 'values' in account:
+            account['values'].pop(good, None)
 
     def sync(self):
         self.stock = {aid: a['stock'] for aid, a in self.accounts.items()}

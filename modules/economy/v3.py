@@ -1203,7 +1203,8 @@ class Economy(EconomyServices):
             before = source['stock'].get(good, 0)
             self.stock_store.set_stock(source['id'], good, max(0, quantity-moved_quantity))
             self._update_physical_stock_total(good, before, source['stock'][good])
-            source['values'][good] = max(0, source['values'].get(good, 0)-moved_value)
+            self.stock_store.set_value(source['id'], good,
+                max(0, source['values'].get(good, 0)-moved_value))
             stock[good] = moved_quantity
             for target in targets:
                 moved = target_split.get(target['id'], 0)

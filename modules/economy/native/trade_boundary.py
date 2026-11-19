@@ -49,7 +49,6 @@ class _TradeTransaction(object):
                             'carrier:'+state_id)
         self.cash = {}
         self.stock = {}
-        self.values = {}
         self.projects = {}
         stock_store = get_stock_store(owner)
         for account_id in (buyer_id, seller_id):
@@ -59,8 +58,6 @@ class _TradeTransaction(object):
             self.cash[account_id] = (owner.cash_store.get_balance(account_id),
                                      owner.cash_store.get_reserved_cash(account_id))
             self.stock[account_id] = stock_store.snapshot_good(account_id, good)
-            values = account.get('values', {})
-            self.values[account_id] = (values, good in values, values.get(good))
             if account_id == buyer_id and buy['purpose'] == 'Строительные материалы':
                 materials = account['project']['materials']
                 self.projects = (materials, good in materials, materials.get(good))
@@ -105,11 +102,6 @@ class _TradeTransaction(object):
             cash.set_reserved_cash(account_id, reserved)
         for account_id, saved in self.stock.items():
             stock.restore_good(account_id, self.buy['good'], saved)
-            values, had_value, previous = self.values[account_id]
-            if had_value:
-                values[ self.buy['good']] = previous
-            else:
-                values.pop(self.buy['good'], None)
         if self.projects:
             materials, had_value, previous = self.projects
             if had_value:

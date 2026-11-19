@@ -38,7 +38,7 @@ def add_stock_python(owner, account, good, quantity, value=0):
     store = get_stock_store(owner)
     before = store.get_stock(account, good)
     store.set_stock(account, good, before+quantity)
-    account_data['values'][good] = account_data['values'].get(good, 0)+value
+    store.set_value(account, good, account_data['values'].get(good, 0)+value)
     _update_physical_stock_total(owner, good, before, account_data['stock'][good])
 
 
@@ -54,7 +54,7 @@ def use_stock_python(owner, account, good, quantity):
     value = held*quantity/available if available > 0 else 0
     after = max(0, available-quantity)
     store.set_stock(account, good, after)
-    account_data['values'][good] = max(0, held-value)
+    store.set_value(account, good, max(0, held-value))
     _update_physical_stock_total(owner, good, available, after)
     return value
 
