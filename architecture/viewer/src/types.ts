@@ -23,6 +23,10 @@ export interface ArchNode {
   owner: string | null
   source_location: string
   tags: string[]
+  /** Объяснение простыми словами: аналогия и «зачем это мне». */
+  plain: string
+  /** Человеческое название типа: «Класс», «Функция или метод», «Хранилище». */
+  kind_title: string
 }
 
 export type EdgeKind = 'calls' | 'writes' | 'owns' | 'binds' | 'callback'
@@ -36,6 +40,10 @@ export interface ArchEdge {
   confidence: 'confirmed' | 'unknown'
   source_location: string
   note: string | null
+  /** Что происходит на этой стрелке. */
+  plain: string
+  kind_title: string
+  kind_explanation: string
 }
 
 export interface Domain {
@@ -43,6 +51,7 @@ export interface Domain {
   title: string
   description: string
   color: string
+  plain: string
 }
 
 export interface ScenarioStep {
@@ -85,6 +94,12 @@ export interface Owner {
   confidence: 'confirmed' | 'unknown'
   notes: string
   evidence: string[]
+  /** Что это за состояние простыми словами. */
+  plain_what: string
+  /** Как оно защищено и через что идёт запись. */
+  plain_how: string
+  /** Почему это важно на практике. */
+  plain_care: string
 }
 
 export interface Violation {
@@ -98,6 +113,31 @@ export interface Violation {
   related_nodes: string[]
   confidence: 'confirmed' | 'unknown'
   source_location: string
+  /** Что происходит, простыми словами. */
+  plain: string
+  /** Почему это риск. */
+  why: string
+  kind_title: string
+  kind_explanation: string
+}
+
+export interface LegendEntry {
+  id: string
+  title: string
+  explanation: string
+}
+
+export interface GlossaryEntry {
+  term: string
+  meaning: string
+}
+
+export interface Legend {
+  node_types: LegendEntry[]
+  edge_kinds: LegendEntry[]
+  violation_kinds: LegendEntry[]
+  how_to_read: string[]
+  glossary: GlossaryEntry[]
 }
 
 export interface ArchitectureMeta {
@@ -125,6 +165,7 @@ export interface Architecture {
   owners: Owner[]
   violations: Violation[]
   source_locations: SourceLocation[]
+  legend: Legend
   stats: {
     nodes: number
     edges: number

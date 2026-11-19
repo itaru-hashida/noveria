@@ -4,16 +4,16 @@
  * Запуск: node architecture/viewer/smoke_viewer.mjs http://127.0.0.1:5178/
  *
  * Проверяется то, что нельзя проверить статически:
- *   * страница монтируется и читает architecture.json (иначе был бы экран ошибки);
- *   * Cytoscape создал canvas ненулевого размера;
- *   * поиск сужает набор узлов;
- *   * фильтр по домену сужает набор узлов;
- *   * вкладка «Месячный ход» рисует Mermaid-диаграмму и таблицу шагов;
- *   * переключение варианта Python/Cython меняет число шагов;
- *   * вкладка «Владение и записи» показывает владельцев и таблицу нарушений.
+ *   * страница монтируется и читает architecture.json;
+ *   * Cytoscape создал canvas ненулевого размера и на нём реально есть пиксели;
+ *   * на карте видны разные цвета (значит связи не слились с фоном);
+ *   * поиск и фильтр домена сужают набор узлов;
+ *   * есть панель «как читать», расшифровка типов фигур и словарь;
+ *   * вкладка месяца рисует Mermaid и таблицу, режимы отличаются;
+ *   * вкладка владения показывает все шесть состояний и нарушения с пояснениями.
  *
- * Важно: карта и её фильтры живут только на вкладке «Карта экономики», поэтому
- * проверки идут в порядке вкладок — иначе селекторы карты просто отсутствуют.
+ * Текст сравнивается в нижнем регистре: CSS поднимает заголовки в верхний
+ * регистр, и innerText возвращает их уже такими.
  *
  * CDP используется напрямую: у viewer нет тестового сервера, а ставить
  * Playwright ради одной проверки — лишняя зависимость.
@@ -93,7 +93,6 @@ function makeSender(socket) {
   return { send, errors }
 }
 
-/** Число из счётчика «N / M узлов» и само N. */
 function parseMapCounter(value) {
   const match = String(value ?? '').match(/(\d+)\s*\/\s*(\d+)\s*узлов/)
   if (!match) return null
@@ -114,6 +113,9 @@ async function main() {
       '--disable-gpu',
       '--no-sandbox',
       '--disable-dev-shm-usage',
+      // Размер окна важен: при 800×600 карта сжимается и подписи наезжают,
+      // то есть проверка шла бы не на том, что видит человек.
+      '--window-size=1600,1000',
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${process.cwd()}/.tmp-e2e/smoke-profile`,
       'about:blank',
@@ -140,6 +142,8 @@ async function main() {
       return result?.result?.value
     }
 
+    const pageText = async () => String(await evaluate('document.body.innerText')).toLowerCase()
+
     const waitFor = async (selector, timeoutMs = 15000) => {
       const started = Date.now()
       while (Date.now() - started < timeoutMs) {
@@ -161,12 +165,6 @@ async function main() {
       await sleep(1600)
     }
 
-    /**
-     * Установить значение управляемого поля и дождаться, пока React его примет.
-     *
-     * Возвращает false, если поля нет: проверка тогда сообщает диагностикой,
-     * а не падает посреди прогона.
-     */
     const setControlled = async (selector, value, eventName) => {
       const present = await waitFor(selector, 8000)
       if (!present) return false
@@ -187,9 +185,6 @@ async function main() {
     const setSearch = (value) => setControlled('.toolbar input[type=search]', value, 'input')
     const setDomain = (value) => setControlled('.toolbar select', value, 'change')
 
-    const mapCounter = async () =>
-      parseMapCounter(await evaluate(`document.querySelector('.toolbar .counter')?.textContent ?? ''`))
-
     await send('Page.enable')
     await send('Runtime.enable')
     await send('Page.navigate', { url })
@@ -198,42 +193,117 @@ async function main() {
     check(mounted, 'приложение не смонтировалось за 25 с')
     if (!mounted) throw new Error('нет интерфейса')
     await waitFor('#cy canvas', 15000)
-    await sleep(900)
+    await sleep(1200)
 
     // --- карта ------------------------------------------------------------
-    const text = await evaluate('document.body.innerText')
-    check(text.includes('Общая карта экономики'), 'нет боковой панели карты')
-    check(!text.includes('Не удалось загрузить'), 'architecture.json не загрузился')
-    check(text.includes('aad285e'), 'в шапке нет commit SHA')
+    const text = await pageText()
+    check(text.includes('как читать карту'), 'нет панели «Как читать карту»')
+    check(text.includes('типы фигур'), 'нет расшифровки типов фигур')
+    check(text.includes('словарь'), 'нет словаря терминов')
+    check(!text.includes('не удалось загрузить'), 'architecture.json не загрузился')
 
     const canvases = await evaluate('document.querySelectorAll("#cy canvas").length')
     check(Number(canvases) >= 1, 'Cytoscape не создал canvas')
-    const canvasWidth = await evaluate(`(() => {
-      const canvas = document.querySelector('#cy canvas');
-      return canvas ? canvas.width : 0;
-    })()`)
-    check(Number(canvasWidth) > 0, 'canvas карты нулевой ширины')
 
-    const full = await mapCounter()
-    check(full !== null, `счётчик карты не распознан: ${JSON.stringify(full)}`)
+    // Главная проверка: пиксели и разнообразие цветов. Cytoscape рисует
+    // на нескольких слоях, поэтому берём слой с наибольшим числом пикселей.
+    const canvasStats = await evaluate(`(() => {
+      const list = [...document.querySelectorAll('#cy canvas')];
+      let best = { painted: 0, variety: 0, width: 0, height: 0 };
+      for (const canvas of list) {
+        const ctx = canvas.getContext('2d');
+        if (!ctx) continue;
+        let data;
+        try {
+          data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        } catch (error) {
+          continue;
+        }
+        let painted = 0;
+        const colors = new Set();
+        for (let i = 0; i < data.length; i += 4 * 7) {
+          if (data[i + 3] < 12) continue;
+          painted += 1;
+          colors.add((data[i] >> 4) + '-' + (data[i + 1] >> 4) + '-' + (data[i + 2] >> 4));
+        }
+        if (painted > best.painted) {
+          best = { painted, variety: colors.size, width: canvas.width, height: canvas.height };
+        }
+      }
+      return best;
+    })()`)
+    check(canvasStats !== null, 'не удалось прочитать canvas карты')
+    if (canvasStats) {
+      check(canvasStats.painted > 150, `на карте почти ничего не нарисовано: ${canvasStats.painted}`)
+      check(
+        canvasStats.variety > 15,
+        `на карте слишком мало разных цветов, связи могли слиться: ${canvasStats.variety}`,
+      )
+      check(canvasStats.width >= 900, `карта получила слишком узкий холст: ${canvasStats.width}px`)
+    }
+
+    const legendLines = await evaluate(`document.querySelectorAll('.edge-legend .legend-line').length`)
+    check(Number(legendLines) >= 5, `в легенде связей мало видов: ${legendLines}`)
+
+    // Регресс «видна только одна стрелка»: все связи должны доехать до графа.
+    // Причина была в одинаковых id рёбер — Cytoscape оставлял одно из 73.
+    const drawnEdges = await evaluate(`(() => {
+      const container = document.getElementById('cy');
+      const cy = container && container._cyreg && container._cyreg.cy;
+      if (!cy) return { error: 'нет графа' };
+      return {
+        edges: cy.edges().length,
+        kinds: [...new Set(cy.edges().map((edge) => edge.data('kind')))].length,
+        colors: [...new Set(cy.edges().map((edge) => edge.style('line-color')))].length,
+      };
+    })()`)
+    check(!drawnEdges.error, `не удалось прочитать граф: ${drawnEdges.error ?? ''}`)
+    if (!drawnEdges.error) {
+      check(
+        drawnEdges.edges >= 70,
+        `в графе потерялись связи: ${drawnEdges.edges}`,
+      )
+      check(drawnEdges.kinds >= 4, `в графе мало видов связей: ${drawnEdges.kinds}`)
+      check(drawnEdges.colors >= 4, `связи почти одного цвета: ${drawnEdges.colors}`)
+    }
+
+    const shapeKinds = await evaluate(`document.querySelectorAll('.shape-glyph').length`)
+    check(Number(shapeKinds) >= 5, `в легенде мало форм узлов: ${shapeKinds}`)
+
+    const glossaryRows = await evaluate(`document.querySelectorAll('.glossary-row').length`)
+    check(Number(glossaryRows) >= 8, `в словаре мало терминов: ${glossaryRows}`)
+
+    const full = parseMapCounter(
+      await evaluate(`document.querySelector('.toolbar .counter')?.textContent ?? ''`),
+    )
+    check(full !== null, 'счётчик карты не распознан')
     if (!full) throw new Error('нет счётчика карты')
     check(full.total >= 50, `в карте мало узлов: ${full.total}`)
 
+    const counterText = await evaluate(`document.querySelector('.toolbar .counter')?.textContent ?? ''`)
+    check(/связей/.test(counterText), `счётчик не показывает связи: ${counterText}`)
+
     // --- поиск ------------------------------------------------------------
     await setSearch('CashStore')
-    const searched = await mapCounter()
+    const searched = parseMapCounter(
+      await evaluate(`document.querySelector('.toolbar .counter')?.textContent ?? ''`),
+    )
     check(
       searched !== null && searched.visible > 0 && searched.visible < full.total,
       `поиск не сузил карту: ${JSON.stringify(searched)}`,
     )
 
     await setSearch('')
-    const restored = await mapCounter()
-    check(restored?.visible === full.total, `сброс поиска не вернул все узлы: ${JSON.stringify(restored)}`)
+    const restored = parseMapCounter(
+      await evaluate(`document.querySelector('.toolbar .counter')?.textContent ?? ''`),
+    )
+    check(restored?.visible === full.total, 'сброс поиска не вернул все узлы')
 
     // --- фильтр домена ----------------------------------------------------
     await setDomain('money')
-    const byDomain = await mapCounter()
+    const byDomain = parseMapCounter(
+      await evaluate(`document.querySelector('.toolbar .counter')?.textContent ?? ''`),
+    )
     check(
       byDomain !== null && byDomain.visible > 0 && byDomain.visible < full.total,
       `фильтр домена не сузил карту: ${JSON.stringify(byDomain)}`,
@@ -242,11 +312,12 @@ async function main() {
 
     // --- вкладка месяца ---------------------------------------------------
     await clickTab('Месячный ход')
-    const sequenceText = await evaluate('document.body.innerText')
-    check(sequenceText.includes('Шаги месяца'), 'нет таблицы шагов месяца')
-    check(sequenceText.includes('Отличия от другого режима'), 'нет блока отличий режимов')
-    check(sequenceText.includes('Python'), 'нет варианта Python')
-    check(sequenceText.includes('Cython'), 'нет варианта Cython')
+    const sequenceText = await pageText()
+    check(sequenceText.includes('все шаги месяца по порядку'), 'нет таблицы шагов месяца')
+    check(sequenceText.includes('чем отличаются два режима'), 'нет блока отличий режимов')
+    check(sequenceText.includes('сначала — простыми словами'), 'нет вводного объяснения месяца')
+    check(sequenceText.includes('python'), 'нет варианта Python')
+    check(sequenceText.includes('cython'), 'нет варианта Cython')
 
     const svg = await evaluate(`document.querySelectorAll('.mermaid-host svg').length`)
     check(Number(svg) >= 1, 'Mermaid не отрисовал sequence-диаграмму')
@@ -268,15 +339,17 @@ async function main() {
 
     // --- вкладка владения -------------------------------------------------
     await clickTab('Владение и записи')
-    const ownersText = await evaluate('document.body.innerText')
+    const ownersText = await pageText()
     for (const needle of [
-      'Карта владения и записей',
-      'Деньги счёта',
-      'Заявка',
-      'Проекты',
-      'Результаты выпуска',
-      'Отчёты и checkpoint',
-      'Нарушения и зоны риска',
+      'кто чем владеет',
+      'деньги счёта',
+      'склад',
+      'заявка',
+      'проекты',
+      'результаты выпуска',
+      'отчёты и checkpoint',
+      'нарушения: что не так и почему это важно',
+      'почему важно',
     ]) {
       check(ownersText.includes(needle), `нет раздела владения: ${needle}`)
     }
@@ -295,7 +368,7 @@ async function main() {
     process.exit(1)
   }
   console.log(
-    'viewer smoke OK: карта + canvas, поиск, фильтр домена, sequence (Python/Cython), ownership',
+    'viewer smoke OK: карта с видимыми связями, поиск, фильтр домена, sequence (Python/Cython), ownership с объяснениями',
   )
 }
 

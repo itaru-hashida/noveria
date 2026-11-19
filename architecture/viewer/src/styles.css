@@ -1,14 +1,14 @@
 :root {
-  --bg: #0f1115;
-  --panel: #161a21;
-  --panel-2: #1c2129;
-  --line: #2a313c;
-  --text: #e6e9ee;
-  --muted: #9aa4b2;
-  --accent: #5b7cfa;
-  --warn: #e8710a;
-  --bad: #d64545;
-  --ok: #2e9e63;
+  --bg: #0b0d11;
+  --panel: #141821;
+  --panel-2: #1b202a;
+  --line: #272e3a;
+  --text: #e8ecf3;
+  --muted: #97a2b3;
+  --accent: #5b9dff;
+  --warn: #ffa53d;
+  --bad: #ff5c5c;
+  --ok: #3ddc84;
   --radius: 10px;
 }
 
@@ -22,7 +22,7 @@ html, body, #root {
 body {
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+  font: 14px/1.55 "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
 button, input, select {
@@ -36,6 +36,7 @@ button {
   border-radius: 8px;
   padding: 5px 10px;
   cursor: pointer;
+  transition: border-color .15s, background .15s;
 }
 
 button:hover:not(:disabled) { border-color: var(--accent); }
@@ -44,7 +45,8 @@ button:disabled { opacity: .45; cursor: default; }
 button.active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: #06101f;
+  font-weight: 600;
 }
 
 input[type="search"], select {
@@ -116,26 +118,176 @@ input[type="search"], select {
 
 #cy { position: absolute; inset: 0; }
 
+/* --- подсказка «как читать» ------------------------------------------------ */
+
+.intro-panel {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  width: 340px;
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  background: rgba(20, 24, 33, .96);
+  border: 1px solid #39424f;
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(4px);
+}
+
+.intro-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.intro-head button {
+  padding: 0 7px;
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: var(--muted);
+}
+
+.intro-list {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.intro-list li { margin: 5px 0; }
+
+.intro-close {
+  width: 100%;
+  margin-top: 6px;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06101f;
+  font-weight: 600;
+}
+
+/* --- легенда связей поверх карты ------------------------------------------ */
+
+.edge-legend {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: rgba(11, 13, 17, .82);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.legend-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line::before {
+  content: "";
+  display: inline-block;
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  background: #8b98ab;
+}
+
+.legend-line.edge-calls::before { background: #8b98ab; }
+.legend-line.edge-writes::before { background: #3ddc84; }
+.legend-line.edge-owns::before { background: #5b9dff; }
+.legend-line.edge-binds::before { background: #c792ea; }
+.legend-line.edge-callback::before { background: #ffa53d; height: 4px; }
+
+/* --- боковая панель -------------------------------------------------------- */
+
 .side {
-  width: 380px;
+  width: 400px;
   border-left: 1px solid var(--line);
   background: var(--panel);
   overflow: auto;
-  padding: 14px;
+  padding: 14px 16px 40px;
   flex-shrink: 0;
 }
 
-.side h2 { font-size: 14px; margin: 0 0 8px; }
-.side h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--muted); margin: 14px 0 6px; }
+.side h2 { font-size: 15px; margin: 0 0 8px; }
 
-.kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 8px; font-size: 13px; }
+.side h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+
+.kv { display: grid; grid-template-columns: 82px 1fr; gap: 5px 10px; font-size: 13px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; word-break: break-word; }
 
+.legend-kv { display: block; }
+
+.legend-row { margin-bottom: 8px; }
+.legend-row dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+.legend-row dd {
+  margin: 2px 0 0 26px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Формы-подсказки в легенде повторяют формы узлов на карте. */
+.shape-glyph {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background: #39424f;
+  border: 1px solid #5b9dff;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.shape-glyph.shape-class { border-radius: 3px; width: 18px; height: 13px; }
+.shape-glyph.shape-store { border-radius: 6px; width: 20px; height: 14px; background: #2f4a33; }
+.shape-glyph.shape-kernel { clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); border: none; background: #4a3a2a; }
+.shape-glyph.shape-boundary { transform: rotate(45deg); border-radius: 2px; width: 13px; height: 13px; background: #3a2f4a; }
+
+.node-kind { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+
+.plain-text {
+  background: #17202c;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 9px 11px;
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.domain-item { margin-bottom: 8px; }
+
+.glossary { margin: 0; font-size: 13px; }
+.glossary-row { margin-bottom: 7px; }
+.glossary-row dt { font-weight: 600; }
+.glossary-row dd { margin: 1px 0 0; color: var(--muted); font-size: 12px; }
+
+.button-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* --- чипы ---------------------------------------------------------------- */
+
 .chip {
   display: inline-block;
-  padding: 1px 7px;
+  padding: 1px 8px;
   border-radius: 999px;
   border: 1px solid var(--line);
   font-size: 11px;
@@ -145,9 +297,23 @@ input[type="search"], select {
 
 .chip.cython { border-color: #b06000; color: #ffbe6b; }
 .chip.python { border-color: #1a73e8; color: #8fc0ff; }
-.chip.callback { border-color: var(--warn); color: #ffb26b; }
-.chip.violation { border-color: var(--bad); color: #ff9b9b; }
 .chip.owner { border-color: var(--ok); color: #7ee0a8; }
+.chip.violation { border-color: var(--bad); color: #ff9b9b; }
+.chip.callback { border-color: var(--warn); color: #ffb26b; }
+
+.chip.kind-class { border-color: #5b9dff; color: #a8c8ff; }
+.chip.kind-function { border-color: #7b8aa0; color: #c3ccd9; }
+.chip.kind-store { border-color: #3ddc84; color: #9df0bf; }
+.chip.kind-kernel { border-color: #c792ea; color: #dcb8f2; }
+.chip.kind-boundary { border-color: #ffa53d; color: #ffcb8a; }
+
+.chip.edge-calls { border-color: #8b98ab; color: #c3ccd9; }
+.chip.edge-writes { border-color: #3ddc84; color: #9df0bf; }
+.chip.edge-owns { border-color: #5b9dff; color: #a8c8ff; }
+.chip.edge-binds { border-color: #c792ea; color: #dcb8f2; }
+.chip.edge-callback { border-color: #ffa53d; color: #ffcb8a; }
+
+/* --- ссылки и текст -------------------------------------------------------- */
 
 .loc {
   font-family: ui-monospace, Consolas, monospace;
@@ -162,6 +328,22 @@ input[type="search"], select {
 }
 
 .loc:hover { text-decoration: underline; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+ul.tight { margin: 6px 0; padding-left: 16px; }
+ul.tight > li { margin: 6px 0; }
+
+.note {
+  border-left: 3px solid var(--warn);
+  background: #221a12;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin: 8px 0;
+}
 
 table.grid {
   width: 100%;
@@ -179,7 +361,7 @@ table.grid th, table.grid td {
 table.grid th {
   color: var(--muted);
   font-weight: 500;
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .05em;
   position: sticky;
@@ -189,37 +371,23 @@ table.grid th {
 
 table.grid tr:hover td { background: var(--panel-2); }
 table.grid tr.selected td { background: #202b45; }
-
 table.grid td.wrap { max-width: 460px; }
 
-.scroll-page { flex: 1; overflow: auto; padding: 18px; }
+.scroll-page { flex: 1; overflow: auto; padding: 18px 22px 60px; }
 .scroll-page h2 { margin-top: 0; }
 
 .card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
-  padding: 14px;
+  padding: 14px 16px;
   margin-bottom: 14px;
 }
 
-.card h3 { margin: 0 0 8px; font-size: 14px; }
+.card h3 { margin: 12px 0 6px; font-size: 13px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; }
+.card h3:first-child { margin-top: 0; }
 .card p { margin: 6px 0; }
-
-.muted { color: var(--muted); }
-.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
-
-ul.tight { margin: 6px 0; padding-left: 18px; }
-ul.tight li { margin: 3px 0; }
-
-.note {
-  border-left: 3px solid var(--warn);
-  background: #221a12;
-  padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 13px;
-  margin: 8px 0;
-}
 
 .mermaid-host { background: #fff; border-radius: var(--radius); padding: 16px; overflow: auto; }
 .mermaid-host svg { max-width: none; }
@@ -232,16 +400,4 @@ ul.tight li { margin: 3px 0; }
   color: var(--muted);
   padding: 24px;
   text-align: center;
-}
-
-.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
-.legend span::before {
-  content: "";
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  margin-right: 5px;
-  vertical-align: -1px;
-  background: currentColor;
 }

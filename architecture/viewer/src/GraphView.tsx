@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type cytoscape from 'cytoscape'
 import type { Architecture, ArchEdge, SourceLocation } from './types'
-import { applyVisibility, createGraph } from './graph'
+import { applyVisibility, createGraph, focusNode } from './graph'
 import { emptyFilters, ownerNodeIds, visibleNodeIds } from './filters'
 import { sourceHref } from './data'
 
@@ -29,6 +29,7 @@ export default function GraphView({
   const [ownersOnly, setOwnersOnly] = useState(false)
   const [writesOnly, setWritesOnly] = useState(false)
   const [callbacksOnly, setCallbacksOnly] = useState(false)
+  const [showIntro, setShowIntro] = useState(true)
 
   onSelectRef.current = onSelect
 
@@ -53,6 +54,14 @@ export default function GraphView({
       }),
     [data, query, domain, languages, ownersOnly, writesOnly, callbacksOnly],
   )
+
+  const visibleEdges = useMemo(() => {
+    let count = 0
+    for (const edge of data.edges) {
+      if (visible.has(edge.source) && visible.has(edge.target)) count += 1
+    }
+    return count
+  }, [data.edges, visible])
 
   // Граф создаётся ровно один раз на контейнер: повторная инициализация
   // Cytoscape на том же DOM-узле ломает его внутреннее состояние.
@@ -81,21 +90,17 @@ export default function GraphView({
     applyVisibility(cy, visible)
   }, [data, visible])
 
+  // Фокус: выбранный узел и его соседи остаются яркими, остальное гаснет.
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
-    cy.nodes().forEach((node) => {
-      node.data('selected', node.id() === selected)
-    })
+    focusNode(cy, selected)
     if (selected) {
       const node = cy.getElementById(selected)
-      if (node.nonempty()) {
+      if (node.nonempty() && !node.hasClass('filtered')) {
         cy.stop()
-        cy.animate({ center: { eles: node }, zoom: 1.05 }, { duration: 200 })
-        node.select()
+        cy.animate({ center: { eles: node } }, { duration: 220 })
       }
-    } else {
-      cy.$(':selected').unselect()
     }
   }, [selected])
 
@@ -118,8 +123,8 @@ export default function GraphView({
             <button className="loc" onClick={() => onSelect(otherId)}>
               {other?.short ?? otherId}
             </button>{' '}
-            <span className={`chip ${edge.kind}`}>{edge.kind}</span>{' '}
-            <span className="muted">{edge.label}</span>
+            <span className={`chip edge-${edge.kind}`}>{edge.kind_title}</span>
+            <div className="muted small">{edge.plain}</div>
           </li>
         )
       })}
@@ -150,110 +155,150 @@ export default function GraphView({
         <button
           className={languages.has('python') ? 'active' : ''}
           onClick={() => toggleLanguage('python')}
+          title="Только код на Python"
         >
           Python
         </button>
         <button
           className={languages.has('cython') ? 'active' : ''}
           onClick={() => toggleLanguage('cython')}
+          title="Только код на Cython"
         >
           Cython
         </button>
-        <button className={ownersOnly ? 'active' : ''} onClick={() => setOwnersOnly(!ownersOnly)}>
+        <button
+          className={ownersOnly ? 'active' : ''}
+          onClick={() => setOwnersOnly(!ownersOnly)}
+          title="Показать только хранилища, которые владеют состоянием"
+        >
           Владельцы
         </button>
-        <button className={writesOnly ? 'active' : ''} onClick={() => setWritesOnly(!writesOnly)}>
+        <button
+          className={writesOnly ? 'active' : ''}
+          onClick={() => setWritesOnly(!writesOnly)}
+          title="Показать только места, где пишут мимо владельца"
+        >
           Прямые записи
         </button>
         <button
           className={callbacksOnly ? 'active' : ''}
           onClick={() => setCallbacksOnly(!callbacksOnly)}
+          title="Показать только обратные вызовы из быстрого кода"
         >
           Callbacks
         </button>
         <span className="counter">
-          {visible.size} / {data.nodes.length} узлов
+          {visible.size} / {data.nodes.length} узлов · {visibleEdges} / {data.edges.length} связей
         </span>
       </div>
 
       <div className="body">
         <div className="graph-wrap">
           <div id="cy" ref={canvas} />
+          <div className="edge-legend">
+            {data.legend.edge_kinds.map((item) => (
+              <span key={item.id} className={`legend-line edge-${item.id}`} title={item.explanation}>
+                {item.title}
+              </span>
+            ))}
+          </div>
+          {showIntro && (
+            <div className="intro-panel">
+              <div className="intro-head">
+                <strong>Как читать карту</strong>
+                <button onClick={() => setShowIntro(false)} aria-label="Скрыть подсказку">
+                  ✕
+                </button>
+              </div>
+              <ol className="intro-list">
+                {data.legend.how_to_read.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ol>
+              <p className="muted small">
+                Колесо — масштаб, перетаскивание — сдвиг. Клик по фигуре открывает справа, что это
+                за штука, где она лежит и с чем связана.
+              </p>
+              <button className="intro-close" onClick={() => setShowIntro(false)}>
+                Понятно, скрыть
+              </button>
+            </div>
+          )}
         </div>
 
         <aside className="side">
           {!active ? (
             <>
-              <h2>Общая карта экономики</h2>
+              <h2>Что это за схема</h2>
               <p className="muted">
-                Узлы — классы, функции, store, ядра и границы. Рёбра — реальные вызовы, записи,
-                владение и callback-переходы. Нажмите узел, чтобы увидеть файл и строку.
+                Каждая фигура — кусочек кода экономики. Стрелка между ними — кто кого зовёт или
+                кто что меняет. Чем фигура крупнее и ярче, тем больше в ней сосредоточено.
               </p>
-              <h3>Домены</h3>
+
+              <h3>Типы фигур</h3>
+              <dl className="kv legend-kv">
+                {data.legend.node_types.map((item) => (
+                  <div key={item.id} className="legend-row">
+                    <dt>
+                      <span className={`shape-glyph shape-${item.id}`} />
+                      {item.title}
+                    </dt>
+                    <dd>{item.explanation}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <h3>Виды связей</h3>
+              <ul className="tight">
+                {data.legend.edge_kinds.map((item) => (
+                  <li key={item.id}>
+                    <span className={`legend-line edge-${item.id}`}>{item.title}</span>
+                    <div className="muted small">{item.explanation}</div>
+                  </li>
+                ))}
+              </ul>
+
+              <h3>Домены: где что живёт</h3>
               <ul className="tight">
                 {data.domains.map((item) => (
-                  <li key={item.id}>
+                  <li key={item.id} className="domain-item">
                     <button
                       className="loc"
                       style={{ color: item.color }}
                       onClick={() => setDomain(item.id)}
                     >
                       {item.title}
-                    </button>{' '}
-                    <span className="muted">{item.description}</span>
+                    </button>
+                    <div className="muted small">{item.plain}</div>
                   </li>
                 ))}
               </ul>
-              <h3>Обозначения</h3>
-              <dl className="kv">
-                <dt>Шестиугольник</dt>
-                <dd>Cython-ядро (kernel)</dd>
-                <dt>Ромб</dt>
-                <dd>Граница Python↔Cython или callback-узел</dd>
-                <dt>Скруглённый</dt>
-                <dd>Store — владелец состояния</dd>
-                <dt>Зелёная рамка</dt>
-                <dd>Владелец состояния</dd>
-                <dt>Красная рамка</dt>
-                <dd>Есть прямые записи</dd>
-                <dt>Оранжевое ребро</dt>
-                <dd>Callback из горячего цикла</dd>
+
+              <h3>Словарь</h3>
+              <dl className="glossary">
+                {data.legend.glossary.map((item) => (
+                  <div key={item.term} className="glossary-row">
+                    <dt>{item.term}</dt>
+                    <dd>{item.meaning}</dd>
+                  </div>
+                ))}
               </dl>
-              <h3>Покрытие анализа</h3>
-              <p className="muted">{data.meta.scope_note}</p>
-              <p className="muted mono">
-                Python-файлов: {data.meta.python_files.length}, Cython:{' '}
-                {data.meta.cython_files.length}, расширений собрано:{' '}
-                {data.meta.native_extensions_built ? data.meta.native_extension_count : 0}
-              </p>
             </>
           ) : (
             <>
               <h2>{active.short}</h2>
-              <p className="muted">{active.responsibility}</p>
-              <dl className="kv">
-                <dt>Имя</dt>
-                <dd className="mono">{active.name}</dd>
-                <dt>Тип</dt>
-                <dd>
-                  <span className="chip">{active.type}</span>
-                </dd>
-                <dt>Домен</dt>
-                <dd>
-                  {data.domains.find((item) => item.id === active.domain)?.title ?? active.domain}
-                </dd>
-                <dt>Язык</dt>
-                <dd>
-                  <span className={`chip ${active.language}`}>{active.language}</span>
-                </dd>
-                <dt>Владелец</dt>
-                <dd>
-                  {active.owner ?? <span className="muted">не задан</span>}
-                  {owners.has(active.id) && <span className="chip owner"> store</span>}
-                </dd>
-              </dl>
+              <div className="node-kind">
+                <span className={`chip kind-${active.type}`}>{active.kind_title}</span>
+                <span className={`chip ${active.language}`}>
+                  {active.language === 'cython' ? 'Cython' : 'Python'}
+                </span>
+                {owners.has(active.id) && <span className="chip owner">владеет состоянием</span>}
+              </div>
 
-              <h3>Источник</h3>
+              {active.plain && <p className="plain-text">{active.plain}</p>}
+              <p className="muted">{active.responsibility}</p>
+
+              <h3>Где лежит</h3>
               {(() => {
                 const record = locations.get(active.source_location)
                 if (!record) return <p className="muted">локация не найдена</p>
@@ -268,28 +313,44 @@ export default function GraphView({
                       {record.file}:{record.line}
                     </a>
                     <br />
-                    <span className="mono muted">{record.anchor}</span>
+                    <span className="mono muted small">{record.anchor}</span>
                   </p>
                 )
               })()}
 
-              <h3>Переходы</h3>
-              <div>
-                <button onClick={() => onOpenSequence(active.id)}>Место в месячном ходе</button>{' '}
+              <dl className="kv">
+                <dt>Тип</dt>
+                <dd>{active.kind_title}</dd>
+                <dt>Домен</dt>
+                <dd>
+                  {data.domains.find((item) => item.id === active.domain)?.title ?? active.domain}
+                </dd>
+                <dt>Владелец</dt>
+                <dd>
+                  {active.owner ?? <span className="muted">не задан — состояние общее</span>}
+                </dd>
+              </dl>
+
+              <h3>Перейти</h3>
+              <div className="button-row">
+                <button onClick={() => onOpenSequence(active.id)}>Где это в месяце</button>
                 <button onClick={() => onOpenOwners(active.id)}>Карта владения</button>
               </div>
 
               {outgoing.length > 0 && (
                 <>
-                  <h3>Исходящие ({outgoing.length})</h3>
+                  <h3>Отсюда вызывают ({outgoing.length})</h3>
                   {edgeList(outgoing, 'out')}
                 </>
               )}
               {incoming.length > 0 && (
                 <>
-                  <h3>Входящие ({incoming.length})</h3>
+                  <h3>Сюда вызывают ({incoming.length})</h3>
                   {edgeList(incoming, 'in')}
                 </>
+              )}
+              {outgoing.length === 0 && incoming.length === 0 && (
+                <p className="muted">Связей в модели нет: узел либо лист, либо входная точка.</p>
               )}
             </>
           )}

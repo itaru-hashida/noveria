@@ -23,7 +23,7 @@ function alias(name: string): string {
 }
 
 function escapeLabel(value: string): string {
-  return value.replace(/[;"\n]/g, ' ').replace(/\s+/g, ' ').slice(0, 110)
+  return value.replace(/[;"\n]/g, ' ').replace(/\s+/g, ' ').slice(0, 96)
 }
 
 function buildMermaid(data: Architecture, variantId: string, focused: string | null): string {
@@ -98,10 +98,39 @@ export default function SequenceView({ data, selected, onSelect, onOpenOwners }:
     ? variant.steps.filter((step) => step.node === focused)
     : []
 
+  const phases = useMemo(() => {
+    const list: { phase: string; count: number }[] = []
+    for (const step of variant.steps) {
+      const last = list[list.length - 1]
+      if (last && last.phase === step.phase) last.count += 1
+      else list.push({ phase: step.phase, count: 1 })
+    }
+    return list
+  }, [variant.steps])
+
   return (
     <div className="scroll-page">
-      <h2>{scenario.title}</h2>
+      <h2>{scenario.title}: что происходит за один месяц</h2>
       <p className="muted">{scenario.description}</p>
+
+      <div className="card">
+        <h3>Сначала — простыми словами</h3>
+        <p>
+          Месяц в игре идёт строго по порядку, и порядок важен: сначала все смотрят на цены
+          и выставляют заявки, потом торгуются, потом заводы производят, потом все считаются
+          деньгами. Если переставить этапы местами, изменится результат — поэтому порядок
+          записан в одном месте и показан ниже.
+        </p>
+        <p>
+          Диаграмма читается так: сверху вниз, шаг за шагом. Слева — кто действует, стрелка — что
+          он делает в этот момент, справа — сам движок экономики, на который всё в итоге
+          сваливается.
+        </p>
+        <h3>Этапы этого варианта</h3>
+        <p className="muted small">
+          {phases.map((item) => `${item.phase} (${item.count})`).join(' → ')}
+        </p>
+      </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }}>
         {scenario.variants.map((item) => (
@@ -119,7 +148,7 @@ export default function SequenceView({ data, selected, onSelect, onOpenOwners }:
       <div className="card">
         <h3>{variant.title}</h3>
         <p>{variant.summary}</p>
-        <h3>Отличия от другого режима</h3>
+        <h3>Чем отличаются два режима</h3>
         <ul className="tight">
           {variant.divergences.map((line) => (
             <li key={line}>{line}</li>
@@ -131,17 +160,17 @@ export default function SequenceView({ data, selected, onSelect, onOpenOwners }:
       {error && <div className="note">Mermaid не смог отрисовать диаграмму: {error}</div>}
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h3>Шаги месяца</h3>
-        <p className="muted">
-          Порядок — из кода драйвера месяца. Колонка «Когда» показывает условие ветви, в которой
-          стоит вызов; пусто — шаг безусловный.
+        <h3>Все шаги месяца по порядку</h3>
+        <p className="muted small">
+          Колонка «Когда» показывает условие из кода: шаг выполняется только в этом режиме.
+          Прочерк — шаг безусловный.
         </p>
         <table className="grid">
           <thead>
             <tr>
               <th>#</th>
-              <th>Фаза</th>
-              <th>Вызов</th>
+              <th>Этап</th>
+              <th>Что делают</th>
               <th>Когда</th>
               <th>Узел</th>
               <th>Источник</th>
@@ -199,13 +228,17 @@ export default function SequenceView({ data, selected, onSelect, onOpenOwners }:
 
       {focused && (
         <div className="card">
-          <h3>Выбранный узел в этом ходе</h3>
+          <h3>Выбранный узел в этом месяце</h3>
           <p>
             <strong>{data.nodes.find((item) => item.id === focused)?.short ?? focused}</strong>
-            {focusedSteps.length === 0 && (
-              <span className="muted"> — в этом варианте месяца узел вызывается не напрямую.</span>
-            )}
           </p>
+          {(() => {
+            const node = data.nodes.find((item) => item.id === focused)
+            return node?.plain ? <p className="plain-text">{node.plain}</p> : null
+          })()}
+          {focusedSteps.length === 0 && (
+            <p className="muted">В этом варианте месяца узел не вызывается напрямую.</p>
+          )}
           {focusedSteps.length > 0 && (
             <ul className="tight">
               {focusedSteps.map((step, index) => {

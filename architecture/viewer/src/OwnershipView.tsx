@@ -11,6 +11,13 @@ interface Props {
 
 const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2, info: 3 }
 
+const severityTitle: Record<string, string> = {
+  high: 'важно',
+  medium: 'заметно',
+  low: 'мелочь',
+  info: 'справка',
+}
+
 export default function OwnershipView({ data, selected, onSelect, onOpenSequence }: Props) {
   const [query, setQuery] = useState('')
   const [onlyProblems, setOnlyProblems] = useState(false)
@@ -38,6 +45,8 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
         owner.storage,
         owner.write_path,
         owner.notes,
+        owner.plain_what,
+        owner.plain_how,
         ...owner.readers.map(nodeName),
         ...owner.writers.map(nodeName),
       ]
@@ -45,7 +54,6 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
         .toLowerCase()
       return needle.split(/\s+/).every((part) => haystack.includes(part))
     })
-    // nodeName зависит только от data, которая уже в зависимостях.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.owners, data.nodes, query])
 
@@ -55,7 +63,15 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
       .filter((item) => {
         if (onlyProblems && item.severity === 'info') return false
         if (!needle) return true
-        const haystack = [item.title, item.description, item.kind, item.state, item.mitigation ?? '']
+        const haystack = [
+          item.title,
+          item.description,
+          item.plain,
+          item.why,
+          item.kind,
+          item.state,
+          item.mitigation ?? '',
+        ]
           .concat(item.related_nodes.map(nodeName))
           .join(' ')
           .toLowerCase()
@@ -80,14 +96,33 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
     return { writes, owned, callbacks, ownersOfNode }
   }, [data, selected])
 
+  const focusViolations = useMemo(
+    () => (selected ? data.violations.filter((item) => item.related_nodes.includes(selected)) : []),
+    [data.violations, selected],
+  )
+
   return (
     <div className="scroll-page">
-      <h2>Карта владения и записей</h2>
+      <h2>Кто чем владеет — и где это нарушают</h2>
       <p className="muted">
-        Для каждого ключевого состояния: где лежит, кто читает, кто пишет, через какой метод должна
-        идти запись и какие места пишут напрямую. Нарушения не скрываются: они перечислены отдельной
-        таблицей с типом и уровнем.
+        Главная мысль: у важных данных должен быть один хозяин. Тогда никто не может незаметно
+        переписать сумму и никто не спорит, чья правда вернее. Ниже — по каждому важному
+        состоянию: где оно лежит, через что его правильно менять и кто всё-таки лезет мимо.
       </p>
+
+      <div className="card">
+        <h3>Как это устроено в двух словах</h3>
+        <p>
+          Деньги, склад и заявки охраняются: их меняет только специальный объект-хранилище, а всё
+          остальное обязано его просить. Внутри месяца попытка записать мимо хозяина — это ошибка,
+          а не тихое исправление.
+        </p>
+        <p>
+          Хуже там, где хозяина нет: проекты и стройки, план производства, результаты выпуска.
+          Там несколько мест пишут в одни и те же поля, и договориться им помогает только
+          аккуратность автора.
+        </p>
+      </div>
 
       <div className="toolbar" style={{ background: 'transparent', border: 'none', padding: '10px 0' }}>
         <input
@@ -108,12 +143,12 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
       {focus && related && (
         <div className="card">
           <h3>Узел «{focus.short}» в карте владения</h3>
+          <p>
+            <span className={`chip kind-${focus.type}`}>{focus.kind_title}</span>{' '}
+            <span className={`chip ${focus.language}`}>{focus.language}</span>
+          </p>
+          {focus.plain && <p className="plain-text">{focus.plain}</p>}
           <dl className="kv">
-            <dt>Тип</dt>
-            <dd>
-              <span className="chip">{focus.type}</span>{' '}
-              <span className={`chip ${focus.language}`}>{focus.language}</span>
-            </dd>
             <dt>Владелец</dt>
             <dd>{focus.owner ?? <span className="muted">не задан</span>}</dd>
             <dt>Домен</dt>
@@ -133,11 +168,12 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
           )}
           {related.writes.length > 0 && (
             <>
-              <h3>Пишет</h3>
+              <h3>Пишет в</h3>
               <ul className="tight">
                 {related.writes.map((edge) => (
                   <li key={edge.id}>
-                    &rarr; {nodeName(edge.target)} <span className="muted">{edge.label}</span>
+                    &rarr; {nodeName(edge.target)}
+                    <div className="muted small">{edge.plain}</div>
                   </li>
                 ))}
               </ul>
@@ -155,18 +191,33 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
           )}
           {related.callbacks.length > 0 && (
             <>
-              <h3>Callback-переходы</h3>
+              <h3>Обратные вызовы</h3>
               <ul className="tight">
                 {related.callbacks.map((edge) => (
                   <li key={edge.id}>
-                    {nodeName(edge.source)} &rarr; {nodeName(edge.target)}{' '}
-                    <span className="muted">{edge.label}</span>
+                    {nodeName(edge.source)} &rarr; {nodeName(edge.target)}
+                    <div className="muted small">{edge.plain}</div>
                   </li>
                 ))}
               </ul>
             </>
           )}
-          <button onClick={() => onOpenSequence(focus.id)}>Показать место в месячном ходе</button>
+          {focusViolations.length > 0 && (
+            <>
+              <h3>Нарушения рядом</h3>
+              <ul className="tight">
+                {focusViolations.map((item) => (
+                  <li key={item.id}>
+                    <span className="chip violation">{item.kind_title}</span> {item.title}
+                    <div className="muted small">{item.plain}</div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <div className="button-row">
+            <button onClick={() => onOpenSequence(focus.id)}>Где это в месяце</button>
+          </div>
         </div>
       )}
 
@@ -178,30 +229,32 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
         return (
           <div className="card" key={owner.id}>
             <h3>{owner.title}</h3>
+            <p className="plain-text">{owner.plain_what}</p>
+            <p>{owner.plain_how}</p>
+            <p className="muted">{owner.plain_care}</p>
+
             <dl className="kv">
-              <dt>Состояние</dt>
-              <dd>{owner.state}</dd>
               <dt>Хранится</dt>
               <dd>{owner.storage}</dd>
-              <dt>Владелец</dt>
+              <dt>Хозяин</dt>
               <dd>
                 <button className="loc" onClick={() => onSelect(owner.owner_node)}>
                   {ownerNode?.short ?? owner.owner_node}
                 </button>
                 {fallbackNode && (
                   <>
-                    {' · fallback: '}
+                    {' · запасной: '}
                     <button className="loc" onClick={() => onSelect(fallbackNode.id)}>
                       {fallbackNode.short}
                     </button>
                   </>
                 )}
               </dd>
-              <dt>Запись</dt>
-              <dd className="mono">{owner.write_path}</dd>
+              <dt>Правильно</dt>
+              <dd className="mono small">{owner.write_path}</dd>
             </dl>
 
-            <h3>Читают</h3>
+            <h3>Кто читает</h3>
             <ul className="tight">
               {owner.readers.map((id) => (
                 <li key={id}>
@@ -212,7 +265,7 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
               ))}
             </ul>
 
-            <h3>Изменяют</h3>
+            <h3>Кто меняет</h3>
             <ul className="tight">
               {owner.writers.map((id) => (
                 <li key={id}>
@@ -223,14 +276,14 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
               ))}
             </ul>
 
-            <h3>Прямые записи и callback</h3>
+            <h3>Записи мимо хозяина</h3>
             <ul className="tight">
               {[...owner.direct_writes, ...owner.callbacks].map((id) => {
                 const item = violationById.get(id)
                 if (!item) {
                   return (
                     <li key={id}>
-                      <span className="chip violation">unknown</span> {id}
+                      <span className="chip violation">не найдено</span> {id}
                     </li>
                   )
                 }
@@ -238,38 +291,36 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
                 return (
                   <li key={id}>
                     <span className={`chip ${item.kind === 'callback' ? 'callback' : 'violation'}`}>
-                      {item.kind}
+                      {item.kind_title}
                     </span>{' '}
                     {item.title}
+                    <div className="muted small">{item.plain}</div>
                     {record && (
-                      <>
-                        {' — '}
-                        <a
-                          className="loc"
-                          href={sourceHref(record.file, record.line)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {record.file.split('/').pop()}:{record.line}
-                        </a>
-                      </>
+                      <a
+                        className="loc small"
+                        href={sourceHref(record.file, record.line)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {record.file.split('/').pop()}:{record.line}
+                      </a>
                     )}
                   </li>
                 )
               })}
               {owner.direct_writes.length === 0 && owner.callbacks.length === 0 && (
-                <li className="muted">Прямых записей не найдено.</li>
+                <li className="muted">Прямых записей не найдено — всё через хозяина.</li>
               )}
             </ul>
 
             <h3>Заметки</h3>
-            <p>{owner.notes}</p>
+            <p className="muted small">{owner.notes}</p>
             {owner.evidence.length > 0 && (
               <>
-                <h3>Подтверждающие тесты</h3>
+                <h3>Чем подтверждено</h3>
                 <ul className="tight">
                   {owner.evidence.map((item) => (
-                    <li key={item} className="mono">
+                    <li key={item} className="mono small">
                       {item}
                     </li>
                   ))}
@@ -280,19 +331,28 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
         )
       })}
 
-      <h2 style={{ marginTop: 26 }}>Нарушения и зоны риска</h2>
-      <p className="muted">
-        Тип «direct_write» — запись мимо владельца; «ownerless_state» — состояние без владельца;
-        «callback» — переход из горячего цикла в Python; «boundary_leak» — протечка границы между
-        слоями. Уровень «info» помечает осознанные границы, а не дефекты.
-      </p>
+      <h2 style={{ marginTop: 26 }}>Нарушения: что не так и почему это важно</h2>
+      <div className="card">
+        <h3>Как читать таблицу</h3>
+        <ul className="tight">
+          {data.legend.violation_kinds.map((item) => (
+            <li key={item.id}>
+              <strong>{item.title}</strong>
+              <div className="muted small">{item.explanation}</div>
+            </li>
+          ))}
+        </ul>
+        <p className="muted small">
+          Уровень «справка» — это не поломка, а осознанное решение, о котором стоит знать.
+        </p>
+      </div>
+
       <table className="grid">
         <thead>
           <tr>
             <th>Уровень</th>
             <th>Тип</th>
-            <th>Нарушение</th>
-            <th>Состояние</th>
+            <th>Что не так</th>
             <th>Где</th>
             <th>Связанные узлы</th>
           </tr>
@@ -307,16 +367,26 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
               >
                 <td>
                   <span className={`chip ${item.severity === 'info' ? '' : 'violation'}`}>
-                    {item.severity}
+                    {severityTitle[item.severity] ?? item.severity}
                   </span>
                 </td>
-                <td className="mono">{item.kind}</td>
+                <td className="small">{item.kind_title}</td>
                 <td className="wrap">
                   <strong>{item.title}</strong>
-                  <div className="muted">{item.description}</div>
-                  {item.mitigation && <div className="muted">Что делать: {item.mitigation}</div>}
+                  <div className="small" style={{ marginTop: 4 }}>
+                    {item.plain}
+                  </div>
+                  {item.why && (
+                    <div className="muted small" style={{ marginTop: 4 }}>
+                      Почему важно: {item.why}
+                    </div>
+                  )}
+                  {item.mitigation && (
+                    <div className="muted small" style={{ marginTop: 4 }}>
+                      Что делать: {item.mitigation}
+                    </div>
+                  )}
                 </td>
-                <td>{item.state}</td>
                 <td>
                   {record ? (
                     <a
@@ -325,7 +395,7 @@ export default function OwnershipView({ data, selected, onSelect, onOpenSequence
                       target="_blank"
                       rel="noreferrer"
                     >
-                      {record.file}:{record.line}
+                      {record.file.split('/').pop()}:{record.line}
                     </a>
                   ) : (
                     '—'

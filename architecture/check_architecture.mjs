@@ -99,7 +99,10 @@ for (const node of data.nodes) {
 
 // --- связи -----------------------------------------------------------------
 const referenced = new Set()
+const edgeIds = new Set()
 for (const edge of data.edges) {
+  if (edgeIds.has(edge.id)) fail(`дубликат связи: ${edge.id}`)
+  edgeIds.add(edge.id)
   if (!nodes.has(edge.source)) fail(`${edge.id}: нет узла ${edge.source}`)
   if (!nodes.has(edge.target)) fail(`${edge.id}: нет узла ${edge.target}`)
   if (!EDGE_KINDS.has(edge.kind)) fail(`${edge.id}: неизвестный вид ${edge.kind}`)
@@ -107,6 +110,9 @@ for (const edge of data.edges) {
   needLocation(edge.source_location, edge.id)
   referenced.add(edge.source)
   referenced.add(edge.target)
+}
+if (edgeIds.size !== data.edges.length) {
+  fail(`уникальных связей ${edgeIds.size}, а всего ${data.edges.length}`)
 }
 
 // --- сценарии --------------------------------------------------------------
