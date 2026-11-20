@@ -15,11 +15,6 @@ var tiles: Array = []
 var cities: Array = []
 var routes: Array = []
 var tile_index := {}
-var corner_heights := {}
-var corner_colors := {}
-var corner_water := {}
-var terrain_mesh := ArrayMesh.new()
-var terrain_mesh_instance: MeshInstance2D
 var map_width := 0
 var map_height := 0
 var zoom := 1.0
@@ -38,49 +33,8 @@ const BIOME_COLORS := {
 	"grassland": Color("#7f976d"), "steppe": Color("#92916b"), "snow": Color("#abb4ae")
 }
 
-const TERRAIN_SHADER := """
-shader_type canvas_item;
-render_mode unshaded;
-varying vec2 map_position;
-
-void vertex() { map_position = VERTEX; }
-
-float soft_noise(vec2 p) {
-	vec2 cell = floor(p);
-	vec2 local = fract(p);
-	local = local * local * (3.0 - 2.0 * local);
-	float a = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
-	float b = fract(sin(dot(cell + vec2(1.0, 0.0), vec2(12.9898, 78.233))) * 43758.5453);
-	float c = fract(sin(dot(cell + vec2(0.0, 1.0), vec2(12.9898, 78.233))) * 43758.5453);
-	float d = fract(sin(dot(cell + vec2(1.0, 1.0), vec2(12.9898, 78.233))) * 43758.5453);
-	return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
-}
-
-void fragment() {
-	float water = smoothstep(0.35, 0.65, UV.x);
-	float grain = (soft_noise(map_position * 0.035) - 0.5) * 0.045;
-	float broad = (soft_noise(map_position * 0.008) - 0.5) * 0.035;
-	vec3 land = COLOR.rgb * (1.0 + grain + broad);
-	vec3 water_dark = vec3(0.105, 0.255, 0.325);
-	vec3 water_light = vec3(0.245, 0.455, 0.505);
-	vec3 water_color = mix(water_dark, water_light, clamp(0.22 + UV.y * 0.72, 0.0, 1.0));
-	water_color *= 1.0 + grain * 0.55;
-	COLOR = vec4(mix(land, water_color, water), 1.0);
-}
-"""
-
 func _ready() -> void:
 	RenderingServer.set_default_clear_color(Color("#111b20"))
-	terrain_mesh_instance = MeshInstance2D.new()
-	terrain_mesh_instance.name = "ContinuousTerrainMesh"
-	terrain_mesh_instance.z_index = -10
-	terrain_mesh_instance.mesh = terrain_mesh
-	var material := ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = TERRAIN_SHADER
-	material.shader = shader
-	terrain_mesh_instance.material = material
-	add_child(terrain_mesh_instance)
 	tcp.connect_to_host(HOST, PORT)
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	queue_redraw()
@@ -113,46 +67,9 @@ func _apply_map(payload: Dictionary) -> void:
 	tile_index.clear()
 	for tile in tiles:
 		tile_index[Vector2i(int(tile.get("x", 0)), int(tile.get("y", 0)))] = tile
-	_build_corner_heightfield()
 	map_ready = true
 	status = "Мир загружен · %d клеток · %d городов · %d маршрутов" % [tiles.size(), cities.size(), routes.size()]
 	_fit_map()
-	_rebuild_terrain_mesh()
-
-func _build_corner_heightfield() -> void:
-	corner_heights.clear()
-	corner_colors.clear()
-	corner_water.clear()
-	for tile in tiles:
-		var x := int(tile.get("x", 0))
-		var y := int(tile.get("y", 0))
-		for corner in [Vector2i(x, y), Vector2i(x + 1, y), Vector2i(x + 1, y + 1), Vector2i(x, y + 1)]:
-			var samples: Array = []
-			var colors: Array = []
-			var water_samples: Array = []
-			for cell in [Vector2i(corner.x, corner.y), Vector2i(corner.x - 1, corner.y), Vector2i(corner.x, corner.y - 1), Vector2i(corner.x - 1, corner.y - 1)]:
-				if tile_index.has(cell):
-					var sample: Dictionary = tile_index[cell]
-					samples.append(float(sample.get("elevation", 0.0)))
-					colors.append(_tile_color(sample))
-					water_samples.append(1.0 if _is_water(sample) else 0.0)
-			if samples.is_empty():
-				continue
-			corner_heights[corner] = _average_float(samples)
-			corner_colors[corner] = _average_color(colors)
-			corner_water[corner] = _average_float(water_samples)
-
-func _average_float(values: Array) -> float:
-	var total := 0.0
-	for value in values:
-		total += float(value)
-	return total / max(1, values.size())
-
-func _average_color(values: Array) -> Color:
-	var result := Color(0, 0, 0, 1)
-	for value in values:
-		result += value
-	return result / float(max(1, values.size()))
 
 func _fit_map() -> void:
 	if tiles.is_empty():
@@ -188,50 +105,12 @@ func _tile_points(tile: Dictionary, scale := zoom) -> PackedVector2Array:
 	var elevation := float(tile.get("elevation", 0.0))
 	var x := int(tile.get("x", 0))
 	var y := int(tile.get("y", 0))
-	var z := func(key: Vector2i) -> float: return corner_heights.get(key, elevation)
 	return PackedVector2Array([
-		center + Vector2(0, -CELL_H * 0.5 - z.call(Vector2i(x, y)) * HEIGHT_SCALE) * scale,
-		center + Vector2(CELL_W * 0.5, -z.call(Vector2i(x + 1, y)) * HEIGHT_SCALE) * scale,
-		center + Vector2(0, CELL_H * 0.5 - z.call(Vector2i(x + 1, y + 1)) * HEIGHT_SCALE) * scale,
-		center + Vector2(-CELL_W * 0.5, -z.call(Vector2i(x, y + 1)) * HEIGHT_SCALE) * scale
+		center + Vector2(0, -CELL_H * 0.5 - elevation * HEIGHT_SCALE) * scale,
+		center + Vector2(CELL_W * 0.5, -elevation * HEIGHT_SCALE) * scale,
+		center + Vector2(0, CELL_H * 0.5 - elevation * HEIGHT_SCALE) * scale,
+		center + Vector2(-CELL_W * 0.5, -elevation * HEIGHT_SCALE) * scale
 	])
-
-func _rebuild_terrain_mesh() -> void:
-	if not map_ready:
-		return
-	var vertices := PackedVector2Array()
-	var colors := PackedColorArray()
-	var uvs := PackedVector2Array()
-	var indices := PackedInt32Array()
-	var vertex_lookup := {}
-	for tile in tiles:
-		var x := int(tile.get("x", 0))
-		var y := int(tile.get("y", 0))
-		var keys := [Vector2i(x, y), Vector2i(x + 1, y), Vector2i(x + 1, y + 1), Vector2i(x, y + 1)]
-		var tile_indices: Array = []
-		for key in keys:
-			if not vertex_lookup.has(key):
-				vertex_lookup[key] = vertices.size()
-				var corner_tile: Dictionary = tile_index.get(key, tile)
-				vertices.append(_corner_screen_point(key, float(corner_heights.get(key, tile.get("elevation", 0.0)))))
-				colors.append(corner_colors.get(key, _tile_color(corner_tile)))
-				uvs.append(Vector2(float(corner_water.get(key, 1.0 if _is_water(corner_tile) else 0.0)), clamp(float(corner_heights.get(key, 0.0)), 0.0, 1.0)))
-			tile_indices.append(int(vertex_lookup[key]))
-		indices.append_array([tile_indices[0], tile_indices[1], tile_indices[2], tile_indices[0], tile_indices[2], tile_indices[3]])
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_COLOR] = colors
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	arrays[Mesh.ARRAY_INDEX] = indices
-	terrain_mesh.clear_surfaces()
-	terrain_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	terrain_mesh_instance.mesh = terrain_mesh
-
-func _corner_screen_point(key: Vector2i, elevation: float) -> Vector2:
-	var x := float(key.x)
-	var y := float(key.y)
-	return camera + Vector2((x - y) * CELL_W * 0.5, (x + y) * CELL_H * 0.5 - elevation * HEIGHT_SCALE) * zoom
 
 func _is_water(tile: Dictionary) -> bool:
 	return str(tile.get("terrain", "")) == "water" or str(tile.get("terrain", "")) == "river"
@@ -251,9 +130,52 @@ func _draw() -> void:
 	draw_string(MAP_FONT, Vector2(25, get_viewport_rect().size.y - 22), "Колесо · масштаб     Средняя кнопка / Shift + ЛКМ · панорама", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#718384"))
 
 func _draw_map() -> void:
+	for tile in tiles:
+		_draw_tile(tile)
 	for route in routes:
 		_draw_route(route)
 	_draw_cities()
+
+func _draw_tile(tile: Dictionary) -> void:
+	var center := _tile_center(tile)
+	var elevation := float(tile.get("elevation", 0.0))
+	var shape := _tile_points(tile)
+	var terrain := str(tile.get("terrain", "plain"))
+	var color := _tile_color(tile)
+	if terrain == "water":
+		color = Color("#28566f")
+	# Свет слева сверху, объём уходит вниз-вправо.
+	if elevation > 0.025:
+		var side := PackedVector2Array([shape[1], shape[2], shape[2] + Vector2(0, 5) * zoom, shape[1] + Vector2(0, 5) * zoom])
+		draw_colored_polygon(side, color.darkened(0.42))
+		var shadow := PackedVector2Array([shape[1] + Vector2(5, 4) * zoom, shape[2] + Vector2(5, 4) * zoom, shape[2] + Vector2(11, 8) * zoom, shape[1] + Vector2(11, 8) * zoom])
+		draw_colored_polygon(shadow, Color(0.03, 0.05, 0.06, clamp(elevation * 0.22, 0.05, 0.24)))
+	draw_colored_polygon(shape, color)
+	draw_polyline(PackedVector2Array([shape[0], shape[1], shape[2], shape[3], shape[0]]), Color("#263b3b"), 1.0 * zoom)
+	if terrain == "mountain" or str(tile.get("relief", "")) in ["mountains", "peaks"]:
+		_draw_mountain(center, elevation, str(tile.get("relief", "mountains")))
+	elif terrain == "hills" or elevation > 0.32:
+		_draw_hill(center, elevation)
+	if terrain == "water":
+		var glint := center + Vector2(-8, -2) * zoom
+		draw_line(glint, glint + Vector2(15, -2) * zoom, Color("#77a6aa"), 1.0 * zoom)
+
+func _draw_hill(center: Vector2, elevation: float) -> void:
+	var w := (12.0 + elevation * 14.0) * zoom
+	var h := (7.0 + elevation * 12.0) * zoom
+	draw_colored_polygon(PackedVector2Array([center + Vector2(-w, 3) * zoom, center + Vector2(0, -h), center + Vector2(w, 3) * zoom]), Color("#a39b72"))
+	draw_line(center + Vector2(-w, 3) * zoom, center + Vector2(0, -h), Color("#d0bd83"), 1.0 * zoom)
+
+func _draw_mountain(center: Vector2, elevation: float, relief: String) -> void:
+	var h := (20.0 + elevation * 48.0) * zoom
+	if relief == "peaks":
+		h *= 1.22
+	var w := (18.0 + elevation * 18.0) * zoom
+	var base := center + Vector2(0, 3) * zoom
+	draw_colored_polygon(PackedVector2Array([base + Vector2(-w, 0), base + Vector2(0, -h), base + Vector2(0, 4), base + Vector2(w * 0.85, 0)]), Color("#a2a59b"))
+	draw_colored_polygon(PackedVector2Array([base + Vector2(0, -h), base + Vector2(w * 0.85, 0), base + Vector2(0, 4)]), Color("#4e5a5c"))
+	draw_colored_polygon(PackedVector2Array([base + Vector2(-w * 0.25, -h * 0.48), base + Vector2(0, -h), base + Vector2(w * 0.2, -h * 0.45)]), Color("#e0ded0"))
+	draw_line(base + Vector2(0, -h), base + Vector2(w * 0.85, 0), Color("#26383d"), 1.0 * zoom)
 
 func _draw_route(route: Dictionary) -> void:
 	var points := PackedVector2Array()
@@ -292,21 +214,17 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom = clamp(zoom * 1.1, 0.35, 3.0)
-			_rebuild_terrain_mesh()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom = clamp(zoom / 1.1, 0.35, 3.0)
-			_rebuild_terrain_mesh()
 		elif event.button_index == MOUSE_BUTTON_MIDDLE or (event.button_index == MOUSE_BUTTON_LEFT and event.shift_pressed):
 			dragging = event.pressed
 			drag_last = event.position
 	elif event is InputEventMouseMotion and dragging:
 		camera += event.position - drag_last
 		drag_last = event.position
-		_rebuild_terrain_mesh()
 		queue_redraw()
 
 func _on_viewport_resized() -> void:
 	if map_ready:
 		_fit_map()
-		_rebuild_terrain_mesh()
 	queue_redraw()
