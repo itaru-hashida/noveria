@@ -27,8 +27,13 @@
 """
 
 import importlib
+from collections import namedtuple
 
 from ..support import EPS
+
+
+QuoteSnapshot = namedtuple(
+    'QuoteSnapshot', 'offers recovery_rows reference landed owner_id')
 
 
 class QuoteHooks(object):
@@ -79,8 +84,8 @@ class QuoteHooks(object):
 def prepare_quote_context(engine, buyer, good, sells):
     """Подготовить неизменяемую часть серии котировок одного товара."""
     hooks = QuoteHooks(engine, buyer, good, sells)
-    return (hooks.offers(), hooks.recovery_rows(), hooks.reference,
-            hooks.landed, buyer['id'])
+    return QuoteSnapshot(hooks.offers(), hooks.recovery_rows(), hooks.reference,
+                         hooks.landed, buyer['id'])
 
 
 def prepare_native_quote_context(engine, buyer, good, sells, maximum_missing,

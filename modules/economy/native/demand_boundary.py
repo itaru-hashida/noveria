@@ -31,8 +31,13 @@ Python-хуками остаются ``landed`` (маршрут, тариф и `
 """
 
 import importlib
+from collections import namedtuple
 
 from ..support import EPS
+
+
+ReachableDemandSnapshot = namedtuple(
+    'ReachableDemandSnapshot', 'owner price groups books remaining eps')
 
 
 class DemandHooks(object):
@@ -287,7 +292,7 @@ def prepare_reachable_demand(engine, e, sells, groups=None):
     for participant, _, _, limit, _, _ in groups:
         if participant != owner and not (limit+EPS < price) and participant not in books:
             books[participant] = engine._market_book(engine.accounts[participant], good, sells)
-    return owner, price, groups, books, remaining, EPS
+    return ReachableDemandSnapshot(owner, price, groups, books, remaining, EPS)
 
 
 def prepare_outlook_demand_prices(engine, e):

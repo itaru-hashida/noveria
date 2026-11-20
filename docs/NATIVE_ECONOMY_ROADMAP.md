@@ -230,7 +230,9 @@ parity пройдена. Внутри native calculation callback-ов нет; �
 вызовы hooks относятся к Python-подготовке входов и являются следующим
 кандидатом на пакетизацию. Для `plan_kernel` расчётный fallback также очищен
 от фиктивного параметра `hooks`: native и Python расчёт используют один
-контракт `PlanCalculationInputs`.
+контракт `PlanCalculationInputs`. Market-подготовка теперь также имеет явные
+`ReachableDemandSnapshot` и `QuoteSnapshot`; перед Cython они приводятся к
+ABI-совместимым tuples без изменения порядка данных.
 
 ## Критерии достижения целей
 

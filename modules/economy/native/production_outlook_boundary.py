@@ -283,7 +283,11 @@ def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote,
 def _compute_snapshot(snapshot, calculator=None):
     """Единственная calculation boundary для готового snapshot."""
     if not isinstance(snapshot, OutlookSnapshot) and snapshot.get('book_input') is not None:
-        outlook, sales = _forecast_from_books(*snapshot['book_input'])
+        demand_input, stock_input, outlook_input = snapshot['book_input']
+        # Cython typed tuple принимает базовый tuple, поэтому namedtuple
+        # snapshot разворачиваем на самой ABI-границе.
+        outlook, sales = _forecast_from_books(
+            tuple(demand_input), stock_input, outlook_input)
         return _make_result(outlook), sales
     calculator = calculator or run_outlook
     inputs = snapshot if isinstance(snapshot, OutlookSnapshot) else OutlookSnapshot(
