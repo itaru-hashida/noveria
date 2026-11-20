@@ -259,6 +259,16 @@ Focused-набор ownership/runtime прошёл: **107 passed**. Durable write
 `ask_prices` и диагностические поля классифицированы как derived/cache и не
 являются вторым источником durable state.
 
+### Native Storage: первый принятый срез
+
+`NativeStorage` теперь владеет commit boundary и `committed_revision`.
+Поддержаны атомарная публикация, восстановление `.previous`, удаление
+незавершённого `.staging`, миграция schema `v4 → v5` с сохранением исходника и
+отказ для неизвестных версий. Финальный набор `EconomyState`, ownership/runtime
+и migration/recovery прошёл: **91 passed**. Это закрывает storage gate текущего
+checkpoint-формата; перенос всех вычислительных буферов из Python в native
+остаётся отдельной будущей фазой.
+
 ### Финальный аудит текущего среза
 
 Проверено на текущей ветке: `CashStore`, `StockStore`, `OrderStore` и
