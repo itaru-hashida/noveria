@@ -70,8 +70,8 @@ def _result_dict(result):
     return {field: getattr(result, field) for field in OUTLOOK_RESULT_FIELDS}
 
 
-class OutlookHooks(object):
-    """Python-хуки, которые обязаны остаться в Python.
+class OutlookPreparation(object):
+    """Python-only preparation of one immutable outlook snapshot.
 
     Ни один из них не считает прогноз: они отдают уже готовые числа либо
     читают живое состояние месяца. Порядок вызовов задаёт ядро.
@@ -117,6 +117,11 @@ class OutlookHooks(object):
         return self.e.get('sales_history', [])[-3:]
 
 
+# Совместимость для старых call sites: это объект подготовки, не часть
+# native-расчёта и не владелец состояния.
+OutlookHooks = OutlookPreparation
+
+
 def cache_key(engine, e, sells, hooks):
     """Ключ кэша прогноза: та же форма, что была в V3, плюс ``VERSION``.
 
@@ -148,7 +153,7 @@ def production_outlook_python(engine, e, sells=None, hooks=None):
     from collections import defaultdict
     sells = sells or defaultdict(list)
     e = dict(e)
-    hooks = hooks or OutlookHooks(engine, e, sells)
+    hooks = hooks or OutlookPreparation(engine, e, sells)
     cost = hooks.unit_cost()
     # Рентабельную текущую цену (включая B2B без налога) повышать не требуется.
     base_net = hooks.net_price(e)
@@ -207,14 +212,14 @@ def production_outlook(engine, e, sells=None):
     cacheable = engine.enterprises.get(e.get('id')) is e
     key = None
     if cacheable:
-        key = cache_key(engine, e, sells, OutlookHooks(engine, e, sells))
+        key = cache_key(engine, e, sells, OutlookPreparation(engine, e, sells))
         cached = cache.get(key)
         if cached is not None:
             return cached
     # Предприятие копируется до расчёта: прежний код работал с копией, и
     # внешний словарь не должен увидеть промежуточные поля.
     copy_e = dict(e)
-    hooks = OutlookHooks(engine, copy_e, sells)
+    hooks = OutlookPreparation(engine, copy_e, sells)
     result = _compute(engine, copy_e, hooks)
     if key is not None:
         engine.store_production_outlook(key, result)

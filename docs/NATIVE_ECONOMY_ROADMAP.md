@@ -235,7 +235,9 @@ parity пройдена. Внутри native calculation callback-ов нет; �
 ABI-совместимым tuples без изменения порядка данных.
 В `plan_boundary` чтение и применение физически разделены на
 `PlanPreparation` и `PlanApply`; старое имя `PlanHooks` оставлено только как
-совместимый alias для apply-фазы.
+совместимый alias для apply-фазы. В `production_outlook` подготовка также
+названа отдельно — `OutlookPreparation`; `OutlookHooks` оставлен только как
+совместимый alias, а не как часть native API.
 
 ## Критерии достижения целей
 
