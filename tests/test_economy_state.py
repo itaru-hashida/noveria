@@ -196,6 +196,28 @@ def test_native_storage_commits_monotonic_revision(tmp_path):
         assert loaded.committed_revision == 2
 
 
+def test_native_storage_recovers_previous_and_discards_staging(tmp_path):
+    db, service = small_world(tmp_path)
+    try:
+        checkpoint = tmp_path / 'recoverable'
+        service.economy_state().save_checkpoint(checkpoint)
+        backup = checkpoint.with_name(checkpoint.name + '.previous')
+        staging = checkpoint.with_name(checkpoint.name + '.staging')
+        checkpoint.rename(backup)
+        staging.mkdir()
+        (staging / 'schema.json').write_text('{"schema_version": 999}', encoding='utf-8')
+    finally:
+        db.close()
+
+    with WorldDB(tmp_path / 'world.lbug') as db:
+        world = WorldService(db, EventBus()).world_graph()
+        loaded = EconomyState.load_checkpoint(checkpoint, world)
+        assert loaded.committed_revision == 1
+        assert checkpoint.is_dir()
+        assert not backup.exists()
+        assert not staging.exists()
+
+
 @pytest.mark.parametrize('interrupted', [False, True])
 def test_checkpoint_publication_preserves_previous_save(tmp_path, monkeypatch, interrupted):
     import os

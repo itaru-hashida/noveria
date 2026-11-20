@@ -198,6 +198,8 @@ class EconomyState:
     @classmethod
     def load_checkpoint(cls, path, world_graph, strict=True):
         """Восстановить состояние из Parquet и продолжить игру с того же места."""
+        from .native_storage import NativeStorage
+        NativeStorage.recover(path)
         path = Path(path)
         checkpoint_path = path
         if not path.exists():
