@@ -48,6 +48,26 @@ OutlookCalculationInputs = namedtuple(
 OutlookCalculationResult = namedtuple('OutlookCalculationResult', 'values')
 # Immutable input contract shared by the Python boundary and native kernel.
 OutlookSnapshot = OutlookCalculationInputs
+OUTLOOK_RESULT_FIELDS = (
+    'sales_forecast reachable_demand expected_unit_cost expected_price '
+    'expected_margin production_limit planned_output input_target_output '
+    'planned_price expected_fixed_cost expected_fixed_unit').split()
+OutlookResult = namedtuple('OutlookResult', OUTLOOK_RESULT_FIELDS)
+
+
+def _make_result(values):
+    """Validate and freeze the native result before the apply/cache phase."""
+    if isinstance(values, OutlookResult):
+        return values
+    missing = [field for field in OUTLOOK_RESULT_FIELDS if field not in values]
+    if missing:
+        raise ValueError('incomplete production outlook result: ' + ', '.join(missing))
+    return OutlookResult(*(values[field] for field in OUTLOOK_RESULT_FIELDS))
+
+
+def _result_dict(result):
+    """Compatibility view for the existing public Economy API."""
+    return {field: getattr(result, field) for field in OUTLOOK_RESULT_FIELDS}
 
 
 class OutlookHooks(object):
@@ -230,7 +250,7 @@ def _compute(engine, e, hooks):
     if not isinstance(snapshot, OutlookSnapshot) and snapshot.get('stock_cache_owner') is not None:
         engine.store_stock_sales(snapshot['stock_cache_owner'],
                                  sales)
-    return result
+    return _result_dict(result)
 
 
 def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote,
@@ -264,7 +284,7 @@ def _compute_snapshot(snapshot, calculator=None):
     """Единственная calculation boundary для готового snapshot."""
     if not isinstance(snapshot, OutlookSnapshot) and snapshot.get('book_input') is not None:
         outlook, sales = _forecast_from_books(*snapshot['book_input'])
-        return outlook, sales
+        return _make_result(outlook), sales
     calculator = calculator or run_outlook
     inputs = snapshot if isinstance(snapshot, OutlookSnapshot) else OutlookSnapshot(
         snapshot['observations'], snapshot['sales_forecast'], snapshot['trades'],
@@ -274,8 +294,9 @@ def _compute_snapshot(snapshot, calculator=None):
         snapshot['expected_price'], snapshot['overhead'],
         snapshot['overstock_factor'], snapshot['decline_rate'], snapshot['price'])
     calculated = calculator(inputs, EPS)
-    return (calculated.values if isinstance(calculated, OutlookCalculationResult)
-            else calculated), None
+    values = (calculated.values if isinstance(calculated, OutlookCalculationResult)
+              else calculated)
+    return _make_result(values), None
 
 
 def _prepare_books_snapshot(engine, e, hooks, cost, base_net, price, quote,

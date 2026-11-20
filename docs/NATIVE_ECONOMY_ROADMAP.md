@@ -224,7 +224,11 @@ engine на каждое предприятие. Это следующая от�
    обращения к engine.
 4. После этого тем же шаблоном пройти `plan_kernel`, затем market helpers.
 
-Текущий рабочий срез — пункты 1–3 для `production_outlook`.
+Пункты 1–3 для `production_outlook` выполнены: snapshot и result-контракты
+immutable, старый внешний API сохранён через compatibility view, focused
+parity пройдена. Внутри native calculation callback-ов нет; оставшиеся
+вызовы hooks относятся к Python-подготовке входов и являются следующим
+кандидатом на пакетизацию.
 
 ## Критерии достижения целей
 
