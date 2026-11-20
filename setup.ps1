@@ -19,9 +19,10 @@ try {
             }
         }
     }
-    & $uv sync --locked
+    $cache = Join-Path $PSScriptRoot '.noveria-tools\uv-cache'
+    & $uv sync --locked --cache-dir $cache
     if ($LASTEXITCODE) { throw 'uv sync failed' }
-    & $uv pip install --python .venv/Scripts/python.exe -r requirements-ui.txt -r requirements-research.txt
+    & $uv pip install --cache-dir $cache --python .venv/Scripts/python.exe -r requirements-ui.txt -r requirements-research.txt
     if ($LASTEXITCODE) { throw 'Dependency installation failed' }
     Write-Host 'Start the map server: .\.venv\Scripts\python.exe scripts\godot_server.py'
 } finally {
