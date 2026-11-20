@@ -304,14 +304,15 @@ def prepare_outlook_demand_prices(engine, e):
 
 
 def reachable_demand(engine, e, sells):
-    """Единственный вход из ``V3.reachable_demand``: остатки книги и ядро."""
+    """Единственный вход из ``V3.reachable_demand``.
+
+    Собранное native-ядро использует только подготовленную книгу. Если
+    ``offer_view`` недоступен, остаёмся в Python-эталоне: callbacks не должны
+    протекать в native fallback.
+    """
     if cover_demand_from_books is not None:
         return cover_demand_from_books(*prepare_reachable_demand(engine, e, sells))
-    groups = customer_demand_groups(engine, e)
-    remaining = {sell['id']: sell['remaining'] for sell in sells.get(e['good'], [])}
-    return run_reachable(e['id'], e['price'], groups, remaining,
-                         engine.accounts.__getitem__, engine.offers,
-                         e['good'], sells, EPS)
+    return reachable_demand_python(engine, e, sells)
 
 
 def reachable_demand_python(engine, e, sells):

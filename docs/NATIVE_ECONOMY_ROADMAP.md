@@ -225,8 +225,9 @@ engine на каждое предприятие. Это следующая от�
    recovery/reference/cache parity подтверждена.
 2. `volume_input_prices`: убрать callbacks `free_stock`, `quoted_cost` и
    `reference_price` из native/fallback расчёта через пакетный snapshot.
-3. `demand` fallback: заменить передачу `accounts.__getitem__`/`offers` на
-   готовые market rows.
+3. `demand` fallback — сделано: при отсутствии подготовленного native
+   `offer_view` используется Python-эталон, а `accounts.__getitem__`/`offers`
+   больше не передаются внутрь native fallback.
 4. `net_price`: передавать числовой список котировок вместо обхода через hook.
 5. После callback-срезов — полный ownership-аудит и единый benchmark.
 
