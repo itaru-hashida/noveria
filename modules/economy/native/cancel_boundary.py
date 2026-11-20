@@ -56,6 +56,7 @@ import builtins
 import importlib
 
 from . import cash_boundary, project_slot
+from .phase_contracts import CANCELLATION_RESULT_FIELDS, require_fields
 
 # Встроенный sum: float-слагаемые CPython 3.12 складывает компенсированно,
 # поэтому прогресс обязан считаться той же функцией, что и прежде.
@@ -167,6 +168,7 @@ def apply_cancellation_hook(owner, account, reason, result):
     ``kind``/``investor``/``outcome``/``reason``. Восстановленную защиту пишет
     ``CashStore``: это его денежная колонка, а не поле представления.
     """
+    require_fields(result, CANCELLATION_RESULT_FIELDS, contract='cancellation')
     project_slot.detach(account)
     cash_boundary.store_for(owner, account).set_protected_cash(
         account['id'],

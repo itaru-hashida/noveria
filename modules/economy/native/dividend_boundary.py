@@ -3,6 +3,8 @@
 import importlib
 import sys
 
+from .phase_contracts import DIVIDEND_RESULT_FIELDS, require_fields
+
 
 class DividendHooks:
     """Доступ Python-границы к счетам, рыночным данным и отчёту."""
@@ -121,6 +123,7 @@ class DividendHooks:
         side effects: перевод через CashStore-backed transfer, резервы,
         поля предприятия и журнал.
         """
+        require_fields(result, DIVIDEND_RESULT_FIELDS, contract='dividend')
         sender = enterprise['id']
         paid = result['paid']
         if result['revision']:
