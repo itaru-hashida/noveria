@@ -1,5 +1,6 @@
 """Проверка готовности проекта и последовательное применение завершения."""
 
+import copy
 import importlib
 
 from . import cash_boundary, project_slot
@@ -147,6 +148,30 @@ def _limit_capacity(project, capacity, eps, hooks, reason, calculate):
     return True
 
 
+class _ProjectCompletionTransaction(object):
+    """Восстановить связанные владельцы при ошибке завершения стройки."""
+
+    def __init__(self, engine):
+        self.engine = engine
+        self.accounts = copy.deepcopy(engine.accounts)
+        self.enterprises = copy.deepcopy(engine.enterprises)
+        self.report = copy.deepcopy(engine.report)
+        self.receipts = copy.deepcopy(engine.construction_receipts)
+
+    def rollback(self):
+        engine = self.engine
+        engine.accounts.clear()
+        engine.accounts.update(self.accounts)
+        engine.enterprises.clear()
+        engine.enterprises.update(self.enterprises)
+        engine.report.clear()
+        engine.report.update(self.report)
+        engine.construction_receipts.clear()
+        engine.construction_receipts.update(self.receipts)
+        engine.cash_store.sync()
+        engine.stock_store.sync()
+
+
 def load_project_completion_kernel():
     """Вернуть native-модуль project_completion_kernel или None.
 
@@ -187,8 +212,13 @@ def finish_projects(engine):
 
     Граница обходит снимок списка счетов в порядке вставки.
     """
-    run_finish(engine, list(engine.accounts.values()),
-        ProjectCompletionHooks(engine), EPS)
+    transaction = _ProjectCompletionTransaction(engine)
+    try:
+        run_finish(engine, list(engine.accounts.values()),
+            ProjectCompletionHooks(engine), EPS)
+    except Exception:
+        transaction.rollback()
+        raise
 
 
 def limit_project_capacity(engine, project, capacity):
