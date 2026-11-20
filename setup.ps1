@@ -16,17 +16,26 @@ Write-Host '=== Noveria: подготовка окружения через uv =
 # 1. Проверяем наличие uv.
 $uv = Get-Command uv -ErrorAction SilentlyContinue
 if (-not $uv) {
-    Write-Host ''
-    Write-Host 'uv не найден.' -ForegroundColor Yellow
-    Write-Host 'Установите uv одной из команд:' -ForegroundColor Yellow
-    Write-Host ''
-    Write-Host '  winget install --id=astral-sh.uv -e' -ForegroundColor White
-    Write-Host '  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"' -ForegroundColor White
-    Write-Host '  python -m pip install --user uv' -ForegroundColor White
-    Write-Host ''
-    Write-Host 'После установки перезапустите терминал (нужен обновлённый PATH)' -ForegroundColor Yellow
-    Write-Host 'и запустите этот скрипт снова.' -ForegroundColor Yellow
-    exit 1
+    Write-Host 'uv не найден. Пытаюсь установить автоматически...' -ForegroundColor Yellow
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        & winget install --id astral-sh.uv -e --accept-source-agreements --accept-package-agreements
+    } else {
+        $python = Get-Command py -ErrorAction SilentlyContinue
+        if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
+        if (-not $python) {
+            throw 'Не найден ни winget, ни Python. Установите Python 3.12+ с python.org и запустите setup.ps1 снова.'
+        }
+        & $python.Source -m pip install --user uv
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'Автоматическая установка uv завершилась ошибкой.' }
+    # winget/pip обновляют PATH только для новых процессов; добавляем типичные каталоги
+    # в текущий процесс, чтобы не требовать перезапуск PowerShell.
+    $userBin = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+    $userBin2 = Join-Path $env:APPDATA 'Python\Python312\Scripts'
+    $env:Path = "$userBin;$userBin2;$env:Path"
+    $uv = Get-Command uv -ErrorAction SilentlyContinue
+    if (-not $uv) { throw 'uv установлен, но не найден в PATH. Закройте PowerShell, откройте заново и запустите setup.ps1.' }
 }
 
 Write-Host ("uv найден: {0}" -f $uv.Source) -ForegroundColor Green
