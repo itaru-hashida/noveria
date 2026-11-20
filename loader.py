@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from pathlib import Path
 from modules.geography import generate
 from modules.population import create_groups
@@ -37,6 +38,9 @@ def load_world(db, content_path=None):
     if db.meta()['seeded']:
         return False
     content = validate_content(json.loads(Path(content_path or ROOT / 'content/initial_world.json').read_text(encoding='utf-8')))
+    requested_model = os.environ.get('NOVERIA_GENERATION_MODEL')
+    if requested_model:
+        content['generation']['model'] = requested_model
     logging.getLogger(__name__).info('Генерация сценария seed=%s',content['generation']['seed'])
     geography=generate(content)
     groups=create_groups(content,geography)

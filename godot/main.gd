@@ -2,7 +2,7 @@ extends Node2D
 
 const HOST := "127.0.0.1"
 const PORT := 8765
-const CITY_TEXTURE := preload("res://art/city.png")
+const CITY_TEXTURE := preload("res://art/city_nov_city.png")
 const MAP_FONT := preload("res://art/LiberationSerif-Regular.ttf")
 
 var tcp := StreamPeerTCP.new()
@@ -124,9 +124,33 @@ func _draw_tile(tile: Dictionary) -> void:
 		draw_colored_polygon(shadow, Color(0.03, 0.06, 0.07, clamp(elevation * 0.12, 0.04, 0.18)))
 	draw_colored_polygon(shape, color)
 	draw_polyline(PackedVector2Array([shape[0], shape[1], shape[2], shape[3], shape[0]]), Color(0.08, 0.13, 0.14, 0.42), 0.8)
+	if terrain == "forest":
+		_draw_forest(center, elevation)
+	elif terrain == "mountain":
+		_draw_mountain(center, elevation, str(tile.get("relief", "mountains")))
 	if terrain == "water":
 		var glint := center + Vector2(sin(shimmer + float(tile.get("x", 0))) * 12.0, -3.0) * zoom
 		draw_line(glint - Vector2(8, 2) * zoom, glint + Vector2(8, -2) * zoom, Color(0.68, 0.82, 0.78, 0.22), 1.2)
+
+func _draw_forest(center: Vector2, elevation: float) -> void:
+	var count := 2 if elevation < 0.5 else 3
+	for index in range(count):
+		var p := center + Vector2((index - 1) * 15.0, -10.0 - float(index % 2) * 5.0) * zoom
+		var h := (20.0 + elevation * 13.0 + float(index) * 3.0) * zoom
+		var w := h * 0.42
+		draw_colored_polygon(PackedVector2Array([p + Vector2(0, -h), p + Vector2(w, 0), p + Vector2(0, -h * 0.18), p + Vector2(-w, 0)]), Color("#29483d"))
+		draw_colored_polygon(PackedVector2Array([p + Vector2(0, -h * 0.78), p + Vector2(w * 0.72, -h * 0.10), p + Vector2(0, -h * 0.32), p + Vector2(-w * 0.72, -h * 0.10)]), Color("#55765a"))
+
+func _draw_mountain(center: Vector2, elevation: float, relief: String) -> void:
+	var h := (22.0 + elevation * 50.0) * zoom
+	if relief == "peaks":
+		h *= 1.25
+	var w := (26.0 + elevation * 18.0) * zoom
+	var base := center + Vector2(0, 3) * zoom
+	# Two faces make the height readable at map scale; the light is upper-left.
+	draw_colored_polygon(PackedVector2Array([base + Vector2(-w, 0), base + Vector2(0, -h), base + Vector2(0, 4), base + Vector2(w * 0.82, 0)]), Color("#788184"))
+	draw_colored_polygon(PackedVector2Array([base + Vector2(0, -h), base + Vector2(w * 0.82, 0), base + Vector2(0, 4)]), Color("#4c565b"))
+	draw_line(base + Vector2(0, -h), base + Vector2(w * 0.82, 0), Color("#bac0b7"), 1.0 * zoom)
 
 func _draw_route(route: Dictionary) -> void:
 	var points := PackedVector2Array()
@@ -143,7 +167,7 @@ func _draw_city(city: Dictionary) -> void:
 	if tile.is_empty():
 		return
 	var p := _tile_center(tile) + Vector2(0, -17) * zoom
-	var size := Vector2(30, 30) * zoom
+	var size := Vector2(112, 112) * zoom
 	draw_circle(p + Vector2(0, 4) * zoom, 12.0 * zoom, Color(0.02, 0.05, 0.06, 0.45))
 	draw_texture_rect(CITY_TEXTURE, Rect2(p - size * 0.5, size), false, Color.WHITE)
 	var label := str(city.get("name", "Город"))

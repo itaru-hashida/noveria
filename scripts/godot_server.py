@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socketserver
 import sys
 from collections import deque
@@ -102,6 +103,9 @@ def _map_network(tiles, entities):
 def build_map():
     from main import create_application
 
+    # The Godot preview is intended to display the geological terrain fields.
+    # This only affects a newly created database; seeded saves remain immutable.
+    os.environ.setdefault("NOVERIA_GENERATION_MODEL", "geological")
     service = create_application()
     graph = service.world_graph()
     tiles = graph["tiles"]

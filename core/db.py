@@ -87,7 +87,14 @@ class WorldDB:
         for statement in statements:
             self._query(statement)
         self._query('CREATE NODE TABLE IF NOT EXISTS Campaign(id STRING PRIMARY KEY, version INT64, settings STRING)')
-        self._query('CREATE NODE TABLE IF NOT EXISTS Tile(id STRING PRIMARY KEY, x INT64, y INT64, terrain STRING, province_id STRING, road BOOL, resources STRING, passable BOOL, cost DOUBLE)')
+        self._query('CREATE NODE TABLE IF NOT EXISTS Tile(id STRING PRIMARY KEY, x INT64, y INT64, terrain STRING, province_id STRING, road BOOL, resources STRING, passable BOOL, cost DOUBLE, elevation DOUBLE, relief STRING, biome STRING, slope DOUBLE)')
+        # Existing saves may have the pre-geology Tile schema.  Keep them readable
+        # while allowing newly generated snapshots to retain the terrain fields.
+        for column, kind in (('elevation', 'DOUBLE'), ('relief', 'STRING'), ('biome', 'STRING'), ('slope', 'DOUBLE')):
+            try:
+                self._query(f'ALTER TABLE Tile ADD {column} {kind}')
+            except Exception:
+                pass
         self._query('CREATE NODE TABLE IF NOT EXISTS TurnResult(id STRING PRIMARY KEY, turn INT64, report STRING)')
         self._query('CREATE NODE TABLE IF NOT EXISTS PendingCommand(id STRING PRIMARY KEY, kind STRING, payload STRING, status STRING)')
         self._drop_economy_tables()
@@ -388,12 +395,14 @@ class WorldDB:
 
     def store_tiles(self, tiles):
         if len({(t['x'],t['y']) for t in tiles})!=len(tiles): raise IntegrityError('Дубли координат')
-        rows=[dict(t,resources=encode(t['resources']),cost=float(t['cost'])) for t in tiles]
-        self._query('UNWIND $rows AS t CREATE (:Tile {id:t.id,x:t.x,y:t.y,terrain:t.terrain,province_id:t.province_id,road:t.road,resources:t.resources,passable:t.passable,cost:t.cost})',dict(rows=rows))
+        rows=[dict(t,resources=encode(t['resources']),cost=float(t['cost']),
+                   elevation=float(t.get('elevation', 0.0)), relief=str(t.get('relief', 'plain')),
+                   biome=str(t.get('biome', '')), slope=float(t.get('slope', 0.0))) for t in tiles]
+        self._query('UNWIND $rows AS t CREATE (:Tile {id:t.id,x:t.x,y:t.y,terrain:t.terrain,province_id:t.province_id,road:t.road,resources:t.resources,passable:t.passable,cost:t.cost,elevation:t.elevation,relief:t.relief,biome:t.biome,slope:t.slope})',dict(rows=rows))
 
     def tiles(self):
-        rows=self._query('MATCH (t:Tile) RETURN t.id,t.x,t.y,t.terrain,t.province_id,t.road,t.resources,t.passable,t.cost ORDER BY t.y,t.x')
-        keys=('id','x','y','terrain','province_id','road','resources','passable','cost')
+        rows=self._query('MATCH (t:Tile) RETURN t.id,t.x,t.y,t.terrain,t.province_id,t.road,t.resources,t.passable,t.cost,t.elevation,t.relief,t.biome,t.slope ORDER BY t.y,t.x')
+        keys=('id','x','y','terrain','province_id','road','resources','passable','cost','elevation','relief','biome','slope')
         result=[dict(zip(keys,row)) for row in rows]
         for t in result: t['resources']=json.loads(t['resources'])
         return result

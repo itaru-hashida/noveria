@@ -67,4 +67,6 @@ def test_real_snapshot_payload_has_extended_map_fields(monkeypatch, tmp_path):
     assert all(set(route) == {"points"} for route in payload["routes"])
     assert all(route["points"] for route in payload["routes"])
     assert all("elevation" in tile for tile in payload["tiles"])
+    assert max(tile["elevation"] for tile in payload["tiles"]) > 0.0
+    assert {tile["relief"] for tile in payload["tiles"]} >= {"hills", "mountains"}
     json.dumps(payload, ensure_ascii=False, allow_nan=False)
