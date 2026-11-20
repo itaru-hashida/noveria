@@ -172,6 +172,7 @@ class EconomyState:
         self.reports = []
         self.checkpoint_path = None
         self.checkpoint_seconds = None
+        self.committed_revision = 0
         self._undo = None
         # Отчёты хранятся только для лаборатории и аудита: в игре detail=none,
         # и держать 2,8 МБ отчёта на месяц незачем — он никому не читается.
@@ -213,6 +214,8 @@ class EconomyState:
         if strict and schema.get('world') != world_fingerprint(world_graph):
             raise ValueError('Checkpoint собран на другом мире: набор сущностей и клеток '
                              'не совпадает с переданным графом мира')
+        from .native_storage import NativeStorage
+        committed_revision = NativeStorage.restore_revision(schema)
 
         meta = {row['key']: _load(row['data']) for row in _read(path / 'meta.parquet', 'meta')}
         if not meta:
@@ -319,6 +322,7 @@ class EconomyState:
                                  row['gauss']))
 
         state = cls(engine, world_graph, keep_reports=schema.get('keep_reports'))
+        state.committed_revision = committed_revision
         state.checkpoint_path = checkpoint_path
         reports = [_load(row['data']) for row in _read(path / 'reports.parquet', 'reports')]
         # Checkpoint всегда несёт последний отчёт: по нему интерфейс показывает
@@ -551,6 +555,11 @@ class EconomyState:
         Запись идёт в соседний каталог и подменяет прежний целиком: недописанный
         checkpoint не должен выглядеть как рабочий.
         """
+        from .native_storage import NativeStorage
+        return NativeStorage.commit(self, path)
+
+    def _save_checkpoint_payload(self, path, committed_revision):
+        """Собрать и атомарно опубликовать payload через NativeStorage."""
         path = Path(path)
         staging = path.with_name(path.name + '.staging')
         backup = path.with_name(path.name + '.previous')
@@ -587,6 +596,7 @@ class EconomyState:
             # непрерывный прогон их не держит (`report_detail='none'`),
             # и следующий ход вёл бы себя иначе, чем без загрузки.
             keep_reports=bool(self.keep_reports),
+            committed_revision=committed_revision,
             created_at=time.time(),
             rules_version=getattr(self.engine, 'RULES_VERSION', None),
             counts={name: len(rows) for name, rows in payloads.items()},

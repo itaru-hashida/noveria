@@ -175,6 +175,27 @@ def test_checkpoint_round_trip_keeps_state_exactly(tmp_path):
         assert loaded.engine.meta['month'] == state.engine.meta['month'] + 1
 
 
+def test_native_storage_commits_monotonic_revision(tmp_path):
+    db, service = small_world(tmp_path)
+    try:
+        state = service.economy_state()
+        checkpoint = tmp_path / 'revisioned'
+        state.save_checkpoint(checkpoint)
+        assert state.committed_revision == 1
+        schema = json.loads((checkpoint / 'schema.json').read_text(encoding='utf-8'))
+        assert schema['committed_revision'] == 1
+        state.save_checkpoint(checkpoint)
+        assert state.committed_revision == 2
+        schema = json.loads((checkpoint / 'schema.json').read_text(encoding='utf-8'))
+        assert schema['committed_revision'] == 2
+    finally:
+        db.close()
+
+    with WorldDB(tmp_path / 'world.lbug') as db:
+        loaded = EconomyState.load_checkpoint(checkpoint, WorldService(db, EventBus()).world_graph())
+        assert loaded.committed_revision == 2
+
+
 @pytest.mark.parametrize('interrupted', [False, True])
 def test_checkpoint_publication_preserves_previous_save(tmp_path, monkeypatch, interrupted):
     import os
