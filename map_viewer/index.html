@@ -2,14 +2,14 @@
 <html lang="ru">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Noveria · карта Berta 1000×1000</title>
+<title>Noveria · карта Berta 250×250</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#101820;color:#e8edf2;font:14px system-ui,sans-serif}
   #ui{position:fixed;z-index:2;top:14px;left:16px;padding:12px 14px;background:#172633e8;border:1px solid #365064;border-radius:10px;box-shadow:0 8px 30px #0006}
   h1{font-size:16px;margin:0 0 8px}button{margin:2px;padding:5px 8px;border:1px solid #486276;border-radius:6px;background:#203747;color:#e8edf2;cursor:pointer}button.active{background:#d49a55;color:#151b20}
   #hint{margin-top:8px;color:#a9bac7;font-size:12px}canvas{display:block;width:100%;height:100%}
 </style>
-<div id="ui"><h1>Noveria · Berta · 1000×1000</h1><div id="buttons"></div><div id="hint">ЛКМ — двигать · колесо — масштаб · наведи на клетку</div><div id="info"></div></div>
+<div id="ui"><h1>Noveria · Berta · 250×250</h1><div id="buttons"></div><div id="hint">ЛКМ — двигать · колесо — масштаб · наведи на клетку</div><div id="info"></div></div>
 <canvas id="map"></canvas>
 <script>
 const canvas=document.querySelector('#map'),ctx=canvas.getContext('2d'),info=document.querySelector('#info');

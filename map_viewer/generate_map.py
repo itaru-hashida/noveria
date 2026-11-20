@@ -9,7 +9,7 @@ from modules.geography.logic import generate
 
 
 content = json.loads((root / 'content/initial_world.json').read_text(encoding='utf-8'))
-WIDTH = HEIGHT = 1000
+WIDTH = HEIGHT = 250
 content['generation'].update(width=WIDTH, height=HEIGHT, seed=73129, model='geological')
 world = generate(content)
 payload = dict(
