@@ -64,8 +64,8 @@ cdef inline object _min(object left, object right):
     return right if right < left else left
 
 
-def net_price(object e, object quotes, object eps, object consumption_tax,
-              bint consumer, object price_base):
+def net_price(object price_base, object quotes, object eps, object consumption_tax,
+              bint consumer, object unused):
     """Пройти котировки покупателей и вернуть net-цену.
 
     ``price_base`` — прежний ``e['price']``: он читается до цикла и больше не
@@ -73,18 +73,19 @@ def net_price(object e, object quotes, object eps, object consumption_tax,
     """
     cdef object quantity = 0.0
     cdef object final_quantity = 0.0
-    cdef object order, limit, landed, volume, share
+    cdef object order_price, limit, remaining, reserved, final_consumption
+    cdef object landed, volume, share
     cdef Py_ssize_t index, count
 
     count = len(quotes)
     for index in range(count):
-        order, limit = quotes[index]
+        order_price, limit, remaining, reserved, final_consumption = quotes[index]
         if limit+eps < price_base:
             continue
-        landed = price_base+(order['price']-limit)
-        volume = _min(order['remaining'], order['reserved']/_max(landed, eps))
+        landed = price_base+(order_price-limit)
+        volume = _min(remaining, reserved/_max(landed, eps))
         quantity += volume
-        if order.get('final_consumption'):
+        if final_consumption:
             final_quantity += volume
     if quantity > eps:
         share = final_quantity/quantity

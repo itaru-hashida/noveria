@@ -228,8 +228,23 @@ engine на каждое предприятие. Это следующая от�
 3. `demand` fallback — сделано: при отсутствии подготовленного native
    `offer_view` используется Python-эталон, а `accounts.__getitem__`/`offers`
    больше не передаются внутрь native fallback.
-4. `net_price`: передавать числовой список котировок вместо обхода через hook.
+4. `net_price` — сделано: Python материализует числовой список котировок,
+   Cython считает без доступа к order dictionaries и hooks; parity подтверждена.
 5. После callback-срезов — полный ownership-аудит и единый benchmark.
+
+### Финальный аудит текущего среза
+
+Проверено на текущей ветке: `CashStore`, `StockStore`, `OrderStore` и
+`project_slot` остаются назначенными writers; `PlanApply` и Python apply-фазы
+меняют состояние только после native-расчёта. Прямые записи в `Economy` в
+recovery и market относятся к derived/cache или последовательному применению,
+но требуют отдельного market-ownership среза; новым Store их не объявляем.
+
+Первый общий замер после callback-срезов: seed `73129`, 13 месяцев,
+`standard`, без cProfile — `9.371 s`, в среднем `0.725 s/ход`. Зафиксировано:
+`production_outlook` 6302 вызова, `quoted_cost` 51605, `offers` 115845,
+`_market_book` 163881, `landed` 919798. Это baseline после структуризации,
+не сравнение с прежней веткой; A/B Python/Cython — следующий отдельный замер.
 
 Пункты 1–3 для `production_outlook` выполнены: snapshot и result-контракты
 immutable, старый внешний API сохранён через compatibility view, focused

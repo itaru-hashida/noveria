@@ -54,9 +54,12 @@ def net_price_python(engine, e, hooks=None):
 
 
 def net_price(engine, e):
-    """Единственный вход из ``V3.net_price``: native-цикл или эталонный fallback."""
+    """Посчитать net price по числовому snapshot котировок."""
     consumer = e['good'] in (engine.cfg['basic_needs'] | engine.cfg['extra_needs'])
-    return run(e, engine.customer_quotes(e), EPS, engine.cfg['consumption_tax'],
+    quotes = tuple((order['price'], limit, order['remaining'],
+                    order['reserved'], bool(order.get('final_consumption')))
+                   for order, limit in engine.customer_quotes(e))
+    return run(e['price'], quotes, EPS, engine.cfg['consumption_tax'],
                consumer, e['price'])
 
 
@@ -85,16 +88,16 @@ if _kernel is not None:
     run = _kernel.net_price
     NATIVE_KERNEL = True
 else:
-    def run(e, quotes, eps, consumption_tax, consumer, price_base):
+    def run(price_base, quotes, eps, consumption_tax, consumer, unused):
         """Python-эквивалент ядра с той же сигнатурой, что у native-функции."""
         quantity, final_quantity = 0.0, 0.0
-        for order, limit in quotes:
+        for order_price, limit, remaining, reserved, final_consumption in quotes:
             if limit+eps < price_base:
                 continue
-            landed = price_base+(order['price']-limit)
-            volume = min(order['remaining'], order['reserved']/max(landed, eps))
+            landed = price_base+(order_price-limit)
+            volume = min(remaining, reserved/max(landed, eps))
             quantity += volume
-            if order.get('final_consumption'):
+            if final_consumption:
                 final_quantity += volume
         share = (final_quantity/quantity if quantity > eps else float(consumer))
         return price_base*(1-consumption_tax*share)
