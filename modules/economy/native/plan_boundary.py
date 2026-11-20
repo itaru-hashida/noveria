@@ -45,8 +45,8 @@ PlanCalculationInputs = namedtuple(
 PlanCalculationResult = namedtuple('PlanCalculationResult', 'plan orders')
 
 
-class PlanHooks(object):
-    """Живой доступ ядра к движку: чтение чисел плюс прежние мутации.
+class PlanPreparation(object):
+    """Подготовка числового snapshot без применения результата.
 
     Хуки намеренно узкие и повторяют прежний порядок записи. Ни один из них
     не считает числа заново: ядро передаёт уже посчитанные значения, а
@@ -104,10 +104,19 @@ class PlanHooks(object):
     def volume_prices(self, target):
         return self.engine.volume_input_prices(self.enterprise, target, self.sells)
 
-    # --- мутации счёта и предприятия --------------------------------------
+
+class PlanApply(object):
+    """Применение PlanCalculationResult через владельцев состояния."""
+
+    __slots__ = ('engine', 'enterprise', 'sells')
+
+    def __init__(self, engine, enterprise, sells):
+        self.engine = engine
+        self.enterprise = enterprise
+        self.sells = sells
+
     def reset_protected(self):
-        """Снять прошлый ``operating_protected``: прежний ``max(0, ...)``."""
-        account = self.engine.accounts[self.enterprise['id']]
+        """Снять прошлый ``operating_protected`` через CashStore."""
         self.engine.cash_store.release_protected_cash(
             self.enterprise['id'],
             self.engine.cash_store.release_operating_protected(
@@ -142,7 +151,6 @@ class PlanHooks(object):
         self.engine.cash_store.add_protected_cash(e['id'],
                                                   payroll)
 
-    # --- заявки: единственная точка мутации -------------------------------
     def begin_orders(self):
         return len(self.engine.report['orders'])
 
@@ -158,6 +166,11 @@ class PlanHooks(object):
 
     def commit_input_orders(self, ids):
         self.enterprise['production_plan']['input_orders'] = ids
+
+
+# Совместимость для внешних тестов/интеграций: старое имя обозначала именно
+# фазу применения, а не native-расчёт.
+PlanHooks = PlanApply
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +265,8 @@ def plan_enterprises_python(engine, existing, sells):
 
 def input_requests(engine, e, sells):
     """Единственный вход из ``V3.input_requests``: snapshot → расчёт → apply."""
-    hooks = PlanHooks(engine, e, sells)
+    preparation = PlanPreparation(engine, e, sells)
+    apply = PlanApply(engine, e, sells)
     recipe = engine.goods[e['good']]
     account = engine.accounts[e['id']]
     previous_full = copy.deepcopy(e)
@@ -260,7 +274,8 @@ def input_requests(engine, e, sells):
     previous_demand = copy.deepcopy(getattr(engine, '_demand_revision', {}))
     protected = engine.cash_store.get_protected_cash(e['id'])
     try:
-        snapshot, result = _calculate_input_requests(engine, e, sells, hooks, recipe)
+        snapshot, result = _calculate_input_requests(
+            engine, e, sells, preparation, apply, recipe)
     except Exception:
         engine.cash_store.set_protected_cash(e['id'], protected)
         account.clear()
@@ -271,15 +286,15 @@ def input_requests(engine, e, sells):
         engine._demand_revision.update(previous_demand)
         raise
     return apply_input_request_result(
-        hooks, snapshot, result, EPS, previous_full, previous_account,
+        apply, snapshot, result, EPS, previous_full, previous_account,
         previous_demand)
 
 
-def _calculate_input_requests(engine, e, sells, hooks, recipe):
-    hooks.reset_protected()
-    requested = hooks.plan()
-    cash = hooks.free_cash()
-    first_order = hooks.begin_orders()
+def _calculate_input_requests(engine, e, sells, preparation, apply, recipe):
+    apply.reset_protected()
+    requested = preparation.plan()
+    cash = preparation.free_cash()
+    first_order = apply.begin_orders()
     snapshot = {
         'month': engine.meta['month'],
         'input_items': list(recipe['inputs'].items()),
@@ -290,7 +305,7 @@ def _calculate_input_requests(engine, e, sells, hooks, recipe):
             for good, ratio in recipe.get('equipment', {}).items()
         ],
         'stock_values': {
-            good: hooks.stock(good)
+            good: preparation.stock(good)
             for good in list(recipe['inputs']) + [
                 good for good in recipe.get('equipment', {})
                 if good not in recipe['inputs']
@@ -337,14 +352,14 @@ def _calculate_input_requests(engine, e, sells, hooks, recipe):
     return snapshot, result
 
 
-def apply_input_request_result(hooks, snapshot, result, eps=EPS,
+def apply_input_request_result(apply, snapshot, result, eps=EPS,
                                enterprise_before=None, account_before=None,
                                demand_before=None):
     """Применить immutable planning result через владельцев состояния."""
     plan, orders = result.plan, result.orders
     target = snapshot.target
-    engine = hooks.engine
-    enterprise = hooks.enterprise
+    engine = apply.engine
+    enterprise = apply.enterprise
     account = engine.accounts[enterprise['id']]
     enterprise_before = (copy.deepcopy(enterprise)
                          if enterprise_before is None else enterprise_before)
@@ -354,16 +369,16 @@ def apply_input_request_result(hooks, snapshot, result, eps=EPS,
                      if demand_before is None else demand_before)
     created = []
     try:
-        hooks.commit_target(target, snapshot.requested, eps)
+        apply.commit_target(target, snapshot.requested, eps)
         plan['reason'] = enterprise['production_limit']
-        hooks.commit_plan(plan, target)
+        apply.commit_plan(plan, target)
         for good, quantity, price, purpose, adaptive in orders:
-            order = hooks.order(good, quantity, price, purpose)
+            order = apply.order(good, quantity, price, purpose)
             if order:
                 created.append(order)
                 if adaptive:
-                    hooks.mark_adaptive(order)
-        hooks.commit_input_orders(hooks.order_ids(snapshot.first_order))
+                    apply.mark_adaptive(order)
+        apply.commit_input_orders(apply.order_ids(snapshot.first_order))
     except Exception:
         for order in reversed(created):
             if order['status'] not in ('cancelled', 'expired'):
