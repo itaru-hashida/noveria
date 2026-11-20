@@ -410,7 +410,7 @@ def load_plan_kernel():
 # --- Python-эквиваленты ядра с теми же сигнатурами -------------------------
 
 def _cash_needed_python(overhead, labor, wage, quantity, input_items,
-                        equipment_rates, stock_values, quote_contexts, hooks):
+                        equipment_rates, stock_values, quote_contexts):
     """Python-эквивалент ``cash_needed``."""
     needed = overhead+quantity*labor*wage
     for good, ratio in input_items:
@@ -425,15 +425,15 @@ def _cash_needed_python(overhead, labor, wage, quantity, input_items,
 
 
 def _target_python(overhead, labor, wage, target, cash, input_items,
-                   equipment_rates, stock_values, quote_contexts, hooks):
+                   equipment_rates, stock_values, quote_contexts):
     """Python-эквивалент ``plan_target``: те же 40 итераций."""
     if _cash_needed_python(overhead, labor, wage, target, input_items,
-                           equipment_rates, stock_values, quote_contexts, hooks) > cash:
+                           equipment_rates, stock_values, quote_contexts) > cash:
         low, high = 0.0, target
         for _ in range(40):
             middle = (low+high)/2
             if _cash_needed_python(overhead, labor, wage, middle, input_items,
-                                   equipment_rates, stock_values, quote_contexts, hooks) <= cash:
+                                   equipment_rates, stock_values, quote_contexts) <= cash:
                 low = middle
             else:
                 high = middle
@@ -514,4 +514,4 @@ else:
     run_target = lambda snapshot, cash, target, eps: _target_python(
         snapshot.overhead, snapshot.labor, snapshot.wage, target, cash,
         snapshot.input_items, snapshot.equipment_rates,
-        snapshot.stock_values, snapshot.quote_contexts, None)
+        snapshot.stock_values, snapshot.quote_contexts)

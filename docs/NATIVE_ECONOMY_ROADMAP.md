@@ -228,7 +228,9 @@ engine на каждое предприятие. Это следующая от�
 immutable, старый внешний API сохранён через compatibility view, focused
 parity пройдена. Внутри native calculation callback-ов нет; оставшиеся
 вызовы hooks относятся к Python-подготовке входов и являются следующим
-кандидатом на пакетизацию.
+кандидатом на пакетизацию. Для `plan_kernel` расчётный fallback также очищен
+от фиктивного параметра `hooks`: native и Python расчёт используют один
+контракт `PlanCalculationInputs`.
 
 ## Критерии достижения целей
 
