@@ -15,8 +15,8 @@ class ConsumptionHooks(object):
     def __init__(self, engine):
         self.engine = engine
 
-    def consume(self, account, good, need, consumed):
-        """Списать ``consumed`` со склада и записать результат в need/отчёт."""
+    def apply_consumption(self, account, good, need, consumed):
+        """Применить рассчитанное потребление через владельца склада."""
         engine = self.engine
         engine.use_stock(account['id'], good, consumed)
         # Порядок аргументов и чтение need['needed'] — как в прежнем коде.
@@ -31,7 +31,7 @@ def run_households(households, engine, hooks, calculate):
         for good, need in a.get('needs', {}).items():
             needed = need['needed']
             consumed = calculate(needed, engine.free_stock(a['id'], good))
-            hooks.consume(a, good, need, consumed)
+            hooks.apply_consumption(a, good, need, consumed)
 
 
 def consume_households(engine, households):
