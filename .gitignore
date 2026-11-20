@@ -30,3 +30,4 @@ data/*
 logs/*
 !logs/.gitkeep
 /.noveria-tools/
+/godot/.godot/
