@@ -221,6 +221,24 @@ def volume_input_prices(object items, object quantity, object stock_hook,
     return prices
 
 
+cpdef object volume_input_prices_prepared(object items, object quantity,
+                                          object stock_values,
+                                          object quote_values,
+                                          object reference_values,
+                                          object eps):
+    """Посчитать цены по подготовленному числовому snapshot без callbacks."""
+    cdef dict prices = {}
+    cdef object good, ratio, missing, value
+    for good, ratio in items:
+        missing = _max0(quantity*ratio-stock_values[good])
+        if missing > eps:
+            value = quote_values[good]
+            prices[good] = value/missing
+        else:
+            prices[good] = reference_values[good]
+    return prices
+
+
 def input_bid_ceiling(object inputs, object excluded_good, object ratio,
                       object prices, object orders, object input_order_ids,
                       object expected_net_price, object wage_unit,

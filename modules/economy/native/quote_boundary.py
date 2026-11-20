@@ -310,15 +310,25 @@ def volume_input_prices_python(engine, e, quantity, sells):
 
 
 def volume_input_prices(engine, e, quantity, sells):
-    """Единственный вход из ``V3.volume_input_prices``."""
+    """Посчитать цены по подготовленному snapshot без native callbacks."""
     account = engine.accounts[e['id']]
     items = list(engine.goods[e['good']]['inputs'].items())
-    return run_volume(
-        items, quantity,
-        lambda good: engine.free_stock(e['id'], good),
-        lambda account_, good, missing: engine.quoted_cost(account_, good,
-                                                           missing, sells),
-        lambda good: engine.reference_price(e, good, sells), account, EPS)
+    stock_values = {}
+    quote_values = {}
+    reference_values = {}
+    for good, ratio in items:
+        stock = engine.free_stock(e['id'], good)
+        missing = max(0, quantity*ratio-stock)
+        stock_values[good] = stock
+        if missing > EPS:
+            quote_values[good] = engine.quoted_cost(account, good, missing, sells)[0]
+        else:
+            reference_values[good] = engine.reference_price(e, good, sells)
+    if _kernel is not None and hasattr(_kernel, 'volume_input_prices_prepared'):
+        return _kernel.volume_input_prices_prepared(
+            items, quantity, stock_values, quote_values, reference_values, EPS)
+    return _volume_prepared_python(
+        items, quantity, stock_values, quote_values, reference_values, EPS)
 
 
 # --- input_bid_ceiling -----------------------------------------------------
@@ -476,6 +486,16 @@ def _volume_python(items, quantity, stock_hook, quoted_hook, reference_hook,
             prices[good] = value/missing
         else:
             prices[good] = reference_hook(good)
+    return prices
+
+
+def _volume_prepared_python(items, quantity, stock_values, quote_values,
+                            reference_values, eps):
+    prices = {}
+    for good, ratio in items:
+        missing = max(0, quantity*ratio-stock_values[good])
+        prices[good] = (quote_values[good]/missing if missing > eps
+                        else reference_values[good])
     return prices
 
 

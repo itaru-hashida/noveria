@@ -220,8 +220,9 @@ engine на каждое предприятие. Это следующая от�
 
 Остаётся:
 
-1. `quoted_cost`: убрать `reference_hook` и `landed_hook` из native call site.
-   Подготовленный числовой quote snapshot уже подключён; parity подтверждена.
+1. `quoted_cost` — сделано: `reference_hook` и `landed_hook` убраны из штатного
+   native call site. Подготовленный числовой quote snapshot подключён,
+   recovery/reference/cache parity подтверждена.
 2. `volume_input_prices`: убрать callbacks `free_stock`, `quoted_cost` и
    `reference_price` из native/fallback расчёта через пакетный snapshot.
 3. `demand` fallback: заменить передачу `accounts.__getitem__`/`offers` на
