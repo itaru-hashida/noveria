@@ -251,6 +251,14 @@ engine на каждое предприятие. Это следующая от�
 диагностическом `input_evidence` остаётся только разница представления
 `int`/`float` при одинаковом числовом значении.
 
+### Ownership audit текущего HEAD
+
+Focused-набор ownership/runtime прошёл: **107 passed**. Durable writers
+сведены к `CashStore`/`cash_boundary`, `StockStore`/`stock_boundary`,
+`OrderStore`/`order_boundary`, `project_slot` и `PlanApply`. `working_reserve`,
+`ask_prices` и диагностические поля классифицированы как derived/cache и не
+являются вторым источником durable state.
+
 ### Финальный аудит текущего среза
 
 Проверено на текущей ветке: `CashStore`, `StockStore`, `OrderStore` и
