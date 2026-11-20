@@ -99,7 +99,10 @@ def prepare_native_quote_context(engine, buyer, good, sells, maximum_missing,
         if left <= EPS:
             break
     if needs_reference or left > EPS:
-        reference = offers[0][0] if offers else hooks.reference()
+        # Старый quoted_cost запрашивает reference именно при недостаче
+        # объёма, даже если книга частично покрыла заявку.
+        reference = hooks.reference() if left > EPS else (
+            offers[0][0] if offers else hooks.reference())
     else:
         reference = None
     if left <= EPS:
@@ -229,7 +232,7 @@ def quoted_cost_python(engine, buyer, good, quantity, sells):
 
 
 def quoted_cost(engine, buyer, good, quantity, sells):
-    """Единственный вход из ``V3.quoted_cost``: ядро, кэш и промах."""
+    """Котировка через числовой snapshot без native→Python callbacks."""
     source = sells.get(good, [])
     key = (id(source), buyer['id'], engine.market_tile(buyer), good, quantity,
            getattr(engine, '_market_quote_version', 0))
@@ -237,9 +240,9 @@ def quoted_cost(engine, buyer, good, quantity, sells):
     entry = cache.get(key)
     if entry is not None and entry[0] is source:
         return entry[1]
-    hooks = QuoteHooks(engine, buyer, good, sells)
-    result = run_quoted(hooks.offers(), quantity, hooks.reference,
-                        hooks.recovery_rows(), buyer['id'], hooks.landed, EPS)
+    context = prepare_native_quote_context(
+        engine, buyer, good, sells, quantity, needs_reference=True)
+    result = quoted_cost_native_prepared(context, quantity, EPS)
     if engine.QUOTE_CACHE:
         cache[key] = (source, result)
         engine._quoted_cost_cache = cache

@@ -212,17 +212,22 @@ engine на каждое предприятие. Это следующая от�
 
 ### Фаза callback-контрактов
 
-1. **Production outlook:** заменить неявный набор `OutlookHooks` на один
-   immutable `OutlookSnapshot` с числами, кортежами и версиями. Сохранить
-   Python-подготовку книги, спроса и кэшей на внешней границе.
-2. **Native result:** зафиксировать `OutlookResult` как явный результат
-   расчёта. Cython не получает `engine`, словари, bound methods или callbacks;
-   Python отдельно валидирует и применяет результат.
-3. **Проверка границы:** добавить focused parity/exception-тесты и считать
-   callback-и отдельно в подготовке, native-расчёте и apply. Не объявлять
-   callback-фазу закрытой, пока внутри расчётного участка остаются скрытые
-   обращения к engine.
-4. После этого тем же шаблоном пройти `plan_kernel`, затем market helpers.
+Сделано и сжато: `production_outlook` получил immutable
+`OutlookSnapshot`/`OutlookResult`; `plan_kernel` — `PlanPreparation` →
+`PlanCalculationInputs` → Cython → `PlanApply`; market-входы получили
+`ReachableDemandSnapshot` и `QuoteSnapshot`. Native calculation этих срезов не
+получает `engine` и Python callbacks. Parity/rollback проверены focused-тестами.
+
+Остаётся:
+
+1. `quoted_cost`: убрать `reference_hook` и `landed_hook` из native call site.
+   Подготовленный числовой quote snapshot уже подключён; parity подтверждена.
+2. `volume_input_prices`: убрать callbacks `free_stock`, `quoted_cost` и
+   `reference_price` из native/fallback расчёта через пакетный snapshot.
+3. `demand` fallback: заменить передачу `accounts.__getitem__`/`offers` на
+   готовые market rows.
+4. `net_price`: передавать числовой список котировок вместо обхода через hook.
+5. После callback-срезов — полный ownership-аудит и единый benchmark.
 
 Пункты 1–3 для `production_outlook` выполнены: snapshot и result-контракты
 immutable, старый внешний API сохранён через compatibility view, focused
