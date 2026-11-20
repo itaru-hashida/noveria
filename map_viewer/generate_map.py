@@ -9,11 +9,12 @@ from modules.geography.logic import generate
 
 
 content = json.loads((root / 'content/initial_world.json').read_text(encoding='utf-8'))
-content['generation'].update(width=100, height=100, seed=73129, model='geological')
+WIDTH = HEIGHT = 1000
+content['generation'].update(width=WIDTH, height=HEIGHT, seed=73129, model='geological')
 world = generate(content)
 payload = dict(
-    width=100,
-    height=100,
+    width=WIDTH,
+    height=HEIGHT,
     seed=73129,
     model='geological',
     tiles=world['tiles'],
@@ -21,6 +22,6 @@ payload = dict(
     entities=content['entities'],
     links=content['links'],
 )
-out = Path(__file__).resolve().parent / 'map.json'
+out = Path(__file__).resolve().parent / 'berta.json'
 out.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
 print(f'{out}: {len(world["tiles"])} tiles')

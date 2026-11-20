@@ -968,8 +968,8 @@ def _generate_legacy(content):
     """
     config = content['generation']; rng = random.Random(config['seed'])
     w, h = config['width'], config['height']
-    if not 20 <= w <= 100 or not 20 <= h <= 100:
-        raise ValueError('Размер карты вне диапазона 20–100')
+    if not 20 <= w <= 1000 or not 20 <= h <= 1000:
+        raise ValueError('Размер карты вне диапазона 20–1000')
     tiles = []
     for y in range(h):
         coast = 2 + int(1.5 + math.sin(y * .48))
@@ -1046,8 +1046,8 @@ def generate(content):
 def _generate_geological(content):
     config = content['generation']
     width, height = int(config['width']), int(config['height'])
-    if not 20 <= width <= 100 or not 20 <= height <= 100:
-        raise ValueError('Размер карты вне диапазона 20–100')
+    if not 20 <= width <= 1000 or not 20 <= height <= 1000:
+        raise ValueError('Размер карты вне диапазона 20–1000')
     seed = int(config['seed'])
 
     rng_plates = random.Random(derive_seed(seed, 'plates'))
