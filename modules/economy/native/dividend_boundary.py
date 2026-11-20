@@ -114,6 +114,31 @@ class DividendHooks:
         self.engine.report['diagnostics'].append(dict(kind='dividend', **row))
         return row
 
+    def apply_result(self, enterprise, result):
+        """Применить уже рассчитанное решение выплаты.
+
+        Расчёт не меняет предприятие, отчёт или деньги. Здесь находятся все
+        side effects: перевод через CashStore-backed transfer, резервы,
+        поля предприятия и журнал.
+        """
+        sender = enterprise['id']
+        paid = result['paid']
+        if result['revision']:
+            for account, amount in result['payments']:
+                self.transfer(sender, account['id'], amount, result['reason'])
+        else:
+            self.transfer(sender, result['owner_id'], paid, result['reason'])
+        self.book(sender, result['working'], result['project'])
+        enterprise.update(
+            dividends=result['amount'],
+            working_reserve=result['working'],
+            project_reserve=result['project'],
+            dividend_available_cash=result['available'])
+        return self.record(sender, result['owner_id'], result['owner_kind'],
+                           enterprise['profit'], result['amount'], result['limit'],
+                           result['available'], result['working'],
+                           result['project'], result['revision'])
+
 
 def household_groups_python(accounts):
     """Эталон группировки: порядок словаря счетов сохранён."""
@@ -188,17 +213,15 @@ def _pay_dividends(hooks, group_accounts, available_cash, calculate):
         else:
             paid = amount
         reason = hooks.reason(revision)
+        payments = []
         if revision:
             for account in recipients:
-                hooks.transfer(sender, account['id'],
-                    paid*hooks.population(account)/total, reason)
-        else:
-            hooks.transfer(sender, owner_id, paid, reason)
-        hooks.book(sender, working, project)
-        enterprise.update(dividends=amount, working_reserve=working,
-            project_reserve=project, dividend_available_cash=available)
-        records.append(hooks.record(sender, owner_id, owner_kind, enterprise['profit'],
-            amount, limit, available, working, project, revision))
+                payments.append((account, paid*hooks.population(account)/total))
+        result = dict(owner_id=owner_id, owner_kind=owner_kind, amount=amount,
+            paid=paid, limit=limit, available=available, working=working,
+            project=project, revision=revision, reason=reason,
+            payments=payments)
+        records.append(hooks.apply_result(enterprise, result))
     return records
 
 
