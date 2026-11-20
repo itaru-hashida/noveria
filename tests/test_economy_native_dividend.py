@@ -31,6 +31,7 @@ sys.path.insert(0, str(ROOT))
 from modules.economy import Economy  # noqa: E402
 from modules.economy import support  # noqa: E402
 from modules.economy.native import dividend_boundary  # noqa: E402
+from modules.economy.native import cancel_boundary  # noqa: E402
 
 FIXTURE = ROOT/'tests/fixtures/economy.json'
 EPS = support.EPS
@@ -181,6 +182,27 @@ def assert_method_matches(engine, sells=None):
     reference, native = method_pair(engine, sells or {})
     assert_same(snapshot(reference), snapshot(native))
     return reference, native
+
+
+def test_dividend_result_contract_rejects_before_any_mutation():
+    """Неполный native-result не должен начинать apply-фазу."""
+    engine = build_engine()
+    before = snapshot(engine)
+    hooks = dividend_boundary.DividendHooks(engine, {})
+    with pytest.raises(ValueError, match='dividend result missing fields'):
+        hooks.apply_result(engine.enterprises['firm-00001'], {})
+    assert_same(before, snapshot(engine))
+
+
+def test_cancellation_result_contract_rejects_before_detach():
+    """Неполный result отмены не снимает проект и не меняет protected."""
+    engine = build_engine()
+    account = engine.accounts['firm-00001']
+    account['project'] = {'id': 'p', 'materials': {}}
+    before = copy.deepcopy(account)
+    with pytest.raises(ValueError, match='cancellation result missing fields'):
+        cancel_boundary.apply_cancellation_hook(engine, account, 'test', {})
+    assert account == before
 
 
 # ---------------------------------------------------------------------------
