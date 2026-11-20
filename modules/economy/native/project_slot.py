@@ -29,3 +29,8 @@ def replace_public(account, projects):
 def clear_public(account):
     """Снять муниципальные стройки с аккаунта."""
     account['public_projects'] = []
+
+
+def set_field(project, field, value):
+    """Записать поле живого проекта через его owner."""
+    project[field] = value

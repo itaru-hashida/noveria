@@ -88,8 +88,8 @@ def check_stall_python(project, month, stall_months, eps):
     """
     progress = _PY_SUM(project['materials'].values())
     if progress > project.get('progress_quantity', 0)+eps:
-        project['last_progress'] = month
-    project['progress_quantity'] = progress
+        project_slot.set_field(project, 'last_progress', month)
+    project_slot.set_field(project, 'progress_quantity', progress)
     project.setdefault('last_progress', project['created'])
     return month-project['last_progress'] >= stall_months
 

@@ -44,6 +44,7 @@ import importlib
 
 from . import cash_boundary
 from . import material_boundary
+from . import project_slot
 
 # Встроенный max сохраняет тип аргумента: ``max(0, x)`` оставляет целый 0
 # целым, как в прежнем Python-коде.
@@ -90,7 +91,7 @@ def plan_delivery_python(owner, account, project, bill, distance, eps,
     """Эталон прежнего участка: объём, стоимость, запись и защита денег."""
     delivery = delivery_cost_python(bill, owner.goods, distance,
                                     owner.cfg['transport_rate'])
-    project['delivery'] = delivery
+    project_slot.set_field(project, 'delivery', delivery)
     set_protection(owner, account, project, delivery, eps)
     return delivery
 
