@@ -45,6 +45,30 @@ class ProductionHooks(object):
         report = self.engine.report['production']
         report[good] = report.get(good, 0)+quantity
 
+    def apply_output(self, e, account, recipe, plan, quantity, labor, resources):
+        """Применить рассчитанный выпуск через существующих владельцев."""
+        engine = self.engine
+        workers = quantity*recipe['labor']
+        labor[e['state_id'], e['province_id']] -= workers
+        if recipe['resource']:
+            resources[e['province_id'], recipe['resource']] -= quantity
+        wages = workers*engine.cfg['wage']
+        engine.distribute(e['id'], engine.workforce(e), wages, 'Заработная плата')
+        cost = wages
+        for good, ratio in recipe['inputs'].items():
+            used = quantity*ratio
+            cost += engine.use_stock(e['id'], good, used)
+            self.input_used(good, used)
+        for good, worn in engine.equipment_wear(recipe, quantity).items():
+            cost += engine.use_stock(e['id'], good, worn)
+            self.equipment_worn(e, good, worn)
+        if account['stock'].get(e['good'], 0) <= EPS:
+            e['price'] = plan.get('sale_price', e['price'])
+        engine.add_stock(e['id'], e['good'], quantity, cost)
+        e.update(status='active', workers=workers, output=quantity,
+                 production_cost=cost, unit_cost=cost/quantity, wages=wages)
+        self.production(e['good'], quantity)
+
 
 def calculate_output_python(constraints, planned, eps):
     reason = min(constraints, key=constraints.get)
@@ -86,27 +110,7 @@ def run_enterprises(order, engine, labor, resources, observe, hooks, eps, calcul
         if q <= eps:
             e['status'] = 'idle'
             continue
-        workers = q*recipe['labor']
-        labor[e['state_id'], e['province_id']] -= workers
-        if recipe['resource']:
-            resources[e['province_id'], recipe['resource']] -= q
-        wages = workers*engine.cfg['wage']
-        engine.distribute(e['id'], engine.workforce(e), wages, 'Заработная плата')
-        cost = wages
-        for g, ratio in recipe['inputs'].items():
-            quantity = q*ratio
-            cost += engine.use_stock(e['id'], g, quantity)
-            hooks.input_used(g, quantity)
-        for g, quantity in engine.equipment_wear(recipe, q).items():
-            cost += engine.use_stock(e['id'], g, quantity)
-            hooks.equipment_worn(e, g, quantity)
-        # Цена нового выпуска заменяет цену распродажи только у пустого склада.
-        if a['stock'].get(e['good'], 0) <= eps:
-            e['price'] = plan.get('sale_price', e['price'])
-        engine.add_stock(e['id'], e['good'], q, cost)
-        e.update(status='active', workers=workers, output=q, production_cost=cost,
-                 unit_cost=cost/q, wages=wages)
-        hooks.production(e['good'], q)
+        hooks.apply_output(e, a, recipe, plan, q, labor, resources)
 
 
 def _labor(engine):
