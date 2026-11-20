@@ -22,6 +22,13 @@ _PROJECT_DISTANCE_MATRICES = {}
 # kernel остаётся путём для обычных запросов и больших карт.
 _PROJECT_ROUTE_NATIVE_MIN_NODES = 4096
 
+# Полная матрица расстояний нужна native-планировщику только для клеток,
+# которые могут участвовать в текущем наборе инвестиционных кандидатов.
+# На больших картах ресурсных клеток могут быть сотни тысяч, поэтому для
+# каждой пары (провинция, ресурс) используем одну детерминированную клетку-
+# представитель. Предприятия уже создаются на такой же лучшей клетке.
+_PROJECT_RESOURCE_TILE_LIMIT = 4096
+
 # update_prices packs the same rule/goods topology every turn. Recipes and
 # goods membership change only with content reloads, so their derived flat
 # arrays are rebuilt solely when the signature below changes.
@@ -130,21 +137,31 @@ def _update_distance_matrix(engine, tiles):
     directed NetworkX route trees the original loop queried, so the packed
     floats stay bit-identical.
     """
-    if tiles:
+    if tiles and engine.graph.number_of_nodes() < _PROJECT_ROUTE_NATIVE_MIN_NODES:
         engine.path(tiles[0], tiles[0])
     key = (engine._route_cache_key, tuple(tiles))
     cached = _UPDATE_PRICES_DISTANCES.get(key)
     if cached is not None:
         return cached
     distances = np.full((len(tiles), len(tiles)), np.nan, dtype=np.float64)
+    large_graph = engine.graph.number_of_nodes() >= _PROJECT_ROUTE_NATIVE_MIN_NODES
     for source_index, source in enumerate(tiles):
-        engine.path(source, source)
-        route_row = engine.paths[source][0]
         row = distances[source_index]
-        for target_index, target in enumerate(tiles):
-            distance = route_row.get(target)
-            if distance is not None:
-                row[target_index] = distance
+        if large_graph:
+            # Не строим single-source дерево на всю миллионную карту.
+            # HPA* дешевле отвечает на нужные пары, а матрица здесь имеет
+            # размер только по активным клеткам текущего native-pack.
+            for target_index, target in enumerate(tiles):
+                distance, _ = engine.path(source, target)
+                if distance is not None:
+                    row[target_index] = distance
+        else:
+            engine.path(source, source)
+            route_row = engine.paths[source][0]
+            for target_index, target in enumerate(tiles):
+                distance = route_row.get(target)
+                if distance is not None:
+                    row[target_index] = distance
     if len(_UPDATE_PRICES_DISTANCES) >= 8:
         _UPDATE_PRICES_DISTANCES.clear()
     _UPDATE_PRICES_DISTANCES[key] = distances
@@ -2140,9 +2157,18 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     # --- расширение tile-пространства ---
     index = getattr(engine, '_investment_index', None)
     extra_tiles = set()
+    resource_tile_alias = {}
     if index is not None:
-        for tiles in index['resource_tiles'].values():
-            extra_tiles.update(t['id'] for t in tiles)
+        resource_rows = index['resource_tiles']
+        use_representatives = sum(len(tiles) for tiles in resource_rows.values()) > _PROJECT_RESOURCE_TILE_LIMIT
+        for key, tiles in resource_rows.items():
+            if use_representatives:
+                representative = min(tiles, key=lambda t: (not t.get('road'), t.get('cost', 0), t['id']))
+                for tile in tiles:
+                    resource_tile_alias[tile['id']] = representative['id']
+                extra_tiles.add(representative['id'])
+            else:
+                extra_tiles.update(t['id'] for t in tiles)
     for province_id in province_index:
         if province_id is not None:
             extra_tiles.add(engine.location(province_id)['tile_id'])
@@ -2171,7 +2197,7 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
     # Trigger the existing once-per-month graph-shape check before accepting a
     # process-wide cached matrix. Explicit road edits call invalidate_routes;
     # this also catches editor changes that only altered graph shape.
-    if all_tiles:
+    if all_tiles and engine.graph.number_of_nodes() < _PROJECT_ROUTE_NATIVE_MIN_NODES:
         engine.path(all_tiles[0], all_tiles[0])
     distance_key = (engine._route_cache_key, tuple(all_tiles), tuple(extra_sorted))
     distances = _PROJECT_DISTANCE_MATRICES.get(distance_key)
@@ -2181,24 +2207,30 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
             # The extended set is static for a given map. Build its matrix once
             # from exact directed NetworkX route-tree values, then reuse the
             # packed array on every subsequent project phase.
-            path_distances = {}
             use_python_matrix = n_tiles < _PROJECT_ROUTE_NATIVE_MIN_NODES
-            for source in route_sources:
-                if use_python_matrix:
-                    path_distances[source] = nx.single_source_dijkstra(
+            if use_python_matrix:
+                path_distances = {
+                    source: nx.single_source_dijkstra(
                         engine.graph, source, weight='weight')[0]
-                else:
-                    engine.path(source, source)
-                    path_distances[source] = engine.paths[source][0]
-            for i, source in enumerate(all_tiles):
-                row = distances[i]
-                route_row = path_distances.get(source)
-                if route_row is None:
-                    continue
-                for target, distance in route_row.items():
-                    j = tile_index.get(target)
-                    if j is not None:
-                        row[j] = distance
+                    for source in route_sources
+                }
+                for i, source in enumerate(all_tiles):
+                    route_row = path_distances.get(source)
+                    if route_row is None:
+                        continue
+                    for target, distance in route_row.items():
+                        j = tile_index.get(target)
+                        if j is not None:
+                            distances[i, j] = distance
+            else:
+                # HPA* обслуживает только реальные пары active-source ->
+                # active-target; full single-source trees на карте не нужны.
+                for source in route_sources:
+                    i = tile_index[source]
+                    for j, target in enumerate(all_tiles):
+                        distance, _ = engine.path(source, target)
+                        if distance is not None:
+                            distances[i, j] = distance
             # The old extension explicitly gave newly added tiles a zero
             # diagonal, including map tiles absent from the route graph.
             for tile_id in extra_sorted:
@@ -2238,7 +2270,8 @@ def build_candidate_support(engine, sells, inv_data, inv_meta, extra_pairs=(), a
             state_id, province_id, resource = key
             rt_keys.append((state_index[state_id], province_index[province_id],
                             resource_index[resource]))
-            rt_flat.extend(sorted((tile_index[t['id']] for t in index['resource_tiles'][key]),
+            rt_flat.extend(sorted((tile_index[resource_tile_alias.get(t['id'], t['id'])]
+                                   for t in index['resource_tiles'][key]),
                                   key=lambda i: tile_ids_by_index[i]))
             rt_offset.append(len(rt_flat))
 
