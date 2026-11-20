@@ -178,13 +178,19 @@ def calculate_dividend_python(profit, share, available):
     return limit, min(limit, available)
 
 
-def _pay_dividends(hooks, group_accounts, available_cash, calculate):
-    """Подготовить и провести выплаты последовательно по предприятиям."""
+def calculate_dividend_batch_python(rows):
+    """Рассчитать подготовленные строки без side effects."""
+    return [calculate_dividend_python(row[0], row[1], row[2]) for row in rows]
+
+
+def _pay_dividends(hooks, group_accounts, available_cash, calculate_batch):
+    """Подготовить batch результатов, затем применить их в прежнем порядке."""
     month = hooks.month()
     revision = hooks.revision()
     owners = hooks.owner_kinds()
     groups = group_accounts(hooks.accounts())
     records = []
+    pending = []
     for enterprise in hooks.enterprises():
         if enterprise.get('dividend_month') == month:
             continue
@@ -210,20 +216,21 @@ def _pay_dividends(hooks, group_accounts, available_cash, calculate):
         available = available_cash(hooks.balance(sender),
             hooks.reserved(sender), hooks.protected(sender), project, working)
         share = hooks.share(revision)
-        limit, amount = calculate(enterprise['profit'], share, available)
-        if revision:
-            paid = min(amount, hooks.balance(sender))
-        else:
-            paid = amount
         reason = hooks.reason(revision)
-        payments = []
-        if revision:
-            for account in recipients:
-                payments.append((account, paid*hooks.population(account)/total))
-        result = dict(owner_id=owner_id, owner_kind=owner_kind, amount=amount,
-            paid=paid, limit=limit, available=available, working=working,
-            project=project, revision=revision, reason=reason,
-            payments=payments)
+        pending.append((enterprise, dict(owner_id=owner_id, owner_kind=owner_kind,
+            available=available, working=working, project=project,
+            revision=revision, reason=reason, recipients=recipients, total=total,
+            balance=hooks.balance(sender)),
+            (enterprise['profit'], share, available)))
+    for (enterprise, data, _), (limit, amount) in zip(
+            pending, calculate_batch([row for _, _, row in pending])):
+        paid = min(amount, data['balance']) if revision else amount
+        payments = [(account, paid*hooks.population(account)/data['total'])
+                    for account in data['recipients']] if revision else []
+        result = dict(owner_id=data['owner_id'], owner_kind=data['owner_kind'],
+            amount=amount, paid=paid, limit=limit, available=data['available'],
+            working=data['working'], project=data['project'], revision=revision,
+            reason=data['reason'], payments=payments)
         records.append(hooks.apply_result(enterprise, result))
     return records
 
@@ -243,12 +250,13 @@ def load_dividend_kernel():
 
 def pay_dividends_python(hooks):
     return _pay_dividends(hooks, household_groups_python,
-                          cash_after_commitments_python, calculate_dividend_python)
+                          cash_after_commitments_python,
+                          calculate_dividend_batch_python)
 
 
 def run_pay_dividends(hooks):
     return _pay_dividends(hooks, household_groups, cash_after_commitments,
-                          calculate_dividend)
+                          calculate_dividend_batch)
 
 _kernel = load_dividend_kernel()
 household_groups = getattr(_kernel, 'household_groups', household_groups_python)
@@ -256,6 +264,8 @@ working_reserve = working_reserve_python
 cash_after_commitments = getattr(
     _kernel, 'cash_after_commitments', cash_after_commitments_python)
 calculate_dividend = getattr(_kernel, 'calculate_dividend', calculate_dividend_python)
+calculate_dividend_batch = getattr(_kernel, 'calculate_dividend_batch',
+                                   calculate_dividend_batch_python)
 NATIVE_KERNEL = calculate_dividend is not calculate_dividend_python
 
 

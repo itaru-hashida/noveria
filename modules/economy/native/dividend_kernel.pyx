@@ -28,3 +28,14 @@ def cash_after_commitments(balance, reserved, protected, project_reserve, workin
 def calculate_dividend(object profit, object share, object available):
     cdef object limit = share*max(0, profit)
     return limit, min(limit, available)
+
+
+def calculate_dividend_batch(rows):
+    """Пакетный расчёт подготовленных строк без вызовов Python hooks."""
+    cdef list result = []
+    cdef object row, limit, amount
+    for row in rows:
+        limit = row[1]*max(0, row[0])
+        amount = min(limit, row[2])
+        result.append((limit, amount))
+    return result
