@@ -725,7 +725,7 @@ class _ProjectBatch:
                 self.available_input(investor, good)+EPS
                 for good, ratio in self.goods[project['good']]['inputs'].items())
             if ready:
-                investor['project'] = project
+                project_slot.attach(investor, project)
                 self.register_investment_project(project)
                 self.report['investment_decisions'].append(dict(
                     kind='investment_decision', investor=investor['id'], outcome='resumed',
@@ -797,7 +797,7 @@ class _ProjectBatch:
                     if upstream:
                         owner, upstream_project = upstream
                         if not owner.get('project'):
-                            owner['project'] = upstream_project
+                            project_slot.attach(owner, upstream_project)
                             self.register_investment_project(upstream_project)
                             upstream_decision = copy.deepcopy(upstream_project)
                             upstream_decision.update(kind='investment_decision',
@@ -829,7 +829,7 @@ class _ProjectBatch:
                         available=round(available, 6), shortage=round(max(0, required-available), 6),
                         historical_unmet=round(signal[1], 6), historical_volume=round(signal[0], 6))
                 project['input_evidence'] = evidence
-                a['project'] = project
+                project_slot.attach(a, project)
                 self.register_investment_project(project)
                 self.report['investment_decisions'].append(dict(kind='investment_decision', investor=a['id'], outcome='started', **copy.deepcopy(project)))
         if evaluate:

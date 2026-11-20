@@ -1,6 +1,8 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
 """Последовательные native-фазы V3 над одним изменяемым flat state."""
 
+from . import project_slot
+
 
 def weighted_sum(double[::1] values, double[::1] weights):
     """Проверить один вызов с двумя непрерывными массивами float64."""
