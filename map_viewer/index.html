@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Noveria · карта 100×100</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#101820;color:#e8edf2;font:14px system-ui,sans-serif}
+  #ui{position:fixed;z-index:2;top:14px;left:16px;padding:12px 14px;background:#172633e8;border:1px solid #365064;border-radius:10px;box-shadow:0 8px 30px #0006}
+  h1{font-size:16px;margin:0 0 8px}button{margin:2px;padding:5px 8px;border:1px solid #486276;border-radius:6px;background:#203747;color:#e8edf2;cursor:pointer}button.active{background:#d49a55;color:#151b20}
+  #hint{margin-top:8px;color:#a9bac7;font-size:12px}canvas{display:block;width:100%;height:100%}
+</style>
+<div id="ui"><h1>Noveria · геологическая карта 100×100</h1><div id="buttons"></div><div id="hint">ЛКМ — двигать · колесо — масштаб · наведи на клетку</div><div id="info"></div></div>
+<canvas id="map"></canvas>
+<script>
+const canvas=document.querySelector('#map'),ctx=canvas.getContext('2d'),info=document.querySelector('#info');
+const colors={water:'#245276',plain:'#b9b477',forest:'#477b5d',mountain:'#858998',river:'#579fc0'};
+let data,layer='terrain',scale=1,ox=0,oy=0,drag=null,hover=null;
+const layers=['terrain','relief','resources','provinces'];
+fetch('map.json').then(r=>r.json()).then(x=>{data=x;layers.forEach(l=>{let b=document.createElement('button');b.textContent=l;b.onclick=()=>{layer=l;document.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');draw()};if(l===layer)b.classList.add('active');document.querySelector('#buttons').append(b)});resize();fit()});
+function resize(){canvas.width=innerWidth*devicePixelRatio;canvas.height=innerHeight*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);draw()}addEventListener('resize',resize);
+function fit(){scale=Math.min(innerWidth/(data.width*7),innerHeight/(data.height*3.8));ox=innerWidth/2;oy=80;draw()}
+function tileAt(x,y){let tw=10*scale,th=5*scale;let a=(x-ox)/(tw/2),b=(y-oy)/(th/2);let col=Math.floor((a+b)/2),row=Math.floor((b-a)/2);return data.tiles.find(t=>t.x===col&&t.y===row)}
+function col(t){if(layer==='terrain')return colors[t.terrain]||'#888';if(layer==='relief')return ({lowland:'#83a66d',plain:'#b9b477',hills:'#c28d60',plateau:'#aa8567',mountains:'#777b8a',peaks:'#e1e4e7'})[t.relief]||colors[t.terrain];if(layer==='resources')return t.resources?.length?'#d99b45':'#263b49';if(layer==='provinces'){let n=hash(t.province_id||'');return `hsl(${n%360} 42% 48%)`}}
+function hash(s){let n=0;for(let i=0;i<s.length;i++)n=(n*31+s.charCodeAt(i))|0;return Math.abs(n)}
+function draw(){if(!data)return;ctx.clearRect(0,0,innerWidth,innerHeight);let tw=10*scale,th=5*scale;for(const t of data.tiles){let x=ox+(t.x-t.y)*tw/2,y=oy+(t.x+t.y)*th/2;ctx.beginPath();ctx.moveTo(x,y-th/2);ctx.lineTo(x+tw/2,y);ctx.lineTo(x,y+th/2);ctx.lineTo(x-tw/2,y);ctx.closePath();ctx.fillStyle=col(t);ctx.fill();if(t===hover){ctx.strokeStyle='#fff2b2';ctx.lineWidth=2;ctx.stroke()}if(t.road&&scale>1.2){ctx.strokeStyle='#f1d49b';ctx.lineWidth=1;ctx.stroke()}}if(hover){info.textContent=` · ${hover.x},${hover.y} · ${hover.terrain} · ${(hover.resources||[]).join(', ')}`}}
+canvas.onmousedown=e=>drag={x:e.clientX,y:e.clientY,ox,oy};canvas.onmousemove=e=>{if(drag){ox=drag.ox+e.clientX-drag.x;oy=drag.oy+e.clientY-drag.y;draw()}else{hover=tileAt(e.clientX,e.clientY);draw()}};canvas.onmouseup=()=>drag=null;canvas.onmouseleave=()=>drag=null;canvas.onwheel=e=>{e.preventDefault();let old=scale;scale*=e.deltaY<0?1.12:.89;scale=Math.max(.15,Math.min(8,scale));ox=e.clientX-(e.clientX-ox)*scale/old;oy=e.clientY-(e.clientY-oy)*scale/old;draw()};
+</script>
