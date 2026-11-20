@@ -8,9 +8,12 @@ from __future__ import annotations
 import argparse
 import json
 import socketserver
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if __name__ == "__main__":
+    sys.path.insert(0, str(ROOT))
 
 
 def build_map():
