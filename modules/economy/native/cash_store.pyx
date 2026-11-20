@@ -113,6 +113,10 @@ cdef class CashStore:
         self.runtime = False
         self._load()
 
+    def __reduce__(self):
+        """Pickle хранит только авторитетный dict и режим проверки."""
+        return type(self), (self.accounts, self.strict)
+
     # --- импорт текущих значений ------------------------------------------
     cdef int _load(self) except -1:
         """Считать колонки из словаря: единственный импорт значений."""

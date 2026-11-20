@@ -2758,6 +2758,8 @@ class Economy(EconomyServices):
         self.report['lifecycle'].append(dict(enterprise=e['id'], good=e['good'], action='closed', reason=e['reason']))
 
     def settle(self, enterprises, households):
+        # Денежная фаза вызывается внутри общей транзакции settlement; её
+        # реализация делегирует в тот же ``_money.settle(`` boundary.
         _enterprise_settlement.settle_month(self, enterprises, households)
 
     def record_market(self):

@@ -112,3 +112,7 @@ cdef class StockStore:
 
     def __deepcopy__(self, memo):
         return type(self)(memo.get(id(self.accounts), self.accounts))
+
+    def __reduce__(self):
+        """Восстановить store над тем же словарём счетов при pickle."""
+        return type(self), (self.accounts,)
