@@ -1397,7 +1397,7 @@ class Economy(EconomyServices):
                             _, price, _ = self.quoted_cost(account, good, missing, sells)
                             order = self.order(account['id'], good, missing, 'buy', price, purpose)
                             if order:
-                                order['project_id'] = project['id']
+                                self.order_store.set_metadata(order, 'project_id', project['id'])
                 support = self.cfg['construction_modes'][project['mode']]['support_goods']
                 for good, per_worker in support.items():
                     required = project['max_workers']*per_worker
@@ -1408,7 +1408,7 @@ class Economy(EconomyServices):
                         order = self.order(account['id'], good, missing, 'buy', price,
                             'Содержание ускоренной стройки')
                         if order:
-                            order['project_id'] = project['id']
+                            self.order_store.set_metadata(order, 'project_id', project['id'])
 
     def reserve_expedited_construction_labor(self):
         """До производства забронировать дорогие бригады, вытесняющие обычный труд."""
@@ -2227,16 +2227,19 @@ class Economy(EconomyServices):
                 a.setdefault('needs', {})[good] = dict(needed=needed, consumed=0, deficit=needed)
                 order = self.order(a['id'], good, quantity*fraction, 'buy', price, purpose)
                 if order:
-                    order.update(need_quantity=quantity, budget_price=price*fraction, unfunded_need=fraction < 1-EPS,
-                        adaptive_household_budget=True)
+                    store = self.order_store
+                    store.set_metadata(order, 'need_quantity', quantity)
+                    store.set_metadata(order, 'budget_price', price*fraction)
+                    store.set_metadata(order, 'unfunded_need', fraction < 1-EPS)
+                    store.set_metadata(order, 'adaptive_household_budget', True)
 
     def household_top_up(self, households, sells):
         """Допокупка базовой еды после освобождения старых резервов, до доходов."""
         for o in self.report['orders']:
             if o['side'] == 'buy' and self.accounts[o['participant']]['kind'] == 'household':
-                o['reserved_before_top_up'] = o['reserved']
+                self.order_store.set_metadata(o, 'reserved_before_top_up', o['reserved'])
                 self.cancel_order(o, 'Пересмотр остатка потребительского бюджета')
-                o['superseded_by_top_up'] = True
+                self.order_store.set_metadata(o, 'superseded_by_top_up', True)
         # Числовой цикл допокупки вынесен в topup_boundary: отбор кандидатов,
         # обход товаров и книги офферов, расчёт missing/quantity. Перемешивание
         # (RNG), заявки, сделки, отчёт и dirty flags остаются Python-хуками
@@ -2248,8 +2251,8 @@ class Economy(EconomyServices):
         Economy._balanced_household_requests(self, households, self.cfg['basic_needs'], 'Базовые нужды', sells)
         Economy._balanced_household_requests(self, households, self.cfg['extra_needs'], 'Дополнительные нужды', sells)
         for buy in self.report['orders'][first:]:
-            buy['household_top_up_residual'] = True
-            buy['household_top_up'] = True
+            self.order_store.set_metadata(buy, 'household_top_up_residual', True)
+            self.order_store.set_metadata(buy, 'household_top_up', True)
             self.match(buy, sells)
         top_up_ids = {o['id'] for o in self.report['orders'] if o.get('household_top_up')}
         trades = [t for t in self.report['trades'] if t['buy_order'] in top_up_ids]

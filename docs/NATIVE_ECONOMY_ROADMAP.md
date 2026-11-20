@@ -236,9 +236,11 @@ engine на каждое предприятие. Это следующая от�
 
 Проверено на текущей ветке: `CashStore`, `StockStore`, `OrderStore` и
 `project_slot` остаются назначенными writers; `PlanApply` и Python apply-фазы
-меняют состояние только после native-расчёта. Прямые записи в `Economy` в
-recovery и market относятся к derived/cache или последовательному применению,
-но требуют отдельного market-ownership среза; новым Store их не объявляем.
+меняют состояние только после native-расчёта. Market audit закрыт: прямые
+записи metadata заявок (`project_id`, household budget/top-up flags) переведены
+через `OrderStore`. Остальные записи `Economy` в recovery и market — derived
+cache, snapshot или последовательное применение сделки; отдельный `MarketStore`
+не нужен.
 
 Первый общий замер после callback-срезов: seed `73129`, 13 месяцев,
 `standard`, без cProfile — `9.371 s`, в среднем `0.725 s/ход`. Зафиксировано:
