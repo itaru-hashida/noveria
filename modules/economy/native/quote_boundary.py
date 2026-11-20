@@ -34,6 +34,9 @@ from ..support import EPS
 
 QuoteSnapshot = namedtuple(
     'QuoteSnapshot', 'offers recovery_rows reference landed owner_id')
+VolumeInputSnapshot = namedtuple(
+    'VolumeInputSnapshot',
+    'items quantity stock_values quote_values reference_values')
 
 
 class QuoteHooks(object):
@@ -309,8 +312,13 @@ def volume_input_prices_python(engine, e, quantity, sells):
     return prices
 
 
-def volume_input_prices(engine, e, quantity, sells):
-    """Посчитать цены по подготовленному snapshot без native callbacks."""
+def prepare_volume_input_snapshot(engine, e, quantity, sells):
+    """Собрать все значения до входа в числовой расчёт.
+
+    После возврата snapshot расчёт не обращается к ``engine`` и не вызывает
+    callbacks. Книга, склад, кэши и recovery остаются владельцами движка и
+    читаются только на этой внешней границе.
+    """
     account = engine.accounts[e['id']]
     items = list(engine.goods[e['good']]['inputs'].items())
     stock_values = {}
@@ -324,11 +332,20 @@ def volume_input_prices(engine, e, quantity, sells):
             quote_values[good] = engine.quoted_cost(account, good, missing, sells)[0]
         else:
             reference_values[good] = engine.reference_price(e, good, sells)
+    return VolumeInputSnapshot(tuple(items), quantity, stock_values,
+                               quote_values, reference_values)
+
+
+def volume_input_prices(engine, e, quantity, sells):
+    """Посчитать цены по immutable numeric snapshot без callbacks."""
+    snapshot = prepare_volume_input_snapshot(engine, e, quantity, sells)
     if _kernel is not None and hasattr(_kernel, 'volume_input_prices_prepared'):
         return _kernel.volume_input_prices_prepared(
-            items, quantity, stock_values, quote_values, reference_values, EPS)
+            snapshot.items, snapshot.quantity, snapshot.stock_values,
+            snapshot.quote_values, snapshot.reference_values, EPS)
     return _volume_prepared_python(
-        items, quantity, stock_values, quote_values, reference_values, EPS)
+        snapshot.items, snapshot.quantity, snapshot.stock_values,
+        snapshot.quote_values, snapshot.reference_values, EPS)
 
 
 # --- input_bid_ceiling -----------------------------------------------------
