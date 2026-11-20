@@ -218,6 +218,47 @@ def test_native_storage_recovers_previous_and_discards_staging(tmp_path):
         assert not staging.exists()
 
 
+def test_native_storage_migrates_supported_schema_and_keeps_source(tmp_path):
+    db, service = small_world(tmp_path)
+    try:
+        checkpoint = tmp_path / 'legacy'
+        service.economy_state().save_checkpoint(checkpoint)
+        schema_path = checkpoint / 'schema.json'
+        schema = json.loads(schema_path.read_text(encoding='utf-8'))
+        schema['schema_version'] = 4
+        schema.pop('committed_revision', None)
+        schema_path.write_text(json.dumps(schema), encoding='utf-8')
+    finally:
+        db.close()
+
+    with WorldDB(tmp_path / 'world.lbug') as db:
+        loaded = EconomyState.load_checkpoint(
+            checkpoint, WorldService(db, EventBus()).world_graph())
+        migrated = json.loads((checkpoint / 'schema.json').read_text(encoding='utf-8'))
+        assert loaded.committed_revision == 0
+        assert migrated['schema_version'] == 5
+        assert checkpoint.with_name('legacy.previous').is_dir()
+
+
+def test_native_storage_rejects_unsupported_schema_without_migration(tmp_path):
+    db, service = small_world(tmp_path)
+    try:
+        checkpoint = tmp_path / 'unsupported'
+        service.economy_state().save_checkpoint(checkpoint)
+        schema_path = checkpoint / 'schema.json'
+        schema = json.loads(schema_path.read_text(encoding='utf-8'))
+        schema['schema_version'] = 999
+        schema_path.write_text(json.dumps(schema), encoding='utf-8')
+    finally:
+        db.close()
+
+    with WorldDB(tmp_path / 'world.lbug') as db:
+        with pytest.raises(ValueError, match='неподдерживаемой версией'):
+            EconomyState.load_checkpoint(
+                checkpoint, WorldService(db, EventBus()).world_graph())
+    assert not checkpoint.with_name('unsupported.previous').exists()
+
+
 @pytest.mark.parametrize('interrupted', [False, True])
 def test_checkpoint_publication_preserves_previous_save(tmp_path, monkeypatch, interrupted):
     import os

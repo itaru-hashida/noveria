@@ -200,6 +200,7 @@ class EconomyState:
         """Восстановить состояние из Parquet и продолжить игру с того же места."""
         from .native_storage import NativeStorage
         NativeStorage.recover(path)
+        NativeStorage.migrate(path)
         path = Path(path)
         checkpoint_path = path
         if not path.exists():

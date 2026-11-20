@@ -10,6 +10,9 @@ import os
 import shutil
 from pathlib import Path
 
+CURRENT_SCHEMA_VERSION = 5
+SUPPORTED_MIGRATIONS = {4}
+
 
 class NativeStorage:
     """Transaction boundary поверх checkpoint writer'а экономики."""
@@ -17,6 +20,7 @@ class NativeStorage:
     @staticmethod
     def commit(state, path):
         path = NativeStorage.recover(path)
+        NativeStorage.migrate(path)
         next_revision = state.committed_revision + 1
         state._save_checkpoint_payload(path, next_revision)
         state.committed_revision = next_revision
@@ -54,6 +58,42 @@ class NativeStorage:
             path.unlink()
         if staging.exists():
             shutil.rmtree(staging)
+        return path
+
+    @staticmethod
+    def migrate(path):
+        """Мигрировать поддержанную старую schema до текущей версии."""
+        path = Path(path)
+        schema_path = path / 'schema.json'
+        if not schema_path.is_file():
+            return path
+        data = json.loads(schema_path.read_text(encoding='utf-8'))
+        version = data.get('schema_version')
+        if version == CURRENT_SCHEMA_VERSION:
+            return path
+        if version not in SUPPORTED_MIGRATIONS:
+            raise ValueError('Checkpoint собран неподдерживаемой версией схемы: %s' % version)
+        staging = path.with_name(path.name + '.migration')
+        backup = path.with_name(path.name + '.previous')
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.copytree(path, staging)
+        migrated = json.loads((staging / 'schema.json').read_text(encoding='utf-8'))
+        migrated['schema_version'] = CURRENT_SCHEMA_VERSION
+        migrated.setdefault('committed_revision', 0)
+        (staging / 'schema.json').write_text(
+            json.dumps(migrated, ensure_ascii=False), encoding='utf-8')
+        if not NativeStorage._valid(staging):
+            shutil.rmtree(staging, ignore_errors=True)
+            raise ValueError('Результат миграции checkpoint не прошёл проверку')
+        if backup.exists():
+            shutil.rmtree(backup)
+        os.replace(path, backup)
+        try:
+            os.replace(staging, path)
+        except OSError:
+            if not path.exists():
+                os.replace(backup, path)
+            raise
         return path
 
     @staticmethod
