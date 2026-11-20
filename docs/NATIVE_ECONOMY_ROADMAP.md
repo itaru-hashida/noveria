@@ -223,14 +223,28 @@ engine на каждое предприятие. Это следующая от�
 1. `quoted_cost` — сделано: `reference_hook` и `landed_hook` убраны из штатного
    native call site. Подготовленный числовой quote snapshot подключён,
    recovery/reference/cache parity подтверждена.
-2. `volume_input_prices`: убрать callbacks `free_stock`, `quoted_cost` и
-   `reference_price` из native/fallback расчёта через пакетный snapshot.
+2. `volume_input_prices` — сделано: подготовка вынесена в
+   `VolumeInputSnapshot`; native и Python fallback получают одинаковые
+   числовые входы и не вызывают `free_stock`, `quoted_cost` или
+   `reference_price` внутри расчёта.
 3. `demand` fallback — сделано: при отсутствии подготовленного native
    `offer_view` используется Python-эталон, а `accounts.__getitem__`/`offers`
    больше не передаются внутрь native fallback.
 4. `net_price` — сделано: Python материализует числовой список котировок,
    Cython считает без доступа к order dictionaries и hooks; parity подтверждена.
 5. После callback-срезов — полный ownership-аудит и единый benchmark.
+
+### Benchmark callback-среза
+
+После двух прогревочных ходов и пяти измерительных, `standard`, Linux/GCC:
+
+| seed | `off`, с/ход | `cython`, с/ход | изменение |
+|---:|---:|---:|---:|
+| 17 | 0.450 | 0.431 | −4.2% |
+| 73129 | 0.470 | 0.445 | −5.3% |
+
+Матрица `verify_native_parity.py --compare-baseline` прошла побитово: 8/8
+сочетаний seed, detail и режима совпали с зафиксированной baseline.
 
 ### Финальный аудит текущего среза
 
