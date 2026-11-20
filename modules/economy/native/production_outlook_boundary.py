@@ -46,6 +46,8 @@ OutlookCalculationInputs = namedtuple(
     'stock_planning stock capacity previous cost expected_price overhead '
     'overstock_factor decline_rate price')
 OutlookCalculationResult = namedtuple('OutlookCalculationResult', 'values')
+# Immutable input contract shared by the Python boundary and native kernel.
+OutlookSnapshot = OutlookCalculationInputs
 
 
 class OutlookHooks(object):
@@ -225,7 +227,7 @@ def _compute(engine, e, hooks):
                 if base_groups is None else _prepare_books_snapshot(
                     engine, e, hooks, cost, base_net, price, quote, base_groups))
     result, sales = _compute_snapshot(snapshot)
-    if snapshot.get('stock_cache_owner') is not None:
+    if not isinstance(snapshot, OutlookSnapshot) and snapshot.get('stock_cache_owner') is not None:
         engine.store_stock_sales(snapshot['stock_cache_owner'],
                                  sales)
     return result
@@ -249,35 +251,22 @@ def _prepare_snapshot(engine, e, hooks, cost, base_net, price, quote,
     expected_sales = (
         hooks.expected_stock_sales(demand if price == e['price'] else None)
         if engine.STOCK_PLANNING_REVISION else None)
-    return {
-        'observations': hooks.observations(),
-        'sales_forecast': e['sales_forecast'],
-        'trades': hooks.trades(),
-        'seller': e['id'],
-        'good': e['good'],
-        'demand': demand,
-        'expected_sales': expected_sales,
-        'stock_planning': engine.STOCK_PLANNING_REVISION,
-        'stock': hooks.stock(e['good']),
-        'capacity': e['capacity'],
-        'previous': e.get('planned_output', 0),
-        'cost': cost,
-        'expected_price': (base_net if price == e['price']
-                           else hooks.net_price(quote)),
-        'overhead': hooks.overhead(),
-        'overstock_factor': engine.cfg['output_overstock_factor'],
-        'decline_rate': engine.cfg['output_decline_rate'],
-        'price': price,
-    }
+    return OutlookSnapshot(
+        hooks.observations(), e['sales_forecast'], hooks.trades(), e['id'],
+        e['good'], demand, expected_sales, engine.STOCK_PLANNING_REVISION,
+        hooks.stock(e['good']), e['capacity'], e.get('planned_output', 0),
+        cost, (base_net if price == e['price'] else hooks.net_price(quote)),
+        hooks.overhead(), engine.cfg['output_overstock_factor'],
+        engine.cfg['output_decline_rate'], price)
 
 
 def _compute_snapshot(snapshot, calculator=None):
     """Единственная calculation boundary для готового snapshot."""
-    if snapshot.get('book_input') is not None:
+    if not isinstance(snapshot, OutlookSnapshot) and snapshot.get('book_input') is not None:
         outlook, sales = _forecast_from_books(*snapshot['book_input'])
         return outlook, sales
     calculator = calculator or run_outlook
-    inputs = OutlookCalculationInputs(
+    inputs = snapshot if isinstance(snapshot, OutlookSnapshot) else OutlookSnapshot(
         snapshot['observations'], snapshot['sales_forecast'], snapshot['trades'],
         snapshot['seller'], snapshot['good'], snapshot['demand'],
         snapshot['expected_sales'], snapshot['stock_planning'], snapshot['stock'],
