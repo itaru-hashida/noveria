@@ -6,6 +6,7 @@ from collections import defaultdict
 # EPS проекта. Импорт из support безопасен: support не импортирует эту
 # границу, поэтому цикла support -> boundary -> support не возникает.
 from ..support import EPS
+from . import project_slot
 
 
 class WageHooks:
@@ -33,7 +34,7 @@ class WageHooks:
         self.remaining = []
 
     def end(self, account):
-        account['public_projects'] = self.remaining
+        project_slot.replace_public(account, self.remaining)
         self.remaining = None
 
     # --- деньги: единственные переводы среза ------------------------------
@@ -169,7 +170,7 @@ def run_advance_python(engine, accounts, labor, expedited, hooks, eps):
                 engine._complete_public_project(account, project)
             else:
                 remaining.append(project)
-        account['public_projects'] = remaining
+        project_slot.replace_public(account, remaining)
     return None
 
 

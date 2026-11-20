@@ -1347,7 +1347,7 @@ class Economy(EconomyServices):
             work_required=float(blueprint['work_required']), work_done=0.0,
             max_workers=float(blueprint['max_workers']), created=self.meta['month'],
             status='procurement')
-        account['public_projects'] = [project]
+        _project_slot.attach_public(account, project)
         self.log_event('public_project.started', entity_id=project_id, region_id=loc['province_id'],
             cause='municipal_order', source='public_construction', project_id=project_id,
             institution_kind=kind, city_id=city_id, mode=mode, material_bill=project['material_bill'],
