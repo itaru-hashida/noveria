@@ -1,0 +1,20 @@
+{
+  "buyers": 910,
+  "sellers": 616,
+  "edges": 1669,
+  "csr_volume": 3434.4056419999997,
+  "lp_volume": 3434.405641460572,
+  "exact_ms": 74375.1595,
+  "changed_buyers": 244,
+  "priority_violations": 39,
+  "legacy_buggy_priority_violations": 44,
+  "raw_budget_violations_1e-7": 8,
+  "max_raw_budget_excess": 1.6798552877617112e-06,
+  "sum_raw_budget_excess": 7.580481316438181e-06,
+  "quantisation_only_changed": 16,
+  "cause_counts": {
+    "common_stock_competition": 189,
+    "priority_price_limit": 39,
+    "rounding": 16
+  }
+}
