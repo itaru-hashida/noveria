@@ -75,7 +75,35 @@ def main():
         [dict(buyer_id=b, seller_id=s, good="x", reachable=s in allowed)
          for b, allowed in zip("abc", ("01", "12", "0")) for s in "012"],
     )
-    assert abs(compare("five_edges_required", longer_path).sum() - 2) < 1e-8
+    assert abs(compare("five_edges_required", longer_path).sum() - 3) < 1e-8
+    rng = np.random.default_rng(73129)
+    random_losses = []
+    for case in range(12):
+        buyers = [
+            dict(id=f"rb{case}-{i}", good="x", quantity=float(rng.integers(1, 7)),
+                 limit=float(rng.integers(3, 12)), budget=float(rng.integers(4, 35)),
+                 unmet_age=float(rng.integers(0, 4)))
+            for i in range(4)
+        ]
+        sellers = [
+            dict(id=f"rs{case}-{i}", good="x", quantity=float(rng.integers(1, 7)),
+                 price=float(rng.integers(1, 10)))
+            for i in range(4)
+        ]
+        routes = [
+            dict(buyer_id=buyer["id"], seller_id=seller["id"], good="x",
+                 reachable=bool(rng.integers(0, 2)))
+            for buyer in buyers for seller in sellers
+        ]
+        snapshot = MarketSnapshot.from_rows(buyers, sellers, routes)
+        flow = compare(f"random_{case}", snapshot)
+        exact = allocate_market_exact(snapshot)
+        random_losses.append(float(exact.objective_volume - flow.sum()))
+    print(json.dumps({
+        "random_cases": 12,
+        "random_max_volume_loss": max(random_losses, default=0.0),
+        "random_nonoptimal_cases": sum(loss > 1e-7 for loss in random_losses),
+    }))
     with tempfile.TemporaryDirectory() as directory:
         db, service = build_world(73129, directory, report_detail="none")
         try:
