@@ -1453,8 +1453,14 @@ def pack_investment_state(engine, data=None, meta=None, sells=None):
     province_index = _indices(provinces)
 
     # --- ресурсы и плитки (для resource tile RNG и capacity) ---
-    resource_names = sorted({recipe['resource'] for recipe in engine.goods.values()
-                             if recipe['resource']})
+    # Карта может содержать ресурс, для которого пока нет товарного рецепта
+    # (например, глину). Он всё равно присутствует в resource_tiles и может
+    # попасть в investment index, поэтому индекс должен покрывать всю карту,
+    # а не только текущие goods.
+    resource_names = sorted(
+        {recipe['resource'] for recipe in engine.goods.values() if recipe['resource']}
+        | {resource for tile in engine.tiles.values() for resource in tile['resources']}
+    )
     resource_index = _indices(resource_names)
     tile_resources = []
     tile_resource_offsets = [0]

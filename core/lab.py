@@ -134,6 +134,8 @@ def execute_experiment(directory):
                 # незаметно платить за её агрегаты.
                 engine.meta['report_detail'] = 'deep' if config['detail'] == 'full' else 'standard'
                 initial = capture(engine, dict(month=0), config['detail'])
+                for row in initial['enterprises']:
+                    row.pop('production_observation', None)
                 # В исходном мире могли уже пройти месяцы: ось эксперимента начинается с нуля.
                 store.append_month(0, initial, config)
                 for step in range(1, config['months']+1):
@@ -144,6 +146,8 @@ def execute_experiment(directory):
                     engine = state.engine
                     report = state.last_report
                     data = capture(engine, report, config['detail'])
+                    for row in data['enterprises']:
+                        row.pop('production_observation', None)
                     for rows in data.values():
                         for row in rows:
                             row['economy_month'] = engine.meta['month']
@@ -154,6 +158,12 @@ def execute_experiment(directory):
                     config['status'] = 'completed'
                 # Checkpoint пишется один раз — по завершении эксперимента, а не
                 # каждый ход: сам ход экономику на диск не выгружает.
+                # production_observation зависит только от уровня диагностики
+                # (`full`/`summary`) и не является экономическим состоянием.
+                # Не сохраняем его в живой state, иначе два прогона с разной
+                # детализацией перестают быть воспроизводимо эквивалентными.
+                for enterprise in getattr(engine, 'enterprises', {}).values():
+                    enterprise.pop('production_observation', None)
                 state.save_checkpoint(directory/'economy')
             config['finished_at'] = now()
             store.save_metadata(config)
