@@ -124,9 +124,7 @@ def _snapshot(seed: int) -> MarketSnapshot:
             db.close()
 
 
-def main() -> None:
-    seed = 73129
-    snapshot = _snapshot(seed)
+def _compare(label: str, snapshot: MarketSnapshot) -> dict[str, object]:
     started = time.perf_counter()
     exact = allocate_market_exact(snapshot)
     exact_seconds = time.perf_counter() - started
@@ -150,8 +148,8 @@ def main() -> None:
                              for j in range(index + 1, len(ordered_ids)))
             if later_gain:
                 violations.append(ordered_ids[index])
-    print(json.dumps({
-        "seed": seed,
+    result = {
+        "label": label,
         "buyers": len(snapshot.buyer_ids),
         "sellers": len(snapshot.seller_ids),
         "pairs": len(snapshot.pair_buyer),
@@ -164,7 +162,41 @@ def main() -> None:
         "max_order_abs_delta": max((abs(value) for value in deltas.values()), default=0.0),
         "priority_violations": len(violations),
         "first_priority_violations": violations[:10],
-    }, ensure_ascii=False, indent=2))
+    }
+    if result["orders_changed"] or result["priority_violations"]:
+        result["exact_execution"] = {key: exact_by_id[key].executed for key in exact_by_id}
+        result["two_lp_execution"] = {key: candidate_by_id[key].executed for key in candidate_by_id}
+    return result
+
+
+def _synthetic_snapshots() -> list[tuple[str, MarketSnapshot]]:
+    return [
+        ("deficit_equal_priority", MarketSnapshot.from_rows(
+            [{"id": "b1", "good": "x", "quantity": 8, "limit": 5, "budget": 40, "unmet_age": 2},
+             {"id": "b2", "good": "x", "quantity": 3, "limit": 5, "budget": 15, "unmet_age": 2}],
+            [{"id": "s", "good": "x", "quantity": 5, "price": 5}],
+        )),
+        ("deficit_different_sizes", MarketSnapshot.from_rows(
+            [{"id": "b1", "good": "x", "quantity": 1, "limit": 5, "budget": 5, "unmet_age": 3},
+             {"id": "b2", "good": "x", "quantity": 20, "limit": 5, "budget": 100, "unmet_age": 1},
+             {"id": "b3", "good": "x", "quantity": 20, "limit": 5, "budget": 100, "unmet_age": 0}],
+            [{"id": "s1", "good": "x", "quantity": 7, "price": 5}],
+        )),
+        ("deficit_budget_tradeoff", MarketSnapshot.from_rows(
+            [{"id": "b1", "good": "x", "quantity": 6, "limit": 10, "budget": 10, "unmet_age": 4},
+             {"id": "b2", "good": "x", "quantity": 2, "limit": 10, "budget": 20, "unmet_age": 2},
+             {"id": "b3", "good": "x", "quantity": 10, "limit": 10, "budget": 100, "unmet_age": 0}],
+            [{"id": "cheap", "good": "x", "quantity": 4, "price": 5},
+             {"id": "dear", "good": "x", "quantity": 4, "price": 10}],
+        )),
+    ]
+
+
+def main() -> None:
+    seeds = (73129, 17, 7, 4231)
+    results = [_compare(f"seed_{seed}", _snapshot(seed)) for seed in seeds]
+    results.extend(_compare(label, snapshot) for label, snapshot in _synthetic_snapshots())
+    print(json.dumps(results, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
