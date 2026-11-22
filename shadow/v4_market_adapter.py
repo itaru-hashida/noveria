@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from modules.economy.native.trade_boundary import commit_trade_atomic
-from modules.economy.v4.market import Allocation, MarketResult, MarketSnapshot, allocate_market
+from modules.economy.v4.market import MarketResult, MarketSnapshot
 
 
 EPS = 1e-9
@@ -78,7 +78,17 @@ def build_v4_snapshot(
     route_by_pair: dict[tuple[str, str], tuple[float, float, Any, Any]] = {}
     for buy in buyers:
         for sell in sellers:
-            if buy["good"] != sell["good"] or buy["participant"] == sell["participant"]:
+            if buy["good"] != sell["good"]:
+                continue
+            if buy["participant"] == sell["participant"]:
+                # MarketSnapshot treats an omitted route as reachable with
+                # zero freight. Self-trade must therefore be explicit.
+                routes.append({
+                    "buyer_id": str(buy["id"]),
+                    "seller_id": str(sell["id"]),
+                    "good_id": str(buy["good"]),
+                    "reachable": False,
+                })
                 continue
             quote = engine.landed(
                 sell["tile_id"], buy["tile_id"], buy["good"], float(sell["price"])
@@ -131,10 +141,16 @@ def clear_and_apply_v4(
     buys: Iterable[Mapping[str, Any]],
     sells: Iterable[Mapping[str, Any]],
     *,
-    solver: Callable[[MarketSnapshot], MarketResult] = allocate_market,
+    solver: Callable[[MarketSnapshot], MarketResult] | None = None,
     unmet_age: Mapping[str, float] | None = None,
 ) -> V4MarketRun:
     """Выполнить shadow V4 market phase на живых V3 orders."""
+    if solver is None:
+        # This is intentionally the already-audited research candidate. It
+        # is faster than exact lexicographic solving, but not a proof of it.
+        from scripts.experiment_v4_priority_lp import allocate_market_two_lp
+
+        solver = allocate_market_two_lp
     snapshot, route_by_pair = build_v4_snapshot(
         engine, buys, sells, unmet_age=unmet_age
     )
