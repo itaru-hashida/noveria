@@ -138,7 +138,7 @@ def apply_v4_result(engine: Any, result: MarketResult, route_by_pair: Mapping[tu
             sell,
             (quote[0], quote[1], quote[2], quote[3]),
             allocation.quantity,
-            allocation.seller_price,
+            quote[0],
             EPS,
             engine.cash_store,
             engine.order_store,
