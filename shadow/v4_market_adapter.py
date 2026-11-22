@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from modules.economy.native.trade_boundary import commit_trade_atomic
@@ -25,6 +26,7 @@ class V4MarketRun:
     snapshot: MarketSnapshot
     result: MarketResult
     applied: tuple[dict[str, Any], ...]
+    timings_ns: dict[str, int]
 
 
 def _active(orders: Iterable[Mapping[str, Any]], side: str) -> list[Mapping[str, Any]]:
@@ -42,6 +44,7 @@ def build_v4_snapshot(
     sells: Iterable[Mapping[str, Any]],
     *,
     unmet_age: Mapping[str, float] | None = None,
+    timings_ns: dict[str, int] | None = None,
 ) -> tuple[MarketSnapshot, dict[tuple[str, str], tuple[float, float, Any, Any]]]:
     """Преобразовать живые V3 orders в V4 snapshot.
 
@@ -76,6 +79,7 @@ def build_v4_snapshot(
 
     routes: list[dict[str, Any]] = []
     route_by_pair: dict[tuple[str, str], tuple[float, float, Any, Any]] = {}
+    route_started = time.perf_counter_ns()
     for buy in buyers:
         for sell in sellers:
             if buy["good"] != sell["good"]:
@@ -111,7 +115,13 @@ def build_v4_snapshot(
             route_by_pair[(str(buy["id"]), str(sell["id"]))] = (
                 float(delivered), float(freight), distance, path
             )
-    return MarketSnapshot.from_rows(buyer_rows, seller_rows, routes), route_by_pair
+    route_ns = time.perf_counter_ns() - route_started
+    snapshot_started = time.perf_counter_ns()
+    snapshot = MarketSnapshot.from_rows(buyer_rows, seller_rows, routes)
+    snapshot_ns = time.perf_counter_ns() - snapshot_started
+    if timings_ns is not None:
+        timings_ns.update(routes=route_ns, snapshot=snapshot_ns)
+    return snapshot, route_by_pair
 
 
 def apply_v4_result(engine: Any, result: MarketResult, route_by_pair: Mapping[tuple[str, str], tuple[float, float, Any, Any]]) -> tuple[dict[str, Any], ...]:
@@ -133,6 +143,13 @@ def apply_v4_result(engine: Any, result: MarketResult, route_by_pair: Mapping[tu
             engine.cash_store,
             engine.order_store,
         ))
+    # V3's matcher finalises the buyer status in its outer loop. The shadow
+    # bridge has no such loop, so mirror that small bookkeeping step for every
+    # order represented in the solver outcomes.
+    for outcome in result.outcomes:
+        order = orders[outcome.order_id]
+        status = "filled" if outcome.status == "fulfilled" else outcome.status
+        engine.order_store.set_status(order, status)
     return tuple(applied)
 
 
@@ -151,9 +168,15 @@ def clear_and_apply_v4(
         from scripts.experiment_v4_priority_lp import allocate_market_two_lp
 
         solver = allocate_market_two_lp
+    preparation_timings: dict[str, int] = {}
     snapshot, route_by_pair = build_v4_snapshot(
-        engine, buys, sells, unmet_age=unmet_age
+        engine, buys, sells, unmet_age=unmet_age, timings_ns=preparation_timings
     )
+    solver_started = time.perf_counter_ns()
     result = solver(snapshot)
+    solver_ns = time.perf_counter_ns() - solver_started
+    apply_started = time.perf_counter_ns()
     applied = apply_v4_result(engine, result, route_by_pair)
-    return V4MarketRun(snapshot, result, applied)
+    apply_ns = time.perf_counter_ns() - apply_started
+    timings_ns = dict(preparation_timings, two_lp=solver_ns, apply=apply_ns)
+    return V4MarketRun(snapshot, result, applied, timings_ns)
