@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import json
+import argparse
+import csv
+import hashlib
+import pickle
 import math
 import sys
 import tempfile
@@ -27,10 +30,14 @@ from scripts.experiment_v4_priority_lp import allocate_market_two_lp  # noqa: E4
 import scripts.experiment_v4_priority_lp as v4_experiment  # noqa: E402
 
 
-SEEDS = (7, 17, 31, 43, 101, 211, 307, 401, 509, 613, 719, 823,
-         929, 1031, 1171, 1283, 1409, 1531, 1663, 1789, 1901, 2027,
-         4231, 73129)
+SEEDS = (17, 73129, 7, 4231)
 REPEATS = 3
+now = time.perf_counter_ns
+
+
+def _signature(engine):
+    state = (engine.tiles, engine.enterprises, engine.accounts, engine.goods, engine.meta)
+    return hashlib.sha256(pickle.dumps(state)).hexdigest()
 
 
 def _v4_rows(engine: object) -> list[dict[str, object]]:
@@ -47,52 +54,66 @@ def _v4_rows(engine: object) -> list[dict[str, object]]:
     ]
 
 
-def _run_v3(seed: int) -> dict[str, float]:
+def _run_v3(seed: int):
     with tempfile.TemporaryDirectory() as directory:
         db, service = scenario.build_world(seed, directory, report_detail="none")
         try:
             engine = service.economy_state().engine
+            signature = _signature(engine)
+            started = now()
+            # Арифметика V3 на общих входах: заданный план и нулевой запас.
+            missing = {(e["id"], good): max(0, e["capacity"] * ratio)
+                       for e in engine.enterprises.values()
+                       for good, ratio in engine.goods[e["good"]]["inputs"].items()
+                       if ratio > 0}
+            common = now() - started
             existing = list(engine.enterprises.values())
-            inner = {"input_requests": 0.0, "calls": 0}
+            input_ns = 0
             original = engine.input_requests
 
             def timed_input(self, enterprise, sells):
-                started = time.perf_counter()
+                nonlocal input_ns
+                started = now()
                 try:
                     return original(enterprise, sells)
                 finally:
-                    inner["input_requests"] += time.perf_counter() - started
-                    inner["calls"] += 1
+                    input_ns += now() - started
 
             engine.input_requests = types.MethodType(timed_input, engine)
-            started = time.perf_counter()
+            total_started = started = now()
             sells = engine.sell_orders()
-            sell_seconds = time.perf_counter() - started
-            started = time.perf_counter()
+            sell_seconds = now() - started
+            started = now()
             engine.plan_enterprises(existing, sells)
-            planning_seconds = time.perf_counter() - started
-            return {
-                "total": sell_seconds + planning_seconds,
+            ended = now()
+            planning_seconds = ended - started
+            return signature, missing, {
+                "total": ended - total_started,
                 "sell_prepare": sell_seconds,
-                "planning": planning_seconds,
-                "input_requests": inner["input_requests"],
-                "planning_other": max(0.0, planning_seconds - inner["input_requests"]),
-                "input_calls": float(inner["calls"]),
+                "input_requests": input_ns,
+                "planning_other": planning_seconds - input_ns,
+                "timer_gaps": started - total_started - sell_seconds,
+                "scalar_missing": common,
             }
         finally:
             db.close()
 
 
-def _run_v4(seed: int) -> dict[str, float]:
+def _run_v4(seed: int):
     with tempfile.TemporaryDirectory() as directory:
         db, service = scenario.build_world(seed, directory, report_detail="none")
         try:
             engine = service.economy_state().engine
+            signature = _signature(engine)
+            started = now()
             graph = load_recipe_graph()
-            started = time.perf_counter()
+            recipe_setup = now() - started
+            total_started = started = now()
             rows = _v4_rows(engine)
             matrices = build_enterprise_matrices(rows, graph)
+            matrix_end = now()
             production = calculate_enterprise_orders(matrices, graph, detailed=False)
+            production_end = now()
             buyers: list[dict[str, object]] = []
             sellers: list[dict[str, object]] = []
             for enterprise_index, enterprise_id in enumerate(matrices.enterprise_ids):
@@ -106,44 +127,50 @@ def _run_v4(seed: int) -> dict[str, float]:
                     if available > 1e-9:
                         sellers.append({"id": f"s:{enterprise_id}:{good}", "good": good,
                                         "quantity": available, "price": 1})
-            prepare_seconds = time.perf_counter() - started
-
-            started = time.perf_counter()
+            rows_end = now()
             snapshot = MarketSnapshot.from_rows(buyers, sellers)
-            snapshot_seconds = time.perf_counter() - started
-            lp_seconds = 0.0
+            snapshot_end = now()
+            lp_seconds = 0
             lp_calls = 0
 
             original_lp = v4_experiment.linprog
 
             def timed_lp(*args, **kwargs):
                 nonlocal lp_seconds, lp_calls
-                lp_started = time.perf_counter()
+                lp_started = now()
                 try:
                     return original_lp(*args, **kwargs)
                 finally:
-                    lp_seconds += time.perf_counter() - lp_started
+                    lp_seconds += now() - lp_started
                     lp_calls += 1
 
             v4_experiment.linprog = timed_lp
             try:
-                started = time.perf_counter()
-                allocation = allocate_market_two_lp(snapshot)
-                market_seconds = time.perf_counter() - started
+                started = now()
+                allocate_market_two_lp(snapshot)
+                ended = now()
             finally:
                 v4_experiment.linprog = original_lp
-            return {
-                "total": prepare_seconds + snapshot_seconds + market_seconds,
-                "prepare": prepare_seconds,
-                "snapshot": snapshot_seconds,
-                "market": market_seconds,
+            assert lp_calls == 2
+            # Отдельный микрозамер общей арифметики на готовых массивах.
+            started_common = now()
+            deficits = np.maximum(matrices.production_plan @ graph.A.T - matrices.stock, 0)
+            common = now() - started_common
+            np.testing.assert_allclose(deficits, production.input_orders, atol=1e-9)
+            missing = {(enterprise, good): float(deficits[i, j])
+                       for i, enterprise in enumerate(matrices.enterprise_ids)
+                       for j, good in enumerate(matrices.good_ids) if deficits[i, j] > 0}
+            return signature, missing, {
+                "total": ended - total_started,
+                "matrix_prepare": matrix_end - total_started,
+                "production_numpy_and_diagnostics": production_end - matrix_end,
+                "order_rows": rows_end - production_end,
+                "snapshot": snapshot_end - rows_end,
                 "lp": lp_seconds,
-                "market_other": max(0.0, market_seconds - lp_seconds),
-                "lp_calls": float(lp_calls),
-                "buyers": float(len(buyers)),
-                "sellers": float(len(sellers)),
-                "pairs": float(len(snapshot.pair_buyer)),
-                "volume": allocation.objective_volume,
+                "market_other": ended - started - lp_seconds,
+                "timer_gaps": started - snapshot_end,
+                "numpy_missing": common,
+                "recipe_setup": recipe_setup,
             }
         finally:
             db.close()
@@ -158,55 +185,91 @@ def _ci(values: list[float]) -> tuple[float, float]:
     return mean - half, mean + half
 
 
-def main() -> None:
-    measurements: list[dict[str, object]] = []
+SEPARATE = {"scalar_missing", "numpy_missing", "recipe_setup"}
+FIELDS = ("seed", "repeat", "position", "variant", "stage", "ns")
+
+
+def measure(path):
+    with path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(FIELDS)
+        for row in measurements():
+            writer.writerow(row)
+
+
+def measurements():
     for seed_index, seed in enumerate(SEEDS):
-        # Прогрев не входит в статистику; порядок прогрева тоже чередуем.
-        warm_order = ("v3", "v4") if seed_index % 2 == 0 else ("v4", "v3")
-        for variant in warm_order:
-            (_run_v3 if variant == "v3" else _run_v4)(seed)
-        for repeat in range(REPEATS):
+        expected_signature = None
+        for repeat in range(REPEATS + 1):
             order = ("v3", "v4") if (seed_index + repeat) % 2 == 0 else ("v4", "v3")
-            values: dict[str, dict[str, float]] = {}
-            for variant in order:
-                values[variant] = (_run_v3 if variant == "v3" else _run_v4)(seed)
-            measurements.append({"seed": seed, "repeat": repeat + 1, **values})
+            deficits = {}
+            for position, variant in enumerate(order, 1):
+                signature, deficits[variant], stages = (
+                    _run_v3 if variant == "v3" else _run_v4)(seed)
+                expected_signature = expected_signature or signature
+                if signature != expected_signature:
+                    raise ValueError(f"Разное исходное состояние: {seed}, {variant}")
+                if min(stages.values()) < 0 or stages["total"] != sum(
+                    ns for stage, ns in stages.items() if stage not in SEPARATE | {"total"}
+                ):
+                    raise ValueError(f"Не сходится бюджет времени: {seed}, {variant}")
+                for stage, ns in stages.items():
+                    yield seed, repeat, position, variant, stage, ns
+            keys = deficits["v3"].keys() | deficits["v4"].keys()
+            np.testing.assert_allclose(
+                [deficits["v3"].get(key, 0) for key in keys],
+                [deficits["v4"].get(key, 0) for key in keys], rtol=1e-12, atol=1e-9)
 
-    by_seed = []
-    for seed in SEEDS:
-        rows = [row for row in measurements if row["seed"] == seed]
-        v3 = [row["v3"]["total"] for row in rows]
-        v4 = [row["v4"]["total"] for row in rows]
-        ratios = [a / b for a, b in zip(v3, v4)]
-        by_seed.append({"seed": seed, "v3_mean": float(np.mean(v3)),
-                        "v4_mean": float(np.mean(v4)),
-                        "speedup": float(np.mean(ratios)),
-                        "v3_v4_delta": float(np.mean(v3) - np.mean(v4))})
 
-    speedups = [row["speedup"] for row in by_seed]
-    log_speedups = np.log(speedups)
-    log_ci = _ci(log_speedups.tolist())
-    paired_deltas = [row["v3_v4_delta"] for row in by_seed]
-    v4_stage = {key: float(np.mean([row["v4"][key] for row in measurements]))
-                for key in ("prepare", "snapshot", "lp", "market_other")}
-    v4_total = sum(v4_stage.values())
-    output = {
-        "seeds": list(SEEDS), "repeats": REPEATS,
-        "warmup": "one run per variant per seed, excluded",
-        "alternation": "V3/V4 order alternated by seed and repeat",
-        "paired_by_seed": by_seed,
-        "speedup_mean": float(np.mean(speedups)),
-        "speedup_median": float(np.median(speedups)),
-        "speedup_paired_95ci": [math.exp(log_ci[0]), math.exp(log_ci[1])],
-        "paired_delta_seconds_95ci": list(_ci(paired_deltas)),
-        "v4_stage_mean_seconds": v4_stage,
-        "v4_stage_percent": {key: 100.0 * value / v4_total for key, value in v4_stage.items()},
-        "notes": [
-            "V4 is an isolated snapshot; its preparation consumes synthetic rows derived from the initial V3 engine.",
-            "V3/V4 are not full-turn equivalent and this result is not an end-to-end speedup.",
-        ],
-    }
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+def report(path):
+    groups = {}
+    runs = {}
+    with path.open(newline="", encoding="utf-8") as stream:
+        for row in csv.DictReader(stream):
+            run = runs.setdefault((row["seed"], row["repeat"], row["variant"]), {})
+            stage, ns = row["stage"], int(row["ns"])
+            if stage in run or ns < 0:
+                raise ValueError("Повторная стадия или отрицательное время")
+            run[stage] = ns
+            if int(row["repeat"]) == 0:
+                continue
+            key = int(row["seed"]), row["variant"], row["stage"]
+            groups.setdefault(key, []).append(ns)
+    for run in runs.values():
+        if run["total"] != sum(ns for stage, ns in run.items()
+                               if stage not in SEPARATE | {"total"}):
+            raise ValueError("Не сходится бюджет времени в CSV")
+    if not groups or any(len(samples) != REPEATS for samples in groups.values()):
+        raise ValueError("Неполный набор измерений")
+    means = {key: float(np.mean(samples)) / 1e6 for key, samples in groups.items()}
+    seeds = sorted({key[0] for key in means})
+    print("| Seed | Вариант | Стадия | Среднее, мс | Доля total |")
+    print("|---:|---|---|---:|---:|")
+    for (seed, variant, stage), ms in sorted(means.items()):
+        share = "—" if stage in SEPARATE else f"{100*ms/means[seed, variant, 'total']:.2f}%"
+        print(f"| {seed} | {variant} | {stage} | {ms:.6f} | {share} |")
+    for title, left, right in [
+        ("Отношение времени разных рабочих нагрузок", "total", "total"),
+        ("Микрозамер общей формулы дефицита", "scalar_missing", "numpy_missing"),
+    ]:
+        ratios = [means[s, "v3", left] / means[s, "v4", right] for s in seeds]
+        low, high = map(math.exp, _ci(np.log(ratios).tolist()))
+        print(f"\n{title}.\n")
+        print("| Seed | V3/V4 |\n|---:|---:|")
+        for seed, ratio in zip(seeds, ratios):
+            print(f"| {seed} | {ratio:.3f}x |")
+        print(f"\nСреднее {np.mean(ratios):.3f}x, медиана {np.median(ratios):.3f}x, "
+              f"парный 95% t-интервал геометрического среднего [{low:.3f}x, {high:.3f}x].")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("csv", type=Path)
+    parser.add_argument("--report-only", action="store_true")
+    args = parser.parse_args()
+    if not args.report_only:
+        measure(args.csv)
+    report(args.csv)
 
 
 if __name__ == "__main__":
